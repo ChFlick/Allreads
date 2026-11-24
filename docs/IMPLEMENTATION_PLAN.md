@@ -93,7 +93,7 @@ Android work to do in one batch once Android Studio is available: step 2's proje
     - **Done when** taps hit the right word and reopening the book resumes in place.
 13. **Word sheet and saving.** A `ModalBottomSheet` shows the word, its sentence, status chips (1–5, known, ignore) and a translation field. `app.save_term(...)` saves it, then the chapter's statuses are refreshed without a full reload.
     - **Done when** saving a word recolours every occurrence in the chapter.
-14. **Translator.** Add a `Translator` trait with DeepL and LibreTranslate implementations (`reqwest` blocking, rustls), and cache results in SentenceCache. The key lives in the Android Keystore and is passed in per call.
+14. **Translator.** Add a `Translator` trait with DeepL and LibreTranslate implementations (`ureq` with rustls), and cache results in SentenceCache. The key lives in the Android Keystore and is passed in per call.
     - *Learn:* trait objects, `Box<dyn Trait>`, HTTP and `serde_json`.
     - **Done when** tapping a new word shows a translation in under 1 s, and instantly the second time.
     - *Added 2026-11-24:* never hold the database lock during an HTTP call. Read the cache, release the lock, translate, then lock again to store the result. The key is never logged and never stored.

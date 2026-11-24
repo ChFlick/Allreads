@@ -58,7 +58,7 @@ All the logic lives in a Rust library, built for Android with `cargo-ndk`. UniFF
 | EPUB parsing | `rbook` + `scraper` for XHTML | Rust | Chapters become clean paragraphs, no WebView needed |
 | Tokenizing | `unicode-segmentation`, plus the ported Lukaisu rules; `lindera` (Japanese) and `jieba-rs` (Chinese) later | Rust | Offline and fast, CJK without a server |
 | Storage | `rusqlite` (bundled SQLite) + `refinery` migrations | Rust | One database file, easy to back up |
-| HTTP | `reqwest` blocking client (rustls), no async runtime | Rust | Translator and AI clients; the core stays synchronous and Kotlin calls it on `Dispatchers.IO` |
+| HTTP | `ureq` (rustls), a purely blocking client with no async runtime | Rust | Translator and AI clients; the core stays synchronous and Kotlin calls it on `Dispatchers.IO` |
 | Translation | `Translator` trait: DeepL, LibreTranslate, LLM | Rust | Swappable; Bergamot offline later |
 | AI | `AiProvider` trait: OpenAI-compatible + Anthropic, bring your own key | Rust | No backend to run; answers cached per sentence |
 | Dictionaries | Wiktionary extracts (kaikki.org, CC BY-SA), downloaded per language | Rust | Offline, with lemmas and inflections |

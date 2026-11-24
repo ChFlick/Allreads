@@ -22,3 +22,4 @@
 | 2026-11-24 | HTTP uses the blocking `reqwest` client with rustls, and no `tokio` | The core is synchronous and Kotlin calls it on `Dispatchers.IO`, so an async runtime adds size and complexity for nothing |
 | 2026-11-24 | Only terms saved with status 1–4 become Anki cards; PRD goal G2 now says so | Matches F20. Words saved as 5, ignored or known need no review |
 | 2026-11-24 | The note type has both card templates (word → meaning, sentence → meaning) | Closes the PRD open question, as step 17 already specified |
+| 2026-11-24 | Use `ureq` (rustls) for HTTP instead of blocking `reqwest`; supersedes the row above | `reqwest`'s blocking client still runs a hidden tokio runtime on a background thread. `ureq` is purely blocking, smaller, and has fewer dependencies, with the same calling style |
