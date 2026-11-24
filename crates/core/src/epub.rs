@@ -2,7 +2,6 @@
 
 use std::path::{Path, PathBuf};
 
-use rbook::prelude::*;
 use scraper::{node::Node, ElementRef, Html};
 use thiserror::Error;
 
