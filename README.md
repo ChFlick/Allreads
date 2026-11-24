@@ -4,7 +4,7 @@ An open-source Android app for learning languages by reading books. Import an EP
 
 ## Status
 
-Early development. Step 2 of 27 (workspace scaffolding). See `docs/PROGRESS.md`.
+Early development. Steps 1 to 4 are done, and the Rust side of steps 5 to 7 (UniFFI bridge, EPUB reading). See `docs/PROGRESS.md`.
 
 ## Layout
 
@@ -16,10 +16,22 @@ Early development. Step 2 of 27 (workspace scaffolding). See `docs/PROGRESS.md`.
 
 ## Development
 
+Minimum supported Rust version: 1.91.
+
 ```bash
-cargo fmt --check
+cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
-cargo test
+cargo test --workspace
+```
+
+Test fixtures live in `crates/core/tests/fixtures`. Regenerate them with `python3 make_fixtures.py` in that folder.
+
+Kotlin bindings for the Android app:
+
+```bash
+cargo build -p allreads-ffi
+cargo run -p allreads-ffi --bin uniffi-bindgen -- generate \
+  --library target/debug/liballreads_ffi.so --language kotlin --out-dir target/bindings
 ```
 
 ## Licence

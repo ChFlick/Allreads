@@ -8,3 +8,6 @@
 | 2026-11-23 | `.apkg` export as a fallback | For people without AnkiDroid |
 | 2026-11-24 | App name: Allreads (plural), replacing the earlier "Allread"; repo: `ChFlick/Allreads` | Chosen by Christoph |
 | 2026-11-24 | Licence: MIT | Chosen by Christoph; resolves the open licence question in the PRD and PLAN |
+| 2026-11-24 | Minimum supported Rust is 1.91, checked in CI | Dependencies (uniffi, rbook, scraper, clap in the bindgen) need 1.91; the earlier 1.75 claim was wrong |
+| 2026-11-24 | EPUB reading goes through `epub::Book`, which opens the file once | Re-parsing the zip on every call is too slow for chapter navigation; the step 8 `App` will hold the open book |
+| 2026-11-24 | Preset files are validated and duplicate codes are rejected at load | A typo in a preset should fail loudly in tests, not silently in the app |

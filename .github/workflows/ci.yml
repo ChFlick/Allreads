@@ -10,7 +10,7 @@ env:
 
 jobs:
   rust:
-    name: Rust (fmt, clippy, test)
+    name: Rust (fmt, clippy, docs, test, bindings)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,8 +24,33 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Docs (warnings are errors)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --workspace --locked
 
       - name: Test
-        run: cargo test --all
+        run: cargo test --workspace --locked
+
+      - name: Generate Kotlin bindings
+        run: |
+          cargo build -p allreads-ffi --locked
+          cargo run -p allreads-ffi --locked --bin uniffi-bindgen -- \
+            generate --library target/debug/liballreads_ffi.so \
+            --language kotlin --out-dir target/bindings
+
+  msrv:
+    name: Minimum supported Rust (1.91)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.91
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test on 1.91
+        run: cargo test --workspace --locked
