@@ -6,6 +6,7 @@ pub mod library;
 pub mod presets;
 pub mod reader;
 pub mod text;
+pub mod translate;
 pub mod txt;
 
 /// Returns the version of the core library.

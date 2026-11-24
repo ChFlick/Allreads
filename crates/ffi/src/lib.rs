@@ -8,12 +8,15 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use allreads_core::db::book::Book as BookRow;
 use allreads_core::db::term::{NewTerm, Status, Term};
+use allreads_core::db::translation_cache::CacheKey;
 use allreads_core::db::{Database, DbError};
 use allreads_core::epub::BookError;
 use allreads_core::library::{self, ImportError, OpenedBook};
 use allreads_core::presets::builtin_presets;
 use allreads_core::reader::{parse_blocks, ParsedChapter};
 use allreads_core::text::{LanguageRules, PARSER_VERSION};
+use allreads_core::translate::deepl::DeepL;
+use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
 
 uniffi::setup_scaffolding!();
 
@@ -172,6 +175,13 @@ pub struct Chapter {
     pub blocks: Vec<ChapterBlock>,
 }
 
+/// A machine translation, and whether it came from the cache (free and instant).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Translation {
+    pub text: String,
+    pub from_cache: bool,
+}
+
 /// Converts a count to `u32`, clamping instead of wrapping.
 fn saturate_u32(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
@@ -195,6 +205,18 @@ pub enum AllreadsError {
     Missing { what: String },
     #[error("could not write a file: {message}")]
     Storage { message: String },
+    /// The translation service could not be reached; try again when online.
+    #[error("translation is unavailable: {message}")]
+    TranslationUnavailable { message: String },
+    #[error("the translation service rejected the API key")]
+    TranslationKeyRejected,
+    #[error("the translation quota is used up")]
+    TranslationQuotaExceeded,
+    /// DeepL is busy even after retrying; try again in a moment.
+    #[error("the translation service is busy; try again in a moment")]
+    TranslationRateLimited,
+    #[error("translation failed: {message}")]
+    TranslationFailed { message: String },
     /// A value the caller passed in was not valid, e.g. an empty word.
     #[error("invalid input: {message}")]
     InvalidInput { message: String },
@@ -236,6 +258,20 @@ impl From<ImportError> for AllreadsError {
             ImportError::Book(error) => error.into(),
             ImportError::Db(error) => error.into(),
             ImportError::Cover(message) => AllreadsError::Storage { message },
+        }
+    }
+}
+
+impl From<TranslateError> for AllreadsError {
+    fn from(error: TranslateError) -> Self {
+        match error {
+            TranslateError::Network(message) => AllreadsError::TranslationUnavailable { message },
+            TranslateError::Unauthorized => AllreadsError::TranslationKeyRejected,
+            TranslateError::QuotaExceeded => AllreadsError::TranslationQuotaExceeded,
+            TranslateError::RateLimited => AllreadsError::TranslationRateLimited,
+            other => AllreadsError::TranslationFailed {
+                message: other.to_string(),
+            },
         }
     }
 }
@@ -313,6 +349,41 @@ impl App {
             .db()?
             .store_chapter_cache(row.id, index, PARSER_VERSION, &chapter.to_bytes());
         Ok(chapter)
+    }
+
+    /// Translates through any service, using and filling the cache. The
+    /// database lock is never held during the network call.
+    fn translate_with(
+        &self,
+        translator: &dyn Translator,
+        text: &str,
+        context: Option<&str>,
+        source_lang: &str,
+        target_lang: &str,
+    ) -> Result<Translation, AllreadsError> {
+        let key = CacheKey::new(text, context, source_lang, target_lang, translator.name());
+        if key.text.is_empty() {
+            return Err(AllreadsError::InvalidInput {
+                message: "nothing to translate".into(),
+            });
+        }
+        if let Some(cached) = self.db()?.cached_translation(&key)? {
+            return Ok(Translation {
+                text: cached,
+                from_cache: true,
+            });
+        }
+        let translated = translator.translate(&TranslationRequest {
+            text: &key.text,
+            context: key.context(),
+            source: &key.source_lang,
+            target: &key.target_lang,
+        })?;
+        self.db()?.save_translation(&key, &translated)?;
+        Ok(Translation {
+            text: translated,
+            from_cache: false,
+        })
     }
 
     fn book_row(&self, book_id: i64) -> Result<BookRow, AllreadsError> {
@@ -590,6 +661,39 @@ impl App {
             .collect();
         let added = self.db()?.mark_known(&row.language_code, &words)?;
         Ok(saturate_u32(added))
+    }
+
+    /// Translates a word or sentence with DeepL. Repeats come from the cache.
+    /// For a tapped word, pass its sentence as `context`: DeepL uses it to pick
+    /// the right sense ("lit" as "reads" or "bed") and does not bill it.
+    /// `deepl_api_key` comes from the Android Keystore for each call; it is
+    /// never stored or logged.
+    ///
+    /// # Errors
+    /// Returns `InvalidInput` for empty text or key, `TranslationUnavailable`
+    /// when offline, `TranslationKeyRejected`, `TranslationQuotaExceeded`,
+    /// `TranslationRateLimited`, or `TranslationFailed`.
+    pub fn translate(
+        &self,
+        text: String,
+        context: Option<String>,
+        source_lang: String,
+        target_lang: String,
+        deepl_api_key: String,
+    ) -> Result<Translation, AllreadsError> {
+        if deepl_api_key.trim().is_empty() {
+            return Err(AllreadsError::InvalidInput {
+                message: "a DeepL API key is needed".into(),
+            });
+        }
+        let deepl = DeepL::new(&deepl_api_key);
+        self.translate_with(
+            &deepl,
+            &text,
+            context.as_deref(),
+            &source_lang,
+            &target_lang,
+        )
     }
 
     /// Saves where the reader stopped in a book.
@@ -965,6 +1069,134 @@ mod tests {
             ]
         );
         assert_eq!(app.mark_rest_known(id, 0, 1).unwrap(), 0);
+    }
+
+    fn mock_deepl(status: u16, body: &str) -> (DeepL, std::thread::JoinHandle<String>) {
+        // A tiny local server stands in for DeepL; it answers exactly one request.
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let body = body.to_string();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            let response = format!(
+                "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\n\
+                 Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            String::from_utf8_lossy(&buffer[..read]).to_string()
+        });
+        (DeepL::with_base_url("test-key:fx", &url), handle)
+    }
+
+    /// Step 14's check on the Rust side: the second lookup is instant (cached).
+    #[test]
+    fn a_second_translation_comes_from_the_cache_without_a_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let (deepl, server) = mock_deepl(200, r#"{"translations":[{"text":"The man reads."}]}"#);
+        let first = app
+            .translate_with(&deepl, "L'homme  lit.", None, "fr", "en")
+            .unwrap();
+        assert_eq!(
+            first,
+            Translation {
+                text: "The man reads.".into(),
+                from_cache: false
+            }
+        );
+        server.join().unwrap();
+        // The mock server is gone: this only works if no request is made.
+        let second = app
+            .translate_with(&deepl, "L'homme lit.", None, "fr", "en")
+            .unwrap();
+        assert_eq!(
+            second,
+            Translation {
+                text: "The man reads.".into(),
+                from_cache: true
+            }
+        );
+    }
+
+    #[test]
+    fn a_word_is_cached_per_sentence_it_was_translated_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let (deepl, server) = mock_deepl(200, r#"{"translations":[{"text":"reads"}]}"#);
+        app.translate_with(&deepl, "lit", Some("Il lit."), "fr", "en")
+            .unwrap();
+        server.join().unwrap();
+        let (deepl, server) = mock_deepl(200, r#"{"translations":[{"text":"bed"}]}"#);
+        let bed = app
+            .translate_with(&deepl, "lit", Some("Le lit."), "fr", "en")
+            .unwrap();
+        server.join().unwrap();
+        assert_eq!(
+            bed,
+            Translation {
+                text: "bed".into(),
+                from_cache: false
+            }
+        );
+        let offline = DeepL::with_base_url("k", "http://127.0.0.1:9");
+        let reads = app
+            .translate_with(&offline, "lit", Some("Il lit."), "fr", "en")
+            .unwrap();
+        assert_eq!(
+            reads,
+            Translation {
+                text: "reads".into(),
+                from_cache: true
+            }
+        );
+    }
+
+    #[test]
+    fn translation_errors_are_typed_and_not_cached() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let (deepl, server) = mock_deepl(456, "{}");
+        assert!(matches!(
+            app.translate_with(&deepl, "chat", None, "fr", "en"),
+            Err(AllreadsError::TranslationQuotaExceeded)
+        ));
+        server.join().unwrap();
+        let (deepl, server) = mock_deepl(403, "{}");
+        assert!(matches!(
+            app.translate_with(&deepl, "chat", None, "fr", "en"),
+            Err(AllreadsError::TranslationKeyRejected)
+        ));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn being_offline_is_translation_unavailable() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let offline = DeepL::with_base_url("k", "http://127.0.0.1:9");
+        assert!(matches!(
+            app.translate_with(&offline, "chat", None, "fr", "en"),
+            Err(AllreadsError::TranslationUnavailable { .. })
+        ));
+    }
+
+    #[test]
+    fn empty_text_or_key_is_invalid_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        assert!(matches!(
+            app.translate("chat".into(), None, "fr".into(), "en".into(), "  ".into()),
+            Err(AllreadsError::InvalidInput { .. })
+        ));
+        let offline = DeepL::with_base_url("k", "http://127.0.0.1:9");
+        assert!(matches!(
+            app.translate_with(&offline, "   ", None, "fr", "en"),
+            Err(AllreadsError::InvalidInput { .. })
+        ));
     }
 
     #[test]

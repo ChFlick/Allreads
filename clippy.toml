@@ -1,0 +1,3 @@
+# Product names that clippy's pedantic doc check should not ask to put in backticks.
+# ".." keeps clippy's default list.
+doc-valid-idents = ["DeepL", "AnkiDroid", "UniFFI", "SQLite", ".."]

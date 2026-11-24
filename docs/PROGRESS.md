@@ -20,7 +20,7 @@ Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes
 - [ ] 11. `open_chapter` (Rust side done 2026-11-24: `App::open_chapter` returns blocks of tokens with term keys, statuses and italic/bold; parses are cached (migration V4) and statuses joined fresh with one query. Host benchmark for 10,000 words: 10.8 ms cold, 6.1 ms cached, 0.2 ms status join. Pending: the 300 ms check on a phone, which also covers passing the records to Kotlin)
 - [ ] 12. Reader screen
 - [ ] 13. Word sheet and saving (Rust side done 2026-11-24: `App::save_term`, `find_term`, `forget_term`, and `mark_rest_known` for F8. A test saves a word and checks every occurrence is recoloured on the next `open_chapter`. Pending: the word sheet on Android)
-- [ ] 14. Translator
+- [ ] 14. Translator (Rust side done 2026-11-24: `Translator` trait with a DeepL client over ureq, checked against DeepL's OpenAPI spec; words are translated with their sentence as context; results cached per text, context, language pair and provider (migration V5); busy and server errors are retried. Tested against a local mock server, including errors and a second call served from the cache with no request. Pending: a real DeepL key and the under-1 s check on a phone)
 - [ ] 15. Settings and polish
 
 ## Phase 3 (M2): AnkiDroid integration

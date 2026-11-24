@@ -59,7 +59,7 @@ All the logic lives in a Rust library, built for Android with `cargo-ndk`. UniFF
 | Tokenizing | `unicode-segmentation`, plus the ported Lukaisu rules; `lindera` (Japanese) and `jieba-rs` (Chinese) later | Rust | Offline and fast, CJK without a server |
 | Storage | `rusqlite` (bundled SQLite) + `refinery` migrations | Rust | One database file, easy to back up |
 | HTTP | `ureq` (rustls), a purely blocking client with no async runtime | Rust | Translator and AI clients; the core stays synchronous and Kotlin calls it on `Dispatchers.IO` |
-| Translation | `Translator` trait: DeepL, LibreTranslate, LLM | Rust | Swappable; Bergamot offline later |
+| Translation | `Translator` trait: DeepL (free tier with your own key) | Rust | Swappable; offline dictionaries (step 23) are the free path for single words, Bergamot offline later |
 | AI | `AiProvider` trait: OpenAI-compatible + Anthropic, bring your own key | Rust | No backend to run; answers cached per sentence |
 | Dictionaries | Wiktionary extracts (kaikki.org, CC BY-SA), downloaded per language | Rust | Offline, with lemmas and inflections |
 | Anki | AnkiDroid `AddContentApi` | Kotlin | Officially supported; AnkiDroid does scheduling and AnkiWeb sync |
@@ -98,7 +98,7 @@ Opening a chapter, the Kotlin side calls `open_chapter(book, index)`. Rust parse
 | Term | language, key, display text, lemma, status (1–5 / 98 / 99), translation, notes, parent term | The key is the lower-case `term_key`; the display text keeps the form as first seen. A multi-word phrase is just a term with spaces |
 | AnkiLink | term, AnkiDroid note id, deck, last pushed | Lets edits update the existing card |
 | AnkiOutbox | term, attempts, queued at | Pushes waiting for AnkiDroid; one row per term |
-| SentenceCache | hash of the normalised sentence, source and target language, provider, translation, AI explanation | Avoids paying twice for the same sentence |
+| TranslationCache | normalised text, source and target language, provider, translation | Avoids paying twice for the same text. AI explanations get their own cache (step 22) |
 | ReadingStat | day, book, words read, new terms | Drives progress and known-word counts |
 | BookChapter | book, index, title | The table of contents |
 | ChapterCache | book, chapter index, parser version, tokens blob | A parsed chapter, reused only while the parser version matches |
@@ -130,7 +130,7 @@ M1 is the real MVP: reading a French EPUB and saving words. M2 makes it complete
 | AnkiDroid dependency | The API needs AnkiDroid installed and a permission granted | Check on launch, fall back to `.apkg` export |
 | Dictionary size | Full Wiktionary extracts are hundreds of MB | Pre-filter per language pair, download on demand |
 | AI cost and privacy | Text goes to the provider you pick | Off by default, bring your own key, show a cost estimate |
-| Translation APIs | Scraping Google Translate breaks its terms | DeepL free tier, LibreTranslate, or an LLM |
+| Translation APIs | Scraping Google Translate breaks its terms | Decided: DeepL free tier (2026-11-24) |
 | F-Droid rules | No proprietary libraries (no ML Kit or Play Services) | Dropped 2026-11-24: F-Droid compatibility is not required |
 
 ## Sources
