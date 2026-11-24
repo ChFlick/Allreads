@@ -7,10 +7,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use allreads_core::db::book::Book as BookRow;
+use allreads_core::db::term::Status;
 use allreads_core::db::{Database, DbError};
 use allreads_core::epub::BookError;
 use allreads_core::library::{self, ImportError, OpenedBook};
 use allreads_core::presets::builtin_presets;
+use allreads_core::reader::{parse_blocks, ParsedChapter};
+use allreads_core::text::{LanguageRules, PARSER_VERSION};
 
 uniffi::setup_scaffolding!();
 
@@ -53,6 +56,59 @@ pub struct BookSummary {
     /// Where the reader stopped.
     pub chapter_index: u32,
     pub paragraph_index: u32,
+}
+
+/// How well a word is known, for colouring it in the reader.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum WordStatus {
+    /// Not saved yet.
+    New,
+    /// Being learned, level 1 to 5.
+    Learning {
+        level: u8,
+    },
+    Ignored,
+    WellKnown,
+}
+
+impl From<Status> for WordStatus {
+    fn from(status: Status) -> Self {
+        match status {
+            Status::Learning(level) => WordStatus::Learning { level },
+            Status::Ignored => WordStatus::Ignored,
+            Status::WellKnown => WordStatus::WellKnown,
+        }
+    }
+}
+
+/// A word, or the spaces and punctuation between words.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Token {
+    pub text: String,
+    /// The term key, for words only. Pass it back when saving the word.
+    pub term_key: Option<String>,
+    /// For words only.
+    pub status: Option<WordStatus>,
+    /// Sentence index within the block.
+    pub sentence: u32,
+    pub italic: bool,
+    pub bold: bool,
+}
+
+/// A heading or paragraph.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ChapterBlock {
+    /// 1 to 6 for a heading, `None` for a paragraph.
+    pub heading_level: Option<u8>,
+    pub tokens: Vec<Token>,
+}
+
+/// A chapter ready to render.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Chapter {
+    pub book_id: i64,
+    pub index: u32,
+    pub blocks: Vec<ChapterBlock>,
 }
 
 /// Converts a count to `u32`, clamping instead of wrapping.
@@ -164,6 +220,34 @@ impl App {
             .map_err(|_| poisoned())?
             .insert(book_id, Arc::clone(&book));
         Ok(book)
+    }
+
+    /// The tokenizing rules of a stored language.
+    fn rules(&self, language_code: &str) -> Result<LanguageRules, AllreadsError> {
+        let language =
+            self.db()?
+                .language(language_code)?
+                .ok_or_else(|| AllreadsError::Missing {
+                    what: format!("language {language_code}"),
+                })?;
+        LanguageRules::new(&language).map_err(|message| AllreadsError::Database { message })
+    }
+
+    /// A chapter's tokens from the cache, or parsed and cached on a miss.
+    fn parsed_chapter(&self, row: &BookRow, index: u32) -> Result<ParsedChapter, AllreadsError> {
+        let cached = self.db()?.cached_chapter(row.id, index, PARSER_VERSION)?;
+        if let Some(chapter) = cached.as_deref().and_then(ParsedChapter::from_bytes) {
+            return Ok(chapter);
+        }
+        // Parse without holding the database lock.
+        let rules = self.rules(&row.language_code)?;
+        let blocks = self.opened_book(row.id)?.chapter_blocks(index as usize)?;
+        let chapter = parse_blocks(&blocks, &rules);
+        // The cache only saves time: if writing it fails, the chapter still opens.
+        let _ = self
+            .db()?
+            .store_chapter_cache(row.id, index, PARSER_VERSION, &chapter.to_bytes());
+        Ok(chapter)
     }
 
     fn book_row(&self, book_id: i64) -> Result<BookRow, AllreadsError> {
@@ -315,6 +399,50 @@ impl App {
         Ok(book.chapter_text(index as usize)?)
     }
 
+    /// One chapter as blocks of tokens, each word with its term key and status.
+    /// The parse is cached; statuses are always read fresh, so call this again
+    /// after saving a word to recolour the chapter.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown book or language, `NotFound` if the book
+    /// file is gone, and `ChapterOutOfRange` for a bad index.
+    pub fn open_chapter(&self, book_id: i64, index: u32) -> Result<Chapter, AllreadsError> {
+        let row = self.book_row(book_id)?;
+        let parsed = self.parsed_chapter(&row, index)?;
+        let statuses = self.db()?.term_statuses(&row.language_code)?;
+        let blocks = parsed
+            .blocks
+            .into_iter()
+            .map(|block| ChapterBlock {
+                heading_level: block.heading_level,
+                tokens: block
+                    .tokens
+                    .into_iter()
+                    .map(|token| {
+                        let status = token.key.as_ref().map(|key| {
+                            statuses
+                                .get(key)
+                                .map_or(WordStatus::New, |status| (*status).into())
+                        });
+                        Token {
+                            text: token.text,
+                            term_key: token.key,
+                            status,
+                            sentence: token.sentence,
+                            italic: token.italic,
+                            bold: token.bold,
+                        }
+                    })
+                    .collect(),
+            })
+            .collect();
+        Ok(Chapter {
+            book_id,
+            index,
+            blocks,
+        })
+    }
+
     /// Saves where the reader stopped in a book.
     ///
     /// # Errors
@@ -455,12 +583,139 @@ mod tests {
         ));
     }
 
+    fn save_word(app: &App, text: &str, status: Status) {
+        app.db()
+            .unwrap()
+            .save_term(&allreads_core::db::term::NewTerm {
+                language_code: "fr".into(),
+                text: text.into(),
+                lemma: None,
+                status,
+                translation: String::new(),
+                notes: String::new(),
+                parent_id: None,
+            })
+            .unwrap();
+    }
+
+    fn word_statuses(chapter: &Chapter) -> Vec<(String, WordStatus)> {
+        chapter
+            .blocks
+            .iter()
+            .flat_map(|block| &block.tokens)
+            .filter_map(|t| Some((t.text.clone(), t.status?)))
+            .collect()
+    }
+
+    #[test]
+    fn open_chapter_returns_blocks_of_tokens_with_statuses() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
+            .unwrap()
+            .id;
+        save_word(&app, "Homme", Status::Learning(2));
+        let chapter = app.open_chapter(id, 0).unwrap();
+        assert_eq!(chapter.blocks[0].heading_level, Some(1));
+        assert_eq!(chapter.blocks[1].heading_level, None);
+        let statuses = word_statuses(&chapter);
+        assert!(statuses.contains(&("homme".into(), WordStatus::Learning { level: 2 })));
+        assert!(statuses.contains(&("lisait".into(), WordStatus::New)));
+        let italic: Vec<&str> = chapter.blocks[2]
+            .tokens
+            .iter()
+            .filter(|t| t.italic)
+            .map(|t| t.text.as_str())
+            .collect();
+        assert_eq!(italic, ["livre"]);
+    }
+
+    #[test]
+    fn non_words_have_no_key_or_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
+            .unwrap()
+            .id;
+        let chapter = app.open_chapter(id, 0).unwrap();
+        for token in chapter.blocks.iter().flat_map(|b| &b.tokens) {
+            assert_eq!(
+                token.term_key.is_some(),
+                token.status.is_some(),
+                "{token:?}"
+            );
+            if token.term_key.is_none() {
+                assert!(!token.text.chars().any(char::is_alphabetic), "{token:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn reopening_uses_the_cache_but_reads_statuses_fresh() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
+            .unwrap()
+            .id;
+        let first = app.open_chapter(id, 0).unwrap();
+        assert!(app
+            .db()
+            .unwrap()
+            .cached_chapter(id, 0, PARSER_VERSION)
+            .unwrap()
+            .is_some());
+        save_word(&app, "livre", Status::WellKnown);
+        let second = app.open_chapter(id, 0).unwrap();
+        assert!(word_statuses(&first).contains(&("livre".into(), WordStatus::New)));
+        assert!(word_statuses(&second).contains(&("livre".into(), WordStatus::WellKnown)));
+    }
+
+    #[test]
+    fn a_corrupt_cache_entry_is_parsed_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
+            .unwrap()
+            .id;
+        let good = app.open_chapter(id, 0).unwrap();
+        app.db()
+            .unwrap()
+            .store_chapter_cache(id, 0, PARSER_VERSION, b"garbage")
+            .unwrap();
+        assert_eq!(app.open_chapter(id, 0).unwrap(), good);
+    }
+
+    #[test]
+    fn text_books_open_as_one_chapter_of_paragraphs() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "sample.txt"), "fr".into())
+            .unwrap()
+            .id;
+        let chapter = app.open_chapter(id, 0).unwrap();
+        assert_eq!(chapter.blocks.len(), 2);
+        assert!(chapter.blocks.iter().all(|b| b.heading_level.is_none()));
+        assert!(matches!(
+            app.open_chapter(id, 1),
+            Err(AllreadsError::ChapterOutOfRange { index: 1, count: 1 })
+        ));
+    }
+
     #[test]
     fn unknown_book_is_missing() {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         assert!(matches!(
             app.chapter_text(42, 0),
+            Err(AllreadsError::Missing { .. })
+        ));
+        assert!(matches!(
+            app.open_chapter(42, 0),
             Err(AllreadsError::Missing { .. })
         ));
         assert!(matches!(

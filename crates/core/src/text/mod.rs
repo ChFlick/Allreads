@@ -12,6 +12,10 @@ pub mod tokens;
 
 use regex::Regex;
 
+/// Version of the parser's output. Bump it whenever blocks, sentences or
+/// tokens change, so cached chapters from older versions are parsed again.
+pub const PARSER_VERSION: i64 = 1;
+
 use crate::presets::LanguagePreset;
 
 /// A language's tokenizing rules, compiled once from its preset.

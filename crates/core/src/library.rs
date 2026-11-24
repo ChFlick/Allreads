@@ -12,6 +12,7 @@ use thiserror::Error;
 use crate::db::book::NewBook;
 use crate::db::{Database, DbError};
 use crate::epub::{self, BookError, BookMeta};
+use crate::text::blocks::{Block, BlockKind, Span, Style};
 use crate::txt::{self, TextBook};
 
 /// A book file opened for reading, in either supported format.
@@ -64,6 +65,28 @@ impl OpenedBook {
         match self {
             Self::Epub(book) => book.chapter_text(index),
             Self::Text(book) if index == 0 => Ok(book.paragraphs().to_vec()),
+            Self::Text(_) => Err(BookError::ChapterOutOfRange { index, count: 1 }),
+        }
+    }
+
+    /// One chapter's blocks. A text file's paragraphs become plain paragraph blocks.
+    ///
+    /// # Errors
+    /// Returns `ChapterOutOfRange` if there is no such chapter.
+    pub fn chapter_blocks(&self, index: usize) -> Result<Vec<Block>, BookError> {
+        match self {
+            Self::Epub(book) => book.chapter_blocks(index),
+            Self::Text(book) if index == 0 => Ok(book
+                .paragraphs()
+                .iter()
+                .map(|paragraph| Block {
+                    kind: BlockKind::Paragraph,
+                    spans: vec![Span {
+                        text: paragraph.clone(),
+                        style: Style::default(),
+                    }],
+                })
+                .collect()),
             Self::Text(_) => Err(BookError::ChapterOutOfRange { index, count: 1 }),
         }
     }

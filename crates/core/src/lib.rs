@@ -4,6 +4,7 @@ pub mod db;
 pub mod epub;
 pub mod library;
 pub mod presets;
+pub mod reader;
 pub mod text;
 pub mod txt;
 

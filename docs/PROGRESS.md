@@ -17,7 +17,7 @@ Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes
 - [x] 8. Database and the `App` object (2026-11-24: migrations V1 with all seven tables; repositories in crates/core/src/db with 65 core tests on an in-memory database; ffi `App` holds the open database behind a Mutex)
 - [ ] 9. Book import and library (Rust side done 2026-11-24: built-in presets added on start, `App::import_book` for EPUB and TXT, table of contents (migration V2), covers saved to the data folder, `App` caches opened books. The Rust test imports three fixtures and lists them after reopening. Pending: the file picker and library screen)
 - [x] 10. Text pipeline (2026-11-24: crates/core/src/text: blocks with heading levels and italic/bold spans, sentence splitting after Lukaisu's rules, tokens with French elision, and the shared term_key. insta snapshots for French, German and English are stable, and a golden test matches Lukaisu's parser fixtures. Terms are now stored by key with display_text (migration V3))
-- [ ] 11. `open_chapter`
+- [ ] 11. `open_chapter` (Rust side done 2026-11-24: `App::open_chapter` returns blocks of tokens with term keys, statuses and italic/bold; parses are cached (migration V4) and statuses joined fresh with one query. Host benchmark for 10,000 words: 10.8 ms cold, 6.1 ms cached, 0.2 ms status join. Pending: the 300 ms check on a phone, which also covers passing the records to Kotlin)
 - [ ] 12. Reader screen
 - [ ] 13. Word sheet and saving
 - [ ] 14. Translator

@@ -109,6 +109,22 @@ impl Book {
             .collect()
     }
 
+    /// One chapter's blocks with their inline styles (0-based, in reading order).
+    ///
+    /// # Errors
+    /// Returns `ChapterOutOfRange` if `index` is past the last chapter, and `Invalid` if the chapter cannot be read.
+    pub fn chapter_blocks(&self, index: usize) -> Result<Vec<Block>, BookError> {
+        let reader = self.epub.reader();
+        let count = reader.len();
+        if index >= count {
+            return Err(BookError::ChapterOutOfRange { index, count });
+        }
+        let content = reader
+            .get(index)
+            .map_err(|e| BookError::Invalid(e.to_string()))?;
+        Ok(html_to_blocks(content.content()))
+    }
+
     /// Returns the paragraphs of one chapter (0-based, in reading order).
     ///
     /// # Errors

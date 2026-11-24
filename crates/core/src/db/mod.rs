@@ -6,6 +6,7 @@
 
 pub mod anki;
 pub mod book;
+pub mod chapter_cache;
 pub mod language;
 pub mod sentence_cache;
 pub mod stats;
@@ -34,7 +35,7 @@ pub enum DbError {
 }
 
 /// The schema version after all migrations. Bump it with each new migration.
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// An open `SQLite` database with the schema applied.
 pub struct Database {
