@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use allreads_core::db::book::Book as BookRow;
-use allreads_core::db::term::Status;
+use allreads_core::db::term::{NewTerm, Status, Term};
 use allreads_core::db::{Database, DbError};
 use allreads_core::epub::BookError;
 use allreads_core::library::{self, ImportError, OpenedBook};
@@ -69,6 +69,67 @@ pub enum WordStatus {
     },
     Ignored,
     WellKnown,
+}
+
+impl WordStatus {
+    /// The stored status, or `None` for `New` (an unsaved word).
+    fn to_status(self) -> Result<Option<Status>, AllreadsError> {
+        match self {
+            WordStatus::New => Ok(None),
+            WordStatus::Learning { level } => {
+                Status::learning(level)
+                    .map(Some)
+                    .ok_or_else(|| AllreadsError::InvalidInput {
+                        message: format!("learning level {level} is not 1 to 5"),
+                    })
+            }
+            WordStatus::Ignored => Ok(Some(Status::Ignored)),
+            WordStatus::WellKnown => Ok(Some(Status::WellKnown)),
+        }
+    }
+}
+
+/// A word to save from the word sheet.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct TermInput {
+    pub language_code: String,
+    /// The word or phrase as the reader saw it.
+    pub text: String,
+    /// Any status but `New`; use `forget_term` to un-save a word.
+    pub status: WordStatus,
+    pub translation: String,
+    pub notes: String,
+    pub lemma: Option<String>,
+}
+
+/// A saved word, as the word sheet shows it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SavedTerm {
+    pub id: i64,
+    pub language_code: String,
+    /// The term key, matching `Token::term_key`.
+    pub term_key: String,
+    /// The form as first seen.
+    pub display_text: String,
+    pub status: WordStatus,
+    pub translation: String,
+    pub notes: String,
+    pub lemma: Option<String>,
+}
+
+impl From<Term> for SavedTerm {
+    fn from(term: Term) -> Self {
+        SavedTerm {
+            id: term.id,
+            language_code: term.language_code,
+            term_key: term.text,
+            display_text: term.display_text,
+            status: term.status.into(),
+            translation: term.translation,
+            notes: term.notes,
+            lemma: term.lemma,
+        }
+    }
 }
 
 impl From<Status> for WordStatus {
@@ -134,6 +195,9 @@ pub enum AllreadsError {
     Missing { what: String },
     #[error("could not write a file: {message}")]
     Storage { message: String },
+    /// A value the caller passed in was not valid, e.g. an empty word.
+    #[error("invalid input: {message}")]
+    InvalidInput { message: String },
     #[error("database error: {message}")]
     Database { message: String },
 }
@@ -142,6 +206,7 @@ impl From<DbError> for AllreadsError {
     fn from(error: DbError) -> Self {
         match error {
             DbError::NotFound { what } => AllreadsError::Missing { what },
+            DbError::InvalidValue(message) => AllreadsError::InvalidInput { message },
             other => AllreadsError::Database {
                 message: other.to_string(),
             },
@@ -443,6 +508,90 @@ impl App {
         })
     }
 
+    /// Saves a word (or phrase) with its status and translation. Saving a word
+    /// that is already saved updates it. Call `open_chapter` again afterwards to
+    /// recolour every occurrence.
+    ///
+    /// # Errors
+    /// Returns `InvalidInput` for an empty word, the `New` status or a bad level,
+    /// and `Missing` for an unknown language.
+    pub fn save_term(&self, input: TermInput) -> Result<SavedTerm, AllreadsError> {
+        let status = input
+            .status
+            .to_status()?
+            .ok_or_else(|| AllreadsError::InvalidInput {
+                message: "a saved word cannot be New; use forget_term".into(),
+            })?;
+        let db = self.db()?;
+        let id = db.save_term(&NewTerm {
+            language_code: input.language_code,
+            text: input.text,
+            lemma: input.lemma,
+            status,
+            translation: input.translation,
+            notes: input.notes,
+            parent_id: None,
+        })?;
+        let term = db.term(id)?.ok_or_else(|| AllreadsError::Missing {
+            what: format!("term {id}"),
+        })?;
+        Ok(term.into())
+    }
+
+    /// The saved term for a word, for the word sheet, or `None` if it is new.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn find_term(
+        &self,
+        language_code: String,
+        text: String,
+    ) -> Result<Option<SavedTerm>, AllreadsError> {
+        Ok(self
+            .db()?
+            .find_term(&language_code, &text)?
+            .map(SavedTerm::from))
+    }
+
+    /// Un-saves a word, so it shows as new again. Returns `false` if it was not
+    /// saved. Its card stays in `AnkiDroid`.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be written.
+    pub fn forget_term(&self, language_code: String, text: String) -> Result<bool, AllreadsError> {
+        let db = self.db()?;
+        let Some(term) = db.find_term(&language_code, &text)? else {
+            return Ok(false);
+        };
+        db.delete_term(term.id)?;
+        Ok(true)
+    }
+
+    /// Marks every new word in a chapter, from block `from_block` to the end,
+    /// as well known (PRD F8). Saved words keep their status. Returns how many
+    /// words were added.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown book, and `ChapterOutOfRange` for a bad index.
+    pub fn mark_rest_known(
+        &self,
+        book_id: i64,
+        chapter_index: u32,
+        from_block: u32,
+    ) -> Result<u32, AllreadsError> {
+        let row = self.book_row(book_id)?;
+        let parsed = self.parsed_chapter(&row, chapter_index)?;
+        let words: Vec<(String, String)> = parsed
+            .blocks
+            .iter()
+            .skip(from_block as usize)
+            .flat_map(|block| &block.tokens)
+            .filter_map(|token| Some((token.key.clone()?, token.text.clone())))
+            .collect();
+        let added = self.db()?.mark_known(&row.language_code, &words)?;
+        Ok(saturate_u32(added))
+    }
+
     /// Saves where the reader stopped in a book.
     ///
     /// # Errors
@@ -704,6 +853,118 @@ mod tests {
             app.open_chapter(id, 1),
             Err(AllreadsError::ChapterOutOfRange { index: 1, count: 1 })
         ));
+    }
+
+    fn input(text: &str, status: WordStatus) -> TermInput {
+        TermInput {
+            language_code: "fr".into(),
+            text: text.into(),
+            status,
+            translation: "man".into(),
+            notes: String::new(),
+            lemma: None,
+        }
+    }
+
+    fn statuses_of(chapter: &Chapter, key: &str) -> Vec<WordStatus> {
+        chapter
+            .blocks
+            .iter()
+            .flat_map(|b| &b.tokens)
+            .filter(|t| t.term_key.as_deref() == Some(key))
+            .filter_map(|t| t.status)
+            .collect()
+    }
+
+    /// Step 13's check on the Rust side: saving a word recolours every occurrence.
+    #[test]
+    fn saving_a_word_recolours_every_occurrence_in_the_chapter() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
+            .unwrap()
+            .id;
+        let before = app.open_chapter(id, 0).unwrap();
+        assert_eq!(
+            statuses_of(&before, "homme"),
+            [WordStatus::New, WordStatus::New]
+        );
+
+        let saved = app
+            .save_term(input("homme", WordStatus::Learning { level: 2 }))
+            .unwrap();
+        assert_eq!(saved.term_key, "homme");
+
+        let after = app.open_chapter(id, 0).unwrap();
+        let learning = WordStatus::Learning { level: 2 };
+        assert_eq!(statuses_of(&after, "homme"), [learning, learning]);
+    }
+
+    #[test]
+    fn find_term_returns_the_saved_translation_for_any_casing() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        app.save_term(input("Homme", WordStatus::Learning { level: 1 }))
+            .unwrap();
+        let found = app.find_term("fr".into(), "HOMME".into()).unwrap().unwrap();
+        assert_eq!(
+            (found.display_text.as_str(), found.translation.as_str()),
+            ("Homme", "man")
+        );
+        assert_eq!(app.find_term("fr".into(), "femme".into()).unwrap(), None);
+    }
+
+    #[test]
+    fn forgetting_a_word_makes_it_new_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        app.save_term(input("homme", WordStatus::Ignored)).unwrap();
+        assert!(app.forget_term("fr".into(), "homme".into()).unwrap());
+        assert!(!app.forget_term("fr".into(), "homme".into()).unwrap());
+        assert_eq!(app.find_term("fr".into(), "homme".into()).unwrap(), None);
+    }
+
+    #[test]
+    fn saving_with_new_or_a_bad_level_is_invalid_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        for status in [WordStatus::New, WordStatus::Learning { level: 7 }] {
+            assert!(matches!(
+                app.save_term(input("homme", status)),
+                Err(AllreadsError::InvalidInput { .. })
+            ));
+        }
+        assert!(matches!(
+            app.save_term(input("   ", WordStatus::WellKnown)),
+            Err(AllreadsError::InvalidInput { .. })
+        ));
+    }
+
+    #[test]
+    fn mark_rest_known_skips_earlier_blocks_and_saved_words() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
+            .unwrap()
+            .id;
+        app.save_term(input("homme", WordStatus::Learning { level: 3 }))
+            .unwrap();
+        // Block 0 is the heading "Chapitre un"; start at block 1.
+        let added = app.mark_rest_known(id, 0, 1).unwrap();
+        assert!(added > 0);
+        let chapter = app.open_chapter(id, 0).unwrap();
+        assert_eq!(statuses_of(&chapter, "chapitre"), [WordStatus::New]);
+        assert_eq!(statuses_of(&chapter, "lisait"), [WordStatus::WellKnown]);
+        assert_eq!(
+            statuses_of(&chapter, "homme"),
+            [
+                WordStatus::Learning { level: 3 },
+                WordStatus::Learning { level: 3 }
+            ]
+        );
+        assert_eq!(app.mark_rest_known(id, 0, 1).unwrap(), 0);
     }
 
     #[test]

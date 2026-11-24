@@ -199,6 +199,49 @@ impl Database {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// Saves every word in `words` that is not saved yet as well known (99), in
+    /// one transaction, and returns how many were added. Words already saved
+    /// keep their status, so a word being learned is never marked known by accident.
+    ///
+    /// `words` are `(term key, form as seen)` pairs, e.g. from a parsed chapter.
+    ///
+    /// # Errors
+    /// Returns `NotFound` if the language is not stored, and a database error if
+    /// a statement fails.
+    pub fn mark_known(
+        &self,
+        language_code: &str,
+        words: &[(String, String)],
+    ) -> Result<usize, DbError> {
+        if self.language(language_code)?.is_none() {
+            return Err(DbError::NotFound {
+                what: format!("language {language_code}"),
+            });
+        }
+        let transaction = self.conn().unchecked_transaction()?;
+        let mut added = 0;
+        {
+            let mut insert = transaction.prepare(
+                "INSERT INTO term (language_code, text, status, display_text)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT (language_code, text) DO NOTHING",
+            )?;
+            for (key, display_text) in words {
+                if key.trim().is_empty() {
+                    continue;
+                }
+                added += insert.execute(params![
+                    language_code,
+                    key,
+                    Status::WellKnown.code(),
+                    display_text
+                ])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(added)
+    }
+
     /// Deletes a term. Its `AnkiDroid` link and queue entry go with it; the card
     /// itself stays in `AnkiDroid`.
     ///
@@ -440,6 +483,43 @@ mod tests {
         let mut term = new_term("Haus", Status::Learning(1));
         term.language_code = "zz".into();
         assert!(matches!(db.save_term(&term), Err(DbError::NotFound { .. })));
+    }
+
+    fn pairs(words: &[&str]) -> Vec<(String, String)> {
+        words
+            .iter()
+            .map(|w| (w.to_lowercase(), (*w).to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn mark_known_adds_only_unsaved_words() {
+        let db = french_db();
+        let learning = db
+            .save_term(&new_term("chat", Status::Learning(2)))
+            .unwrap();
+        let added = db
+            .mark_known("fr", &pairs(&["chat", "Chien", "chien", "oiseau"]))
+            .unwrap();
+        assert_eq!(added, 2);
+        assert_eq!(
+            db.term(learning).unwrap().unwrap().status,
+            Status::Learning(2)
+        );
+        let chien = db.find_term("fr", "chien").unwrap().unwrap();
+        assert_eq!(
+            (chien.status, chien.display_text.as_str()),
+            (Status::WellKnown, "Chien")
+        );
+    }
+
+    #[test]
+    fn mark_known_in_an_unknown_language_is_not_found() {
+        let db = french_db();
+        assert!(matches!(
+            db.mark_known("zz", &pairs(&["x"])),
+            Err(DbError::NotFound { .. })
+        ));
     }
 
     #[test]

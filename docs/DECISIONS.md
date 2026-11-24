@@ -33,3 +33,5 @@
 | 2026-11-24 | The chapter cache stores JSON; a binary format (e.g. `postcard`) is an option if the phone check needs it | Simple and readable while debugging. On the host, reading the cache is 6.1 ms against 10.8 ms for a fresh parse, so a binary format could save a few more milliseconds |
 | 2026-11-24 | Statuses are joined from all saved terms of the language in one query, not an `IN (...)` list of the chapter's words | One simple query, with no SQLite parameter limit to worry about; 0.2 ms for a 10,000-word chapter against 3,000 terms |
 | 2026-11-24 | A token takes the style (italic, bold) of the span where it starts | A word split across styles is rare, and splitting the token would break its term key |
+| 2026-11-24 | Choosing "new" in the word sheet un-saves the word (`forget_term`); `save_term` refuses the New status | A word with no row is new, so un-saving is the only honest way back. The Anki card stays, as decided for deleted terms |
+| 2026-11-24 | "Mark rest of chapter as known" starts at the current block and only adds unsaved words | Words already being learned must not jump to known by accident |
