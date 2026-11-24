@@ -20,6 +20,7 @@ The biggest open risk is that the M0 pipeline (Rust built for Android, called fr
 
 1. **Android libraries in CI.** Add a job that runs `cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 build --release` with the NDK preinstalled on GitHub's Ubuntu runner (check that it is there on the first run). Bundled SQLite and zip compile C code, so this is the first real test of the cross-build.
    - **Done when** CI builds all three `.so` files. This is step 1's check, run in CI instead of locally.
+   - *Done 2026-11-24:* the runner had NDK 30 preinstalled; the release libraries are about 7.4 MB (arm64) and 5.4 MB (armv7) before stripping.
 2. **Step 9, Rust side.** See the additions under step 9 below.
    - **Done when** a Rust test imports the EPUB fixtures, reopens the database, and lists them with title, language and position.
 3. **Step 10, text pipeline.** See the additions under step 10.

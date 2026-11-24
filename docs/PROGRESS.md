@@ -3,7 +3,7 @@
 Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes. Add the date and any notes.
 
 ## Phase 0: toolchain and repo setup
-- [ ] 1. Install the toolchain (2026-11-24: rustup, the three Android targets and cargo-ndk are installed. Pending: the NDK, so `cargo ndk` has never run; planned as a CI job)
+- [x] 1. Install the toolchain (2026-11-24: checked in CI instead of locally. The `android-libs` job builds liballreads_ffi.so for arm64-v8a, armeabi-v7a and x86_64 at API 26 with NDK 30. Your own machine still needs the NDK for local Android builds)
 - [ ] 2. Create the repo (2026-11-24: Rust workspace, docs, licence and README done. Pending: the Android project)
 - [ ] 3. Set up CI (2026-11-24: fmt, clippy, docs, test, bindings and a Rust 1.91 job are green on main. Pending: the Gradle assembleDebug job)
 - [x] 4. Port the language presets (2026-11-24: en, fr, de, es in data/languages; loader in crates/core/src/presets.rs checks each file and rejects duplicate codes; NOTICE added for Lukaisu attribution)
