@@ -1,0 +1,33 @@
+---
+source: crates/core/src/text/tokens.rs
+expression: "render(text, &builtin(\"fr\"))"
+---
+0 W "L’" l'
+0 W "homme" homme
+0 - " " 
+0 W "s'" s'
+0 W "arrêta" arrêta
+0 - " :" 
+1 - " « " 
+1 W "Aujourd'hui" aujourd'hui
+1 - ", " 
+1 W "peut-être" peut-être
+1 - " ? »" 
+2 - " " 
+2 W "Il" il
+2 - " " 
+2 W "lut" lut
+2 - " 3,14 " 
+2 W "pages" pages
+2 - "." 
+3 - " " 
+3 W "M" m
+3 - ". " 
+3 W "Dupont" dupont
+3 - " " 
+3 W "rit" rit
+3 - "... " 
+3 W "puis" puis
+3 - " " 
+3 W "partit" partit
+3 - " !"

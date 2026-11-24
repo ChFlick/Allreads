@@ -4,6 +4,7 @@ pub mod db;
 pub mod epub;
 pub mod library;
 pub mod presets;
+pub mod text;
 pub mod txt;
 
 /// Returns the version of the core library.

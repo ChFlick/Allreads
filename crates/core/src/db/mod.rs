@@ -34,7 +34,7 @@ pub enum DbError {
 }
 
 /// The schema version after all migrations. Bump it with each new migration.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// An open `SQLite` database with the schema applied.
 pub struct Database {
@@ -115,7 +115,7 @@ pub(crate) mod tests_support {
             word_characters = "a-zA-ZÀ-ÖØ-öø-ȳ"
             sentence_end_chars = ".!?"
             sentence_exceptions = "Dr.|Mr."
-            character_substitutions = ""
+            character_substitutions = "´='|`='|’='|‘='"
             rtl = false
             remove_spaces = false
             split_each_char = false

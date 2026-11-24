@@ -2,45 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
-use scraper::{node::Node, ElementRef, Html, Selector};
+use scraper::{Html, Selector};
+
+use crate::text::blocks::{html_to_blocks, Block};
 use thiserror::Error;
-
-/// Elements that start and end a paragraph in the reader.
-const BLOCK_TAGS: &[&str] = &[
-    "address",
-    "article",
-    "aside",
-    "blockquote",
-    "dd",
-    "div",
-    "dl",
-    "dt",
-    "figcaption",
-    "figure",
-    "footer",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "header",
-    "hr",
-    "li",
-    "main",
-    "ol",
-    "p",
-    "pre",
-    "section",
-    "table",
-    "td",
-    "th",
-    "tr",
-    "ul",
-];
-
-/// Elements whose contents are never reading text.
-const SKIPPED_TAGS: &[&str] = &["head", "script", "style"];
 
 /// Basic facts about a book, read from its EPUB metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -170,50 +135,7 @@ impl Book {
 /// empty blocks are dropped.
 #[must_use]
 pub fn html_to_paragraphs(html: &str) -> Vec<String> {
-    let document = Html::parse_document(html);
-    let mut paragraphs = Vec::new();
-    let mut buffer = String::new();
-    collect_blocks(document.root_element(), &mut paragraphs, &mut buffer);
-    flush(&mut buffer, &mut paragraphs);
-    paragraphs
-}
-
-fn collect_blocks(node: ElementRef, paragraphs: &mut Vec<String>, buffer: &mut String) {
-    for child in node.children() {
-        match child.value() {
-            Node::Text(text) => buffer.push_str(text),
-            Node::Element(element) => {
-                let name = element.name();
-                if SKIPPED_TAGS.contains(&name) {
-                    continue;
-                }
-                if name == "br" {
-                    buffer.push(' ');
-                    continue;
-                }
-                let Some(child_element) = ElementRef::wrap(child) else {
-                    continue;
-                };
-                if BLOCK_TAGS.contains(&name) {
-                    flush(buffer, paragraphs);
-                    collect_blocks(child_element, paragraphs, buffer);
-                    flush(buffer, paragraphs);
-                } else {
-                    collect_blocks(child_element, paragraphs, buffer);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// Moves the buffered text into `paragraphs` if it isn't blank, then clears it.
-fn flush(buffer: &mut String, paragraphs: &mut Vec<String>) {
-    let text = normalize_whitespace(buffer);
-    buffer.clear();
-    if !text.trim().is_empty() {
-        paragraphs.push(text);
-    }
+    html_to_blocks(html).iter().map(Block::text).collect()
 }
 
 /// The text of the first heading (`h1` to `h6`), if there is a non-blank one.

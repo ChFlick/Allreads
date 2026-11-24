@@ -9,3 +9,9 @@ Lukaisu used the placeholder `lukaisu_term`; here it is `{term}`.
 
 The TTS locales in data/languages/ were chosen by Allreads (not taken from
 Lukaisu).
+
+The sentence-end rules in crates/core/src/text/sentences.rs follow Lukaisu's
+`findLatinSentenceEnd` (webapp/js/shared/offline/local/parser/sentence-end.ts,
+Unlicense), rewritten in Rust. The test file
+crates/core/tests/fixtures/lukaisu-parser-fixtures.json is copied unchanged
+from Lukaisu (webapp-tests/offline/parser/parser-fixtures.json).

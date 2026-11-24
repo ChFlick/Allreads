@@ -1,0 +1,23 @@
+---
+source: crates/core/src/text/tokens.rs
+expression: "render(text, &builtin(\"de\"))"
+---
+0 W "Herr" herr
+0 - " " 
+0 W "Müller" müller
+0 - " " 
+0 W "kam" kam
+0 - " " 
+0 W "am" am
+0 - " 3. " 
+0 W "Oktober" oktober
+0 - "." 
+1 - " „" 
+1 W "Grüß" grüß
+1 - " " 
+1 W "Gott" gott
+1 - "!“, " 
+1 W "sagte" sagte
+1 - " " 
+1 W "er" er
+1 - "."

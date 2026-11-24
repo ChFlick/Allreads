@@ -28,6 +28,10 @@ pub struct LanguagePreset {
     pub dictionary_url: String,
     /// Translator URL with `{term}` as the placeholder for the word. May be empty.
     pub translator_url: String,
+    /// Pipe-separated prefixes split off before an apostrophe, e.g. `l|d|qu` so
+    /// that `l'homme` is two words. Empty for most languages.
+    #[serde(default)]
+    pub elision_prefixes: String,
 }
 
 /// Errors from reading, parsing or checking presets.
@@ -115,6 +119,7 @@ impl LanguagePreset {
         }
         check_url("dictionary_url", &self.dictionary_url)?;
         check_url("translator_url", &self.translator_url)?;
+        crate::text::LanguageRules::new(self)?;
         Ok(())
     }
 }

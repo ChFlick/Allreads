@@ -24,7 +24,7 @@ The biggest open risk is that the M0 pipeline (Rust built for Android, called fr
 2. **Step 9, Rust side.** See the additions under step 9 below.
    - **Done when** a Rust test imports the EPUB fixtures, reopens the database, and lists them with title, language and position.
    - *Done 2026-11-24:* see `library::tests` and the `App` tests in `crates/ffi`.
-3. **Step 10, text pipeline.** See the additions under step 10.
+3. **Step 10, text pipeline.** See the additions under step 10. *Done 2026-11-24.*
 4. **Step 11, `open_chapter`, Rust side.** Includes the chapter cache and the benchmark. The 300 ms check on a phone stays open.
 5. **Step 13, Rust side.** `App::save_term`, plus "mark rest of chapter as known" (F8) as one batch call.
 6. **Step 14, translator.** Tested against a local mock HTTP server; real calls need a key.

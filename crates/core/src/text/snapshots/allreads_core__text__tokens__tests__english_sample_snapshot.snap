@@ -1,0 +1,21 @@
+---
+source: crates/core/src/text/tokens.rs
+expression: "render(text, &builtin(\"en\"))"
+---
+0 W "Mr" mr
+0 - ". " 
+0 W "Smith" smith
+0 - " " 
+0 W "didn't" didn't
+0 - " " 
+0 W "wait" wait
+0 - "." 
+1 - " \"" 
+1 W "Well-known" well-known
+1 - ",\" " 
+1 W "he" he
+1 - " " 
+1 W "said" said
+1 - ": " 
+1 W "it's" it's
+1 - " 3.14."

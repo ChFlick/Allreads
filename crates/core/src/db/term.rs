@@ -4,6 +4,7 @@ use rusqlite::{params, OptionalExtension, Row};
 
 use super::book::require_one_changed;
 use super::{require_text, Database, DbError};
+use crate::text::key::{parse_substitutions, term_key};
 
 /// A word's status. A word with no saved term is "new".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,10 +45,12 @@ impl Status {
     }
 }
 
-/// A term to save. Saving the same language and text again updates the term.
+/// A term to save. Saving a word whose term key is already stored in this
+/// language updates that term, so "Chat" and "chat" are one term.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewTerm {
     pub language_code: String,
+    /// The word or phrase as the reader saw it.
     pub text: String,
     pub lemma: Option<String>,
     pub status: Status,
@@ -62,7 +65,10 @@ pub struct NewTerm {
 pub struct Term {
     pub id: i64,
     pub language_code: String,
+    /// The term key (lower case, normalised), used for matching.
     pub text: String,
+    /// The form as first seen, for display and Anki cards (keeps "Haus" capitalised).
+    pub display_text: String,
     pub lemma: Option<String>,
     pub status: Status,
     pub translation: String,
@@ -70,18 +76,24 @@ pub struct Term {
     pub parent_id: Option<i64>,
 }
 
-const COLUMNS: &str = "id, language_code, text, lemma, status, translation, notes, parent_id";
+const COLUMNS: &str =
+    "id, language_code, text, lemma, status, translation, notes, parent_id, display_text";
 
 impl Database {
     /// Saves a term and returns its id. An existing term with the same language
     /// and text keeps its id and is updated.
     ///
     /// # Errors
-    /// Returns `InvalidValue` for blank text, and a database error if the
-    /// language is not stored or the parent term does not exist.
+    /// Returns `InvalidValue` for blank text or a bad level, `NotFound` if the
+    /// language is not stored, and a database error if the parent term does not exist.
     pub fn save_term(&self, term: &NewTerm) -> Result<i64, DbError> {
-        let text = term.text.trim();
-        require_text("term text", text)?;
+        let display_text = term.text.trim();
+        require_text("term text", display_text)?;
+        let key = self
+            .term_key(&term.language_code, display_text)?
+            .ok_or_else(|| DbError::NotFound {
+                what: format!("language {}", term.language_code),
+            })?;
         if let Status::Learning(level) = term.status {
             if !(1..=5).contains(&level) {
                 return Err(DbError::InvalidValue(format!(
@@ -89,10 +101,12 @@ impl Database {
                 )));
             }
         }
-        self.check_parent_link(&term.language_code, text, term.parent_id)?;
+        self.check_parent_link(&term.language_code, display_text, term.parent_id)?;
+        // On conflict the display text is kept: it is the form as first seen.
         let id = self.conn().query_row(
-            "INSERT INTO term (language_code, text, lemma, status, translation, notes, parent_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "INSERT INTO term (language_code, text, lemma, status, translation, notes, parent_id,
+                 display_text)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT (language_code, text) DO UPDATE SET
                  lemma = excluded.lemma,
                  status = excluded.status,
@@ -102,12 +116,13 @@ impl Database {
              RETURNING id",
             params![
                 term.language_code,
-                text,
+                key,
                 term.lemma,
                 term.status.code(),
                 term.translation,
                 term.notes,
                 term.parent_id,
+                display_text,
             ],
             |row| row.get(0),
         )?;
@@ -151,14 +166,26 @@ impl Database {
             .optional()?)
     }
 
-    /// The saved term for this word in this language, if there is one.
+    /// The term key for `text` in a language, or `None` if the language is not stored.
+    fn term_key(&self, language_code: &str, text: &str) -> Result<Option<String>, DbError> {
+        Ok(self.language(language_code)?.map(|language| {
+            let substitutions = parse_substitutions(&language.character_substitutions);
+            term_key(text, &substitutions)
+        }))
+    }
+
+    /// The saved term for this word in this language, if there is one. The word
+    /// is matched by its term key, so case and apostrophe style do not matter.
     /// # Errors
     /// Returns a database error if the statement fails.
     pub fn find_term(&self, language_code: &str, text: &str) -> Result<Option<Term>, DbError> {
+        let Some(key) = self.term_key(language_code, text)? else {
+            return Ok(None);
+        };
         let sql = format!("SELECT {COLUMNS} FROM term WHERE language_code = ?1 AND text = ?2");
         Ok(self
             .conn()
-            .query_row(&sql, params![language_code, text.trim()], term_from_row)
+            .query_row(&sql, params![language_code, key], term_from_row)
             .optional()?)
     }
 
@@ -200,6 +227,7 @@ fn term_from_row(row: &Row) -> rusqlite::Result<Term> {
         translation: row.get(5)?,
         notes: row.get(6)?,
         parent_id: row.get(7)?,
+        display_text: row.get(8)?,
     })
 }
 
@@ -370,6 +398,48 @@ mod tests {
             db.save_term(&new_term("chat", Status::Learning(9))),
             Err(DbError::InvalidValue(_))
         ));
+    }
+
+    #[test]
+    fn case_does_not_make_a_second_term_and_the_first_form_is_kept() {
+        let db = french_db();
+        let first = db
+            .save_term(&new_term("Chat", Status::Learning(1)))
+            .unwrap();
+        let second = db
+            .save_term(&new_term("chat", Status::Learning(3)))
+            .unwrap();
+        assert_eq!(first, second);
+        let term = db.term(first).unwrap().unwrap();
+        assert_eq!(
+            (term.text.as_str(), term.display_text.as_str()),
+            ("chat", "Chat")
+        );
+        assert_eq!(term.status, Status::Learning(3));
+        assert_eq!(
+            db.find_term("fr", "CHAT").unwrap().map(|t| t.id),
+            Some(first)
+        );
+    }
+
+    #[test]
+    fn curly_and_straight_apostrophes_find_the_same_term() {
+        let db = french_db();
+        let id = db
+            .save_term(&new_term("aujourd’hui", Status::Learning(1)))
+            .unwrap();
+        assert_eq!(
+            db.find_term("fr", "aujourd'hui").unwrap().map(|t| t.id),
+            Some(id)
+        );
+    }
+
+    #[test]
+    fn saving_in_an_unknown_language_is_a_typed_not_found() {
+        let db = french_db();
+        let mut term = new_term("Haus", Status::Learning(1));
+        term.language_code = "zz".into();
+        assert!(matches!(db.save_term(&term), Err(DbError::NotFound { .. })));
     }
 
     #[test]

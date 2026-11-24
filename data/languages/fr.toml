@@ -11,3 +11,5 @@ split_each_char = false
 tts_locale = "fr-FR"
 dictionary_url = "http://www.wordreference.com/fren/{term}"
 translator_url = "https://translate.google.com/?ie=UTF-8&sl=fr&tl=en&text={term}"
+# Split before an apostrophe: l'homme, jusqu'à. Not aujourd'hui.
+elision_prefixes = "l|d|j|m|n|s|t|c|qu|jusqu|lorsqu|puisqu|quoiqu"
