@@ -80,7 +80,16 @@ impl Database {
     /// Returns `InvalidValue` for blank text, and a database error if the
     /// language is not stored or the parent term does not exist.
     pub fn save_term(&self, term: &NewTerm) -> Result<i64, DbError> {
-        require_text("term text", &term.text)?;
+        let text = term.text.trim();
+        require_text("term text", text)?;
+        if let Status::Learning(level) = term.status {
+            if !(1..=5).contains(&level) {
+                return Err(DbError::InvalidValue(format!(
+                    "learning level {level} is not 1 to 5"
+                )));
+            }
+        }
+        self.check_parent_link(&term.language_code, text, term.parent_id)?;
         let id = self.conn().query_row(
             "INSERT INTO term (language_code, text, lemma, status, translation, notes, parent_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -93,7 +102,7 @@ impl Database {
              RETURNING id",
             params![
                 term.language_code,
-                term.text,
+                text,
                 term.lemma,
                 term.status.code(),
                 term.translation,
@@ -103,6 +112,32 @@ impl Database {
             |row| row.get(0),
         )?;
         Ok(id)
+    }
+
+    /// Fails if `parent_id` is the term itself, or if following its parents
+    /// would come back to the term. Following a loop would never end.
+    fn check_parent_link(
+        &self,
+        language_code: &str,
+        text: &str,
+        parent_id: Option<i64>,
+    ) -> Result<(), DbError> {
+        let own_id = self.find_term(language_code, text)?.map(|term| term.id);
+        let mut current = parent_id;
+        let mut seen = std::collections::HashSet::new();
+        while let Some(id) = current {
+            if Some(id) == own_id {
+                return Err(DbError::InvalidValue(
+                    "this lemma link would form a loop".into(),
+                ));
+            }
+            // A loop that already exists in the data must not hang us either.
+            if !seen.insert(id) {
+                break;
+            }
+            current = self.term(id)?.and_then(|term| term.parent_id);
+        }
+        Ok(())
     }
 
     /// The term with this id, if it exists.
@@ -123,7 +158,7 @@ impl Database {
         let sql = format!("SELECT {COLUMNS} FROM term WHERE language_code = ?1 AND text = ?2");
         Ok(self
             .conn()
-            .query_row(&sql, params![language_code, text], term_from_row)
+            .query_row(&sql, params![language_code, text.trim()], term_from_row)
             .optional()?)
     }
 
@@ -270,6 +305,71 @@ mod tests {
             [],
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn a_term_cannot_be_its_own_lemma() {
+        let db = french_db();
+        let id = db
+            .save_term(&new_term("chat", Status::Learning(1)))
+            .unwrap();
+        let mut selfish = new_term("chat", Status::Learning(1));
+        selfish.parent_id = Some(id);
+        assert!(matches!(
+            db.save_term(&selfish),
+            Err(DbError::InvalidValue(_))
+        ));
+    }
+
+    #[test]
+    fn lemma_links_cannot_form_a_loop() {
+        let db = french_db();
+        let mangeons = db
+            .save_term(&new_term("mangeons", Status::Learning(1)))
+            .unwrap();
+        let mut mange = new_term("mange", Status::Learning(1));
+        mange.parent_id = Some(mangeons);
+        db.save_term(&mange).unwrap();
+        let mut back = new_term("mangeons", Status::Learning(1));
+        back.parent_id = db.find_term("fr", "mange").unwrap().map(|t| t.id);
+        assert!(matches!(db.save_term(&back), Err(DbError::InvalidValue(_))));
+    }
+
+    #[test]
+    fn a_normal_lemma_chain_is_accepted() {
+        let db = french_db();
+        let lemma = db
+            .save_term(&new_term("manger", Status::Learning(1)))
+            .unwrap();
+        let mut form = new_term("mange", Status::Learning(1));
+        form.parent_id = Some(lemma);
+        assert!(db.save_term(&form).is_ok());
+    }
+
+    #[test]
+    fn surrounding_spaces_do_not_make_a_second_term() {
+        let db = french_db();
+        let first = db
+            .save_term(&new_term("chat", Status::Learning(1)))
+            .unwrap();
+        let second = db
+            .save_term(&new_term(" chat ", Status::Learning(2)))
+            .unwrap();
+        assert_eq!(first, second);
+        assert_eq!(db.terms("fr").unwrap().len(), 1);
+        assert_eq!(
+            db.find_term("fr", " chat").unwrap().map(|t| t.id),
+            Some(first)
+        );
+    }
+
+    #[test]
+    fn an_invalid_learning_level_is_a_typed_error() {
+        let db = french_db();
+        assert!(matches!(
+            db.save_term(&new_term("chat", Status::Learning(9))),
+            Err(DbError::InvalidValue(_))
+        ));
     }
 
     #[test]

@@ -64,11 +64,13 @@ fn check_day(day: &str) -> Result<(), DbError> {
             .iter()
             .enumerate()
             .all(|(i, b)| i == 4 || i == 7 || b.is_ascii_digit());
-    if shape_ok {
+    let month: u32 = day.get(5..7).and_then(|m| m.parse().ok()).unwrap_or(0);
+    let date: u32 = day.get(8..10).and_then(|d| d.parse().ok()).unwrap_or(0);
+    if shape_ok && (1..=12).contains(&month) && (1..=31).contains(&date) {
         Ok(())
     } else {
         Err(DbError::InvalidValue(format!(
-            "day '{day}' is not YYYY-MM-DD"
+            "day '{day}' is not a date YYYY-MM-DD"
         )))
     }
 }
@@ -141,6 +143,20 @@ mod tests {
                     Err(DbError::InvalidValue(_))
                 ),
                 "{day:?} should be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn impossible_calendar_dates_are_refused() {
+        let (db, book) = db_with_book();
+        for day in ["2026-13-01", "2026-00-10", "2026-11-00", "2026-11-32"] {
+            assert!(
+                matches!(
+                    db.add_reading(day, book, 1, 0),
+                    Err(DbError::InvalidValue(_))
+                ),
+                "{day} should be refused"
             );
         }
     }

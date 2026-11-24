@@ -39,6 +39,11 @@ impl Database {
     /// language is not stored.
     pub fn insert_book(&self, book: &NewBook) -> Result<i64, DbError> {
         require_text("title", &book.title)?;
+        if self.language(&book.language_code)?.is_none() {
+            return Err(DbError::NotFound {
+                what: format!("language {}", book.language_code),
+            });
+        }
         let id = self.conn().query_row(
             "INSERT INTO book (title, author, language_code, file_path, cover_path)
              VALUES (?1, ?2, ?3, ?4, ?5)
@@ -190,11 +195,14 @@ mod tests {
     }
 
     #[test]
-    fn book_in_an_unknown_language_is_refused() {
+    fn book_in_an_unknown_language_is_a_typed_not_found() {
         let db = db_with_french();
         let mut book = new_book("Un");
         book.language_code = "zz".into();
-        assert!(matches!(db.insert_book(&book), Err(DbError::Sql(_))));
+        assert!(matches!(
+            db.insert_book(&book),
+            Err(DbError::NotFound { what }) if what == "language zz"
+        ));
     }
 
     #[test]
