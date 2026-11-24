@@ -8,10 +8,12 @@ repository.workspace = true
 rust-version.workspace = true
 
 [lib]
-crate-type = ["lib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
 allreads-core = { path = "../core" }
+thiserror = "2.0.20"
+uniffi = { version = "0.32.2", features = ["cli"] }
 
 [lints]
 workspace = true
