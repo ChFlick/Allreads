@@ -1,0 +1,4 @@
+<resources>
+    <!-- Compose draws the UI; this only themes the window around it. -->
+    <style name="Theme.Allreads" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

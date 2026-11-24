@@ -77,9 +77,9 @@ cargo run -p allreads-ffi --bin uniffi-bindgen -- generate \
 python3 make_fixtures.py
 ```
 
-Not set up yet (needs the NDK and the Android project):
+Android (needs the Android SDK; `assembleDebug` also needs the NDK, with `ANDROID_NDK_HOME` set):
 
 ```bash
-cargo ndk -t arm64-v8a build    # Android build of the Rust library
-cd android && ./gradlew assembleDebug
+cd android && ./gradlew testDebugUnitTest   # Kotlin tests on the JVM, calling the host Rust build
+cd android && ./gradlew assembleDebug       # APK: runs cargo-ndk and uniffi-bindgen first
 ```

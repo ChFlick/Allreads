@@ -83,7 +83,7 @@ impl WordStatus {
                 Status::learning(level)
                     .map(Some)
                     .ok_or_else(|| AllreadsError::InvalidInput {
-                        message: format!("learning level {level} is not 1 to 5"),
+                        reason: format!("learning level {level} is not 1 to 5"),
                     })
             }
             WordStatus::Ignored => Ok(Some(Status::Ignored)),
@@ -188,14 +188,17 @@ fn saturate_u32(value: usize) -> u32 {
 }
 
 /// Errors that cross into Kotlin as typed exceptions.
+///
+/// No field may be called `message`: it would clash with Kotlin's
+/// `Exception.message`, and the generated bindings would not compile.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum AllreadsError {
     #[error("file not found: {path}")]
     NotFound { path: String },
-    #[error("could not read the book: {message}")]
-    InvalidBook { message: String },
-    #[error("unsupported file type: {message}")]
-    UnsupportedFile { message: String },
+    #[error("could not read the book: {reason}")]
+    InvalidBook { reason: String },
+    #[error("unsupported file type: {reason}")]
+    UnsupportedFile { reason: String },
     #[error("chapter {index} is out of range; the book has {count} chapters")]
     ChapterOutOfRange { index: u32, count: u32 },
     #[error("data folder not found: {path}")]
@@ -203,11 +206,11 @@ pub enum AllreadsError {
     /// A book, language or other row that does not exist.
     #[error("{what} not found")]
     Missing { what: String },
-    #[error("could not write a file: {message}")]
-    Storage { message: String },
+    #[error("could not write a file: {reason}")]
+    Storage { reason: String },
     /// The translation service could not be reached; try again when online.
-    #[error("translation is unavailable: {message}")]
-    TranslationUnavailable { message: String },
+    #[error("translation is unavailable: {reason}")]
+    TranslationUnavailable { reason: String },
     #[error("the translation service rejected the API key")]
     TranslationKeyRejected,
     #[error("the translation quota is used up")]
@@ -215,22 +218,22 @@ pub enum AllreadsError {
     /// DeepL is busy even after retrying; try again in a moment.
     #[error("the translation service is busy; try again in a moment")]
     TranslationRateLimited,
-    #[error("translation failed: {message}")]
-    TranslationFailed { message: String },
+    #[error("translation failed: {reason}")]
+    TranslationFailed { reason: String },
     /// A value the caller passed in was not valid, e.g. an empty word.
-    #[error("invalid input: {message}")]
-    InvalidInput { message: String },
-    #[error("database error: {message}")]
-    Database { message: String },
+    #[error("invalid input: {reason}")]
+    InvalidInput { reason: String },
+    #[error("database error: {reason}")]
+    Database { reason: String },
 }
 
 impl From<DbError> for AllreadsError {
     fn from(error: DbError) -> Self {
         match error {
             DbError::NotFound { what } => AllreadsError::Missing { what },
-            DbError::InvalidValue(message) => AllreadsError::InvalidInput { message },
+            DbError::InvalidValue(reason) => AllreadsError::InvalidInput { reason },
             other => AllreadsError::Database {
-                message: other.to_string(),
+                reason: other.to_string(),
             },
         }
     }
@@ -242,8 +245,8 @@ impl From<BookError> for AllreadsError {
             BookError::NotFound(path) => AllreadsError::NotFound {
                 path: path.display().to_string(),
             },
-            BookError::Invalid(message) => AllreadsError::InvalidBook { message },
-            BookError::Unsupported(message) => AllreadsError::UnsupportedFile { message },
+            BookError::Invalid(reason) => AllreadsError::InvalidBook { reason },
+            BookError::Unsupported(reason) => AllreadsError::UnsupportedFile { reason },
             BookError::ChapterOutOfRange { index, count } => AllreadsError::ChapterOutOfRange {
                 index: saturate_u32(index),
                 count: saturate_u32(count),
@@ -257,7 +260,7 @@ impl From<ImportError> for AllreadsError {
         match error {
             ImportError::Book(error) => error.into(),
             ImportError::Db(error) => error.into(),
-            ImportError::Cover(message) => AllreadsError::Storage { message },
+            ImportError::Cover(reason) => AllreadsError::Storage { reason },
         }
     }
 }
@@ -265,12 +268,12 @@ impl From<ImportError> for AllreadsError {
 impl From<TranslateError> for AllreadsError {
     fn from(error: TranslateError) -> Self {
         match error {
-            TranslateError::Network(message) => AllreadsError::TranslationUnavailable { message },
+            TranslateError::Network(reason) => AllreadsError::TranslationUnavailable { reason },
             TranslateError::Unauthorized => AllreadsError::TranslationKeyRejected,
             TranslateError::QuotaExceeded => AllreadsError::TranslationQuotaExceeded,
             TranslateError::RateLimited => AllreadsError::TranslationRateLimited,
             other => AllreadsError::TranslationFailed {
-                message: other.to_string(),
+                reason: other.to_string(),
             },
         }
     }
@@ -278,7 +281,7 @@ impl From<TranslateError> for AllreadsError {
 
 fn poisoned() -> AllreadsError {
     AllreadsError::Database {
-        message: "a lock is poisoned after an earlier crash".into(),
+        reason: "a lock is poisoned after an earlier crash".into(),
     }
 }
 
@@ -331,7 +334,7 @@ impl App {
                 .ok_or_else(|| AllreadsError::Missing {
                     what: format!("language {language_code}"),
                 })?;
-        LanguageRules::new(&language).map_err(|message| AllreadsError::Database { message })
+        LanguageRules::new(&language).map_err(|reason| AllreadsError::Database { reason })
     }
 
     /// A chapter's tokens from the cache, or parsed and cached on a miss.
@@ -364,7 +367,7 @@ impl App {
         let key = CacheKey::new(text, context, source_lang, target_lang, translator.name());
         if key.text.is_empty() {
             return Err(AllreadsError::InvalidInput {
-                message: "nothing to translate".into(),
+                reason: "nothing to translate".into(),
             });
         }
         if let Some(cached) = self.db()?.cached_translation(&key)? {
@@ -438,7 +441,7 @@ impl App {
         }
         let db = Database::open(&folder.join("allreads.db"))?;
         let presets = builtin_presets().map_err(|e| AllreadsError::Database {
-            message: e.to_string(),
+            reason: e.to_string(),
         })?;
         for preset in &presets {
             db.add_language_if_missing(preset)?;
@@ -591,7 +594,7 @@ impl App {
             .status
             .to_status()?
             .ok_or_else(|| AllreadsError::InvalidInput {
-                message: "a saved word cannot be New; use forget_term".into(),
+                reason: "a saved word cannot be New; use forget_term".into(),
             })?;
         let db = self.db()?;
         let id = db.save_term(&NewTerm {
@@ -683,7 +686,7 @@ impl App {
     ) -> Result<Translation, AllreadsError> {
         if deepl_api_key.trim().is_empty() {
             return Err(AllreadsError::InvalidInput {
-                message: "a DeepL API key is needed".into(),
+                reason: "a DeepL API key is needed".into(),
             });
         }
         let deepl = DeepL::new(&deepl_api_key);

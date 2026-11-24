@@ -10,7 +10,7 @@ Early development. Steps 1 to 4 are done, and the Rust side of steps 5 to 7 (Uni
 
 - `crates/core`: domain logic (books, text, vocabulary, storage)
 - `crates/ffi`: UniFFI wrappers for Kotlin (and later Swift)
-- `android/`: Compose app (to be created in Android Studio)
+- `android/`: Compose app; Gradle builds the Rust library and its Kotlin bindings
 - `data/languages/`: language presets
 - `docs/`: plan, PRD, implementation plan, progress, decisions
 

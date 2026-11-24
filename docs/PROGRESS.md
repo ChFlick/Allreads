@@ -4,13 +4,13 @@ Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes
 
 ## Phase 0: toolchain and repo setup
 - [x] 1. Install the toolchain (2026-11-24: checked in CI instead of locally. The `android-libs` job builds liballreads_ffi.so for arm64-v8a, armeabi-v7a and x86_64 at API 26 with NDK 30. Your own machine still needs the NDK for local Android builds)
-- [ ] 2. Create the repo (2026-11-24: Rust workspace, docs, licence and README done. Pending: the Android project)
-- [ ] 3. Set up CI (2026-11-24: fmt, clippy, docs, test, bindings and a Rust 1.91 job are green on main. Pending: the Gradle assembleDebug job)
+- [ ] 2. Create the repo (2026-11-24: Rust workspace, docs, licence and README done. The Android project in android/ was written by hand (Compose, minSdk 26, AGP 8.13); it builds and runs its Kotlin tests on this machine. Pending: the first green CI build of the APK)
+- [ ] 3. Set up CI (2026-11-24: fmt, clippy, docs, test, bindings and a Rust 1.91 job are green on main. The android job now runs assembleDebug and the Kotlin tests. Pending: its first green run)
 - [x] 4. Port the language presets (2026-11-24: en, fr, de, es in data/languages; loader in crates/core/src/presets.rs checks each file and rejects duplicate codes; NOTICE added for Lukaisu attribution)
 
 ## Phase 1 (M0): Rust ↔ Kotlin spike
-- [ ] 5. Hello from Rust (Rust side done 2026-11-24: uniffi scaffolding, core_version, uniffi-bindgen generates Kotlin on the host. Pending: Gradle task, phone and emulator check)
-- [ ] 6. Records and errors across the boundary (Rust side done 2026-11-24: BookMeta record, AllreadsError with typed variants. Pending: check the typed Kotlin exception on a device)
+- [ ] 5. Hello from Rust (2026-11-24: Gradle runs cargo-ndk for the three ABIs and uniffi-bindgen before each build; MainActivity shows coreVersion() from Rust, and a JVM test calls it from Kotlin. Pending: running the APK on the emulator and the phone)
+- [x] 6. Records and errors across the boundary (2026-11-24: checked on the JVM instead of a device: a Kotlin unit test calls the real Rust library and gets a typed AllreadsException.NotFound for a missing file. Error fields are named reason, not message, which would clash with Kotlin's Exception.message)
 - [ ] 7. EPUB spike (Rust side done 2026-11-24: epub::Book with meta and chapter_text, using rbook and scraper. Tested on generated fixtures, including div-only markup, NBSP and creator roles. Pending: real Gutenberg EPUB and the phone scroll check)
 
 ## Phase 2 (M1): reading MVP
