@@ -38,7 +38,6 @@ Learning Rust is a goal of this project, so:
 
 ## Constraints
 
-- **F-Droid-safe:** every dependency must be open source. No Google Play Services, ML Kit, Firebase or proprietary SDKs.
 - **Privacy:** no analytics or telemetry. API keys live in the Android Keystore on the Kotlin side and are passed into Rust per call; never store them in the SQLite database or in logs.
 - **Small FFI surface:** a few coarse calls that return plain records (for example `open_chapter` returns a whole chapter of tokens). No per-word calls across the boundary.
 - **Core code is synchronous;** Kotlin calls it on `Dispatchers.IO`. Use UniFFI async only if a step clearly needs it.
@@ -60,11 +59,26 @@ docs/                   # plan, PRD, implementation plan, progress, decisions
 
 ## Commands
 
-Fill these in as they're created (step 2 onwards):
+Minimum supported Rust is 1.91.
 
 ```bash
-cargo test                      # core tests
-cargo clippy -- -D warnings
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test --workspace
+cargo +1.91 test --workspace    # same tests on the minimum Rust version
+
+# Kotlin bindings from the host build of the library
+cargo build -p allreads-ffi
+cargo run -p allreads-ffi --bin uniffi-bindgen -- generate \
+  --library target/debug/liballreads_ffi.so --language kotlin --out-dir target/bindings
+
+# Test fixtures (run in crates/core/tests/fixtures)
+python3 make_fixtures.py
+```
+
+Not set up yet (needs the NDK and the Android project):
+
+```bash
 cargo ndk -t arm64-v8a build    # Android build of the Rust library
 cd android && ./gradlew assembleDebug
 ```

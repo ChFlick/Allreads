@@ -15,3 +15,6 @@
 | 2026-11-24 | Pin rusqlite to 0.39 | refinery 0.9 (the newest that works with our Rust 1.91 minimum) only supports rusqlite up to 0.39. refinery 0.10 needs Rust 1.92 |
 | 2026-11-24 | Deleting a term removes its AnkiDroid link and queue entry, but the card stays in AnkiDroid | Closes the open question from the plan: deleting in Allreads never deletes the user's Anki card. Status sync back from Anki is still out of scope |
 | 2026-11-24 | Status is stored as a number with a CHECK constraint (1 to 5, 98, 99); a word with no row is "new" | Matches the plan's status model and stops bad values at the database, not just in Rust |
+| 2026-11-24 | Rust work runs ahead of the plan order while Android Studio is unavailable; device and Gradle checks are batched | Keeps progress going. The risk (an unproven Android build) is reduced by building the Android libraries in CI next |
+| 2026-11-24 | Term keys are lower case, built by one shared `term_key` function (NFC, preset substitutions, lower case, collapsed whitespace); the first-seen form is kept for display | "Le" and "le" must be one term, and ’ and ' must match. German nouns need their capital letter on the card |
+| 2026-11-24 | Drop the F-Droid requirement; release APKs on GitHub | Chosen by Christoph. Dependencies no longer need to be F-Droid-safe |

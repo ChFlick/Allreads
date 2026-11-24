@@ -81,7 +81,7 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 | Performance | Open a 10,000-word chapter in under 300 ms on a mid-range phone; respond to a tap in under 100 ms; scroll at 60 fps |
 | Size | APK under 30 MB, not counting dictionaries, which are optional downloads |
 | Privacy | No accounts, analytics or telemetry. Text goes only to providers the user configures, and keys are stored in the Android Keystore |
-| Openness | Every dependency open source, so the app qualifies for F-Droid; no Google Play Services |
+| Openness | The app is open source (MIT). F-Droid compatibility is not required (dropped 2026-11-24) |
 | Platform | Android 8.0+ (API 26), arm64, armv7 and x86_64 |
 | Accessibility | Works with TalkBack and system font scaling; status colours aren't the only cue |
 | Data | One SQLite file plus book files; schema migrations never lose data |
@@ -96,11 +96,11 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 - You read at least one full French novel in the app.
 - At least 500 cards reach Anki through the app, with no manual fixes.
 - Looking up and saving a word takes at most 2 taps.
-- No crashes or data loss in daily use; the app is on F-Droid.
+- No crashes or data loss in daily use; the app is released on GitHub.
 
 **Open questions:**
 
 - [ ] Note type: basic cards (word → meaning), sentence cards with the word bolded, or both as card templates?
 - [ ] Which dictionary source per language pair (French → English, French → German), and how big is it after filtering?
 - [ ] Should statuses sync back from Anki (for example, mark a word known once its card is mature)?
-- [ ] Name and licence.
+- [x] Name and licence: Allreads, MIT (decided 2026-11-24).

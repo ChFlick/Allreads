@@ -24,7 +24,7 @@ Build our own Android app: a Rust core for books, text and data, a thin Kotlin +
 | FSRS integration | Built-in review | No, AnkiDroid does reviews |
 | Data layer (Dexie + `routeLocal`) | Imitates `/api/v1` server routes on the device | No |
 | UI (about 35 pages, Bulma, Alpine leftovers) | Works, but legacy in shape | Ideas for screens only |
-| Release tooling | Own F-Droid repo, reproducible-build notes | Yes, copy the runbook when we ship |
+| Release tooling | Own F-Droid repo, reproducible-build notes | No: F-Droid was dropped (2026-11-24) |
 
 Its roadmap is mostly about F-Droid release and the local-first switch. Sync, offline CJK, TTS and content discovery are deferred or out of scope, and there is no mention of EPUB or AI.
 
@@ -73,7 +73,7 @@ All the logic lives in a Rust library, built for Android with `cargo-ndk`. UniFF
 The Rust core owns all state and rules. The Kotlin app is a shell that renders what the core returns and forwards taps, so almost everything can be unit-tested in Rust.
 
 ```
-reader/
+allreads/
   Cargo.toml              # Rust workspace
   crates/
     core/                 # domain: books, text, terms, db, assist
@@ -111,15 +111,15 @@ M1 is the real MVP: reading a French EPUB and saving words. M2 makes it complete
 3. **M2: Anki.** Push saved terms to AnkiDroid with the sentence as context, update them on edit, and add `.apkg` export as a fallback.
 4. **M3: Translation and AI.** Sentence translation, parallel mode, "explain this" with your own key, offline dictionaries, all cached.
 5. **M4: Audio.** Read aloud with sentence highlighting, and word pronunciation.
-6. **M5: Library and ship.** A Gutenberg and Standard Ebooks browser, then a signed APK and an F-Droid release.
+6. **M5: Library and ship.** A Gutenberg and Standard Ebooks browser, then a signed APK on GitHub releases.
 7. **Later.** iOS via Swift bindings, Japanese and Chinese tokenizers, offline translation (Bergamot), backup and sync.
 
 ## Open decisions and risks
 
 | Item | Options | Leaning |
 | --- | --- | --- |
-| Licence | MIT, Apache-2.0 or GPL-3.0 | MIT or Apache-2.0 (standard for Rust crates) |
-| App name | Open | Pick one before creating the repo |
+| Licence | MIT, Apache-2.0 or GPL-3.0 | Decided: MIT |
+| App name | Open | Decided: Allreads |
 | Reading layout | Vertical scroll or horizontal pages | Scroll first (simpler in Compose), pages later |
 | Lemmas | "mange" and "mangeons" as separate terms, or linked | Link them, using Wiktionary forms plus AI suggestions |
 | Rust learning curve | Slow start on ownership and async | Keep the FFI surface small; core is synchronous where possible |
@@ -127,7 +127,7 @@ M1 is the real MVP: reading a French EPUB and saving words. M2 makes it complete
 | Dictionary size | Full Wiktionary extracts are hundreds of MB | Pre-filter per language pair, download on demand |
 | AI cost and privacy | Text goes to the provider you pick | Off by default, bring your own key, show a cost estimate |
 | Translation APIs | Scraping Google Translate breaks its terms | DeepL free tier, LibreTranslate, or an LLM |
-| F-Droid rules | No proprietary libraries (no ML Kit or Play Services) | Keep every dependency open source from day one |
+| F-Droid rules | No proprietary libraries (no ML Kit or Play Services) | Dropped 2026-11-24: F-Droid compatibility is not required |
 
 ## Sources
 
