@@ -50,6 +50,18 @@ impl Database {
         Ok(())
     }
 
+    /// Stores a language only if its code is not stored yet, so settings the
+    /// user changed later are kept.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn add_language_if_missing(&self, language: &LanguagePreset) -> Result<(), DbError> {
+        if self.language(&language.code)?.is_none() {
+            self.upsert_language(language)?;
+        }
+        Ok(())
+    }
+
     /// The language with this code, if it has been stored.
     /// # Errors
     /// Returns a database error if the statement fails.
@@ -131,6 +143,21 @@ mod tests {
         let languages = db.languages().unwrap();
         assert_eq!(languages.len(), 1);
         assert_eq!(languages[0].name, "New name");
+    }
+
+    #[test]
+    fn adding_a_missing_language_keeps_an_existing_one() {
+        let db = test_database();
+        db.upsert_language(&preset("xx", "Edited by the user"))
+            .unwrap();
+        db.add_language_if_missing(&preset("xx", "Built-in"))
+            .unwrap();
+        db.add_language_if_missing(&preset("yy", "New")).unwrap();
+        assert_eq!(
+            db.language("xx").unwrap().unwrap().name,
+            "Edited by the user"
+        );
+        assert_eq!(db.language("yy").unwrap().unwrap().name, "New");
     }
 
     #[test]

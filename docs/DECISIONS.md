@@ -23,3 +23,7 @@
 | 2026-11-24 | Only terms saved with status 1–4 become Anki cards; PRD goal G2 now says so | Matches F20. Words saved as 5, ignored or known need no review |
 | 2026-11-24 | The note type has both card templates (word → meaning, sentence → meaning) | Closes the PRD open question, as step 17 already specified |
 | 2026-11-24 | Use `ureq` (rustls) for HTTP instead of blocking `reqwest`; supersedes the earlier blocking-`reqwest` row | `reqwest`'s blocking client still runs a hidden tokio runtime on a background thread. `ureq` is purely blocking, smaller, and has fewer dependencies, with the same calling style |
+| 2026-11-24 | Built-in languages are added on start only if missing, never overwritten | Settings the user changes later (step 15) must survive app restarts |
+| 2026-11-24 | Chapter titles come from each chapter's first heading; a chapter without one has no title, and the app shows "Chapter N" | Simple and works for EPUB 2 and 3. The EPUB's own navigation can replace it later if headings turn out to be poor |
+| 2026-11-24 | Import is split into `prepare_import` (reads the file, no database) and `store_import` (writes) | Parsing a big book must not block other reads while the database lock is held |
+| 2026-11-24 | Deleting a book removes its file only if the file is inside the app's data folder | The app must never delete a file it did not copy in |

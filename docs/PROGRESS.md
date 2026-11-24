@@ -15,7 +15,7 @@ Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes
 
 ## Phase 2 (M1): reading MVP
 - [x] 8. Database and the `App` object (2026-11-24: migrations V1 with all seven tables; repositories in crates/core/src/db with 65 core tests on an in-memory database; ffi `App` holds the open database behind a Mutex)
-- [ ] 9. Book import and library
+- [ ] 9. Book import and library (Rust side done 2026-11-24: built-in presets added on start, `App::import_book` for EPUB and TXT, table of contents (migration V2), covers saved to the data folder, `App` caches opened books. The Rust test imports three fixtures and lists them after reopening. Pending: the file picker and library screen)
 - [ ] 10. Text pipeline
 - [ ] 11. `open_chapter`
 - [ ] 12. Reader screen

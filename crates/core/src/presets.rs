@@ -51,6 +51,37 @@ pub enum PresetError {
     DuplicateCode(String),
 }
 
+/// The presets in `data/languages`, compiled into the library. Android has no
+/// such folder at runtime, so the app reads these instead.
+const BUILTIN: &[(&str, &str)] = &[
+    ("de.toml", include_str!("../../../data/languages/de.toml")),
+    ("en.toml", include_str!("../../../data/languages/en.toml")),
+    ("es.toml", include_str!("../../../data/languages/es.toml")),
+    ("fr.toml", include_str!("../../../data/languages/fr.toml")),
+];
+
+/// Parses and checks the built-in presets.
+///
+/// # Errors
+/// Returns a `PresetError` if a built-in preset is invalid. The tests make sure
+/// this never happens in a release.
+pub fn builtin_presets() -> Result<Vec<LanguagePreset>, PresetError> {
+    let mut presets = Vec::with_capacity(BUILTIN.len());
+    for (name, text) in BUILTIN {
+        let path = PathBuf::from(format!("builtin/{name}"));
+        let preset = parse_preset(text).map_err(|source| PresetError::Parse {
+            path: path.clone(),
+            source,
+        })?;
+        preset
+            .validate()
+            .map_err(|reason| PresetError::Invalid { path, reason })?;
+        presets.push(preset);
+    }
+    ensure_unique_codes(&presets)?;
+    Ok(presets)
+}
+
 /// Parses one preset from TOML text, without checking its values.
 ///
 /// # Errors
@@ -194,6 +225,13 @@ mod tests {
         let presets = load_presets(&languages_dir()).expect("presets should load");
         let codes: Vec<&str> = presets.iter().map(|p| p.code.as_str()).collect();
         assert_eq!(codes, ["de", "en", "es", "fr"]);
+    }
+
+    #[test]
+    fn builtin_presets_match_every_file_in_data_languages() {
+        let from_disk = load_presets(&languages_dir()).expect("presets load from disk");
+        let builtin = builtin_presets().expect("built-in presets are valid");
+        assert_eq!(builtin, from_disk, "add new preset files to BUILTIN too");
     }
 
     #[test]

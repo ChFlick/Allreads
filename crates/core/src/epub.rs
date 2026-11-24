@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use scraper::{node::Node, ElementRef, Html};
+use scraper::{node::Node, ElementRef, Html, Selector};
 use thiserror::Error;
 
 /// Elements that start and end a paragraph in the reader.
@@ -52,13 +52,15 @@ pub struct BookMeta {
     pub chapters: usize,
 }
 
-/// Errors from opening or reading an EPUB file.
+/// Errors from opening or reading a book file (EPUB or TXT).
 #[derive(Debug, Error, PartialEq, Eq)]
-pub enum EpubError {
+pub enum BookError {
     #[error("file not found: {}", .0.display())]
     NotFound(PathBuf),
-    #[error("could not read EPUB: {0}")]
+    #[error("could not read the book: {0}")]
     Invalid(String),
+    #[error("unsupported file type: {0}")]
+    Unsupported(String),
     #[error("chapter {index} is out of range; the book has {count} chapters")]
     ChapterOutOfRange { index: usize, count: usize },
 }
@@ -73,11 +75,11 @@ impl Book {
     ///
     /// # Errors
     /// Returns `NotFound` if `path` is not a file, and `Invalid` if the file is not a readable EPUB.
-    pub fn open(path: &Path) -> Result<Self, EpubError> {
+    pub fn open(path: &Path) -> Result<Self, BookError> {
         if !path.is_file() {
-            return Err(EpubError::NotFound(path.to_path_buf()));
+            return Err(BookError::NotFound(path.to_path_buf()));
         }
-        let epub = rbook::Epub::open(path).map_err(|e| EpubError::Invalid(e.to_string()))?;
+        let epub = rbook::Epub::open(path).map_err(|e| BookError::Invalid(e.to_string()))?;
         Ok(Self { epub })
     }
 
@@ -109,19 +111,52 @@ impl Book {
         self.epub.reader().len()
     }
 
+    /// The cover image and a file extension for it, if the book has a cover in
+    /// a common image format.
+    #[must_use]
+    pub fn cover(&self) -> Option<(Vec<u8>, &'static str)> {
+        let entry = self.epub.manifest().cover_image()?;
+        let extension = match entry.media_type() {
+            "image/jpeg" => "jpg",
+            "image/png" => "png",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            _ => return None,
+        };
+        let bytes = entry.read_bytes().ok()?;
+        Some((bytes, extension))
+    }
+
+    /// Each chapter's title, taken from its first heading. `None` for a chapter
+    /// without a heading.
+    ///
+    /// # Errors
+    /// Returns `Invalid` if a chapter cannot be read.
+    pub fn chapter_titles(&self) -> Result<Vec<Option<String>>, BookError> {
+        let reader = self.epub.reader();
+        (0..reader.len())
+            .map(|index| {
+                let content = reader
+                    .get(index)
+                    .map_err(|e| BookError::Invalid(e.to_string()))?;
+                Ok(first_heading(content.content()))
+            })
+            .collect()
+    }
+
     /// Returns the paragraphs of one chapter (0-based, in reading order).
     ///
     /// # Errors
     /// Returns `ChapterOutOfRange` if `index` is past the last chapter, and `Invalid` if the chapter cannot be read.
-    pub fn chapter_text(&self, index: usize) -> Result<Vec<String>, EpubError> {
+    pub fn chapter_text(&self, index: usize) -> Result<Vec<String>, BookError> {
         let reader = self.epub.reader();
         let count = reader.len();
         if index >= count {
-            return Err(EpubError::ChapterOutOfRange { index, count });
+            return Err(BookError::ChapterOutOfRange { index, count });
         }
         let content = reader
             .get(index)
-            .map_err(|e| EpubError::Invalid(e.to_string()))?;
+            .map_err(|e| BookError::Invalid(e.to_string()))?;
         Ok(html_to_paragraphs(content.content()))
     }
 }
@@ -181,9 +216,19 @@ fn flush(buffer: &mut String, paragraphs: &mut Vec<String>) {
     }
 }
 
+/// The text of the first heading (`h1` to `h6`), if there is a non-blank one.
+fn first_heading(html: &str) -> Option<String> {
+    let document = Html::parse_document(html);
+    let headings = Selector::parse("h1, h2, h3, h4, h5, h6").expect("selector is valid");
+    document
+        .select(&headings)
+        .map(|heading| normalize_whitespace(&heading.text().collect::<String>()))
+        .find(|text| !text.trim().is_empty())
+}
+
 /// Collapses runs of ASCII whitespace to one space and trims the ends.
 /// Non-breaking spaces (U+00A0) are left alone.
-fn normalize_whitespace(text: &str) -> String {
+pub(crate) fn normalize_whitespace(text: &str) -> String {
     let mut normalized = String::with_capacity(text.len());
     for word in text
         .split(|c: char| c.is_ascii_whitespace())
@@ -246,14 +291,14 @@ mod tests {
         let missing = Path::new("does/not/exist.epub");
         assert_eq!(
             Book::open(missing).err(),
-            Some(EpubError::NotFound(missing.to_path_buf()))
+            Some(BookError::NotFound(missing.to_path_buf()))
         );
     }
 
     #[test]
     fn non_epub_file_is_invalid() {
         let result = Book::open(&fixture("broken.epub"));
-        assert!(matches!(result, Err(EpubError::Invalid(_))));
+        assert!(matches!(result, Err(BookError::Invalid(_))));
     }
 
     #[test]
@@ -261,7 +306,7 @@ mod tests {
         let book = Book::open(&fixture("tiny.epub")).unwrap();
         assert_eq!(
             book.chapter_text(5),
-            Err(EpubError::ChapterOutOfRange { index: 5, count: 2 })
+            Err(BookError::ChapterOutOfRange { index: 5, count: 2 })
         );
     }
 
@@ -286,6 +331,44 @@ mod tests {
                 "Deux trois",
             ]
         );
+    }
+
+    #[test]
+    fn chapter_titles_come_from_the_first_heading() {
+        let tiny = Book::open(&fixture("tiny.epub")).unwrap();
+        assert_eq!(
+            tiny.chapter_titles().unwrap(),
+            vec![
+                Some("Chapitre un".to_string()),
+                Some("Chapitre deux".to_string())
+            ]
+        );
+        let layout = Book::open(&fixture("layout.epub")).unwrap();
+        assert_eq!(layout.chapter_titles().unwrap(), vec![None, None]);
+    }
+
+    #[test]
+    fn blank_headings_are_skipped_for_the_title() {
+        assert_eq!(
+            first_heading("<h1> </h1><h2>Deux</h2>"),
+            Some("Deux".to_string())
+        );
+        assert_eq!(first_heading("<p>Pas de titre</p>"), None);
+    }
+
+    #[test]
+    fn cover_is_read_when_the_book_has_one() {
+        let layout = Book::open(&fixture("layout.epub")).unwrap();
+        let (bytes, extension) = layout.cover().expect("layout fixture has a cover");
+        assert_eq!(extension, "png");
+        assert!(bytes.starts_with(b"\x89PNG"));
+        assert!(Book::open(&fixture("tiny.epub")).unwrap().cover().is_none());
+    }
+
+    #[test]
+    fn cover_is_not_a_chapter() {
+        let layout = Book::open(&fixture("layout.epub")).unwrap();
+        assert_eq!(layout.chapter_count(), 2);
     }
 
     #[test]

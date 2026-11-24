@@ -1,9 +1,11 @@
 """Regenerates the EPUB test fixtures in this folder.
 
 Run from anywhere: python3 make_fixtures.py
-Outputs: tiny.epub (simple French book), layout.epub (tricky markup and
-creator roles), broken.epub (not a zip, for error handling).
+Outputs: tiny.epub (simple French book), layout.epub (tricky markup, creator
+roles and a cover image), broken.epub (not a zip, for error handling) and
+sample.txt (a plain-text book).
 """
+import base64
 import pathlib
 import zipfile
 
@@ -38,7 +40,13 @@ def xhtml(title, body):
 </html>"""
 
 
-def opf(title, creators, identifier):
+# A 1x1 PNG, enough to test cover extraction.
+COVER_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
+
+
+def opf(title, creators, identifier, cover=False):
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -52,12 +60,18 @@ def opf(title, creators, identifier):
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
     <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+{{cover_item}}
   </manifest>
   <spine>
     <itemref idref="c1"/>
     <itemref idref="c2"/>
   </spine>
-</package>"""
+</package>""".replace("{cover_item}", COVER_ITEM if cover else "")
+
+
+COVER_ITEM = (
+    '    <item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/>'
+)
 
 
 def write_epub(name, files):
@@ -95,7 +109,9 @@ LAYOUT_FILES = {
     <dc:creator id="c2">Jules Auteur</dc:creator>
     <meta refines="#c2" property="role" scheme="marc:relators">aut</meta>""",
         "allreads-layout-fixture",
+        cover=True,
     ),
+    "OEBPS/cover.png": COVER_PNG,
     "OEBPS/nav.xhtml": NAV,
     "OEBPS/chapter1.xhtml": xhtml("Mise en page", """  Texte nu.
   <div class="chap">
@@ -115,4 +131,9 @@ if __name__ == "__main__":
     write_epub("tiny.epub", TINY_FILES)
     write_epub("layout.epub", LAYOUT_FILES)
     (HERE / "broken.epub").write_text("this is not a zip archive\n", encoding="utf-8")
+    (HERE / "sample.txt").write_text(
+        "\ufeffLe premier paragraphe\r\ncontinue ici.\r\n\r\n\r\n  Le deuxième paragraphe.  \r\n",
+        encoding="utf-8",
+        newline="",
+    )
     print("fixtures written to", HERE)

@@ -33,6 +33,9 @@ pub enum DbError {
     InvalidValue(String),
 }
 
+/// The schema version after all migrations. Bump it with each new migration.
+pub const SCHEMA_VERSION: i64 = 2;
+
 /// An open `SQLite` database with the schema applied.
 pub struct Database {
     conn: Connection,
@@ -134,7 +137,7 @@ mod tests {
 
     #[test]
     fn migrations_apply_to_a_new_database() {
-        assert_eq!(test_database().schema_version().unwrap(), 1);
+        assert_eq!(test_database().schema_version().unwrap(), SCHEMA_VERSION);
     }
 
     #[test]
@@ -166,7 +169,7 @@ mod tests {
         }
         let reopened = Database::open(&path).unwrap();
         assert!(reopened.language("fr").unwrap().is_some());
-        assert_eq!(reopened.schema_version().unwrap(), 1);
+        assert_eq!(reopened.schema_version().unwrap(), SCHEMA_VERSION);
     }
 
     #[test]

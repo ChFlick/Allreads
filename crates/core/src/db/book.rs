@@ -105,6 +105,57 @@ impl Database {
     }
 }
 
+impl Database {
+    /// Replaces a book's table of contents. `titles[i]` is chapter `i`'s title.
+    ///
+    /// # Errors
+    /// Returns a database error if the book does not exist or a statement fails.
+    pub fn set_chapter_titles(
+        &self,
+        book_id: i64,
+        titles: &[Option<String>],
+    ) -> Result<(), DbError> {
+        let transaction = self.conn().unchecked_transaction()?;
+        transaction.execute("DELETE FROM book_chapter WHERE book_id = ?1", [book_id])?;
+        {
+            let mut insert = transaction.prepare(
+                "INSERT INTO book_chapter (book_id, chapter_index, title) VALUES (?1, ?2, ?3)",
+            )?;
+            for (index, title) in titles.iter().enumerate() {
+                let index = u32::try_from(index)
+                    .map_err(|_| DbError::InvalidValue("too many chapters".into()))?;
+                insert.execute(params![book_id, index, title])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// A book's chapter titles in reading order. `None` means the chapter has no heading.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn chapter_titles(&self, book_id: i64) -> Result<Vec<Option<String>>, DbError> {
+        let mut statement = self
+            .conn()
+            .prepare("SELECT title FROM book_chapter WHERE book_id = ?1 ORDER BY chapter_index")?;
+        let rows = statement.query_map([book_id], |row| row.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Sets or clears the path of a book's cover image.
+    ///
+    /// # Errors
+    /// Returns `NotFound` if no book has this id.
+    pub fn set_cover_path(&self, book_id: i64, cover_path: Option<&str>) -> Result<(), DbError> {
+        let changed = self.conn().execute(
+            "UPDATE book SET cover_path = ?2 WHERE id = ?1",
+            params![book_id, cover_path],
+        )?;
+        require_one_changed(changed, || format!("book {book_id}"))
+    }
+}
+
 /// Turns "no rows changed" into `NotFound`, so callers can tell a missing row apart.
 pub(crate) fn require_one_changed(
     changed: usize,
@@ -203,6 +254,37 @@ mod tests {
             db.insert_book(&book),
             Err(DbError::NotFound { what }) if what == "language zz"
         ));
+    }
+
+    #[test]
+    fn chapter_titles_are_stored_in_order_and_can_be_replaced() {
+        let db = db_with_french();
+        let id = db.insert_book(&new_book("Un")).unwrap();
+        db.set_chapter_titles(id, &[Some("Début".into()), None])
+            .unwrap();
+        assert_eq!(
+            db.chapter_titles(id).unwrap(),
+            vec![Some("Début".to_string()), None]
+        );
+        db.set_chapter_titles(id, &[Some("Seul".into())]).unwrap();
+        assert_eq!(
+            db.chapter_titles(id).unwrap(),
+            vec![Some("Seul".to_string())]
+        );
+    }
+
+    #[test]
+    fn chapters_and_cover_path_go_with_the_book() {
+        let db = db_with_french();
+        let id = db.insert_book(&new_book("Un")).unwrap();
+        db.set_chapter_titles(id, &[None]).unwrap();
+        db.set_cover_path(id, Some("covers/1.png")).unwrap();
+        assert_eq!(
+            db.book(id).unwrap().unwrap().cover_path.as_deref(),
+            Some("covers/1.png")
+        );
+        db.delete_book(id).unwrap();
+        assert!(db.chapter_titles(id).unwrap().is_empty());
     }
 
     #[test]
