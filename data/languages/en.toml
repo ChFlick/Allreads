@@ -1,0 +1,13 @@
+# Language preset: English. Ported from Lukaisu (MIT), see NOTICE.
+name = "English"
+code = "en"
+word_characters = "a-zA-ZÀ-ÖØ-öø-ȳ"
+sentence_end_chars = ".!?:;"
+sentence_exceptions = "Mr.|Mrs.|Dr.|[A-Z]."
+character_substitutions = ""
+rtl = false
+remove_spaces = false
+split_each_char = false
+tts_locale = "en-US"
+dictionary_url = "https://en.wiktionary.org/wiki/{term}"
+translator_url = "https://translate.google.com/?ie=UTF-8&sl=en&tl=en&text={term}"

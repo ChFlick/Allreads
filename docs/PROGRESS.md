@@ -6,7 +6,7 @@ Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes
 - [ ] 1. Install the toolchain
 - [ ] 2. Create the repo
 - [ ] 3. Set up CI
-- [ ] 4. Port the language presets
+- [x] 4. Port the language presets (2026-11-24: en, fr, de, es in data/languages; loader and test in crates/core/src/presets.rs; NOTICE added for Lukaisu attribution)
 
 ## Phase 1 (M0): Rust ↔ Kotlin spike
 - [ ] 5. Hello from Rust

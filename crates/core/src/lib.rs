@@ -1,5 +1,7 @@
 //! Domain logic for Allreads. Books, text, vocabulary and storage live here.
 
+pub mod presets;
+
 /// Returns the version of the core library.
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

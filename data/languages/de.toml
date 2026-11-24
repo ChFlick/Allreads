@@ -1,0 +1,13 @@
+# Language preset: German. Ported from Lukaisu (MIT), see NOTICE.
+name = "German"
+code = "de"
+word_characters = "a-zA-ZäöüÄÖÜß"
+sentence_end_chars = ".!?:;"
+sentence_exceptions = "[A-Z].|Dr."
+character_substitutions = "´='|`='|’='|‘='|...=…|..=‥"
+rtl = false
+remove_spaces = false
+split_each_char = false
+tts_locale = "de-DE"
+dictionary_url = "http://de-en.syn.dict.cc/?s={term}"
+translator_url = "https://translate.google.com/?ie=UTF-8&sl=de&tl=en&text={term}"

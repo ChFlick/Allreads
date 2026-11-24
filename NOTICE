@@ -1,0 +1,11 @@
+Allreads includes language presets ported from Lukaisu
+(https://github.com/HugoFara/lukaisu), by HugoFara.
+
+Lukaisu's preset source (webapp/js/shared/offline/local/language-presets.ts)
+is released under the Unlicense, and its repository is MIT licensed.
+The files in data/languages/ carry the split rules, word characters,
+dictionary and translator templates from that source, adapted to TOML.
+Lukaisu used the placeholder `lukaisu_term`; here it is `{term}`.
+
+The TTS locales in data/languages/ were chosen by Allreads (not taken from
+Lukaisu).
