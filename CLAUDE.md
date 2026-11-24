@@ -25,6 +25,7 @@ If the code and the docs disagree, flag it and ask before changing direction. Re
 - **Core first:** logic and tests in `crates/core`, then thin wrappers in `crates/ffi`, then the Compose screen.
 - **Finish a step only when its Done-when check passes.** Run `cargo fmt`, `cargo clippy -- -D warnings` and `cargo test` before saying a step is done. Then tick it in `docs/PROGRESS.md` and suggest a commit message.
 - **Small commits,** one per step or sub-step, using conventional commits (`feat(core): ...`, `fix(android): ...`).
+- **Commit and push without asking** once a piece of work is finished and its checks pass: commit to `main` with a conventional commit message, then push. Don't commit half-done work or failing checks.
 - If something needs to be checked on a real phone (taps, performance, AnkiDroid), say so clearly instead of claiming it works.
 
 ## Christoph is learning Rust
