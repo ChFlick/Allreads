@@ -132,6 +132,17 @@ Android work to do in one batch once Android Studio is available: step 2's proje
     - *Learn:* streaming large files, CLI tools with `clap`.
     - **Done when** French → English lookups work in flight mode.
     - *Added 2026-11-24:* `dictgen` stores headwords and inflected forms by `term_key`, so lookups match tokens directly.
+    - *Measured 2026-11-24 (French → English spike):*
+      - The raw kaikki.org French extract is 593 MB (404,127 entries). Filtered to word, part of speech, English definitions, IPA and form → lemma links, it is **43 MB as SQLite and 14 MB gzipped**. That is 103,460 words, 127,613 definitions and 333,157 inflected forms.
+      - Capping definitions at three per word saves almost nothing; the form links are most of the size, and they are what powers lemma suggestions.
+      - Lookups take under 0.5 ms. Spot checks were good: "lit" gives both "third-person singular of lire" and "bed"; "allait" gives "imperfect of aller"; "aujourd'hui", "peut-être" and "l'" match our tokenizer's keys.
+      - To fix in `dictgen`: keep the form tags so labels say the person and tense (some only say "inflection of manger:"), and drop duplicate form rows.
+    - *Planned 2026-11-24, personal build:*
+      - French → English only, baked into a `personal` Gradle flavour's assets. That adds about 15 MB to the APK and about 43 MB on disk, because the app copies the file to its data folder on first launch, since SQLite cannot open a file inside the APK.
+      - A `public` flavour ships without it and can offer a download later.
+      - The generated file is not committed; `dictgen` builds it, locally or in CI, into a gitignored flavour folder.
+      - Wiktionary data is CC BY-SA: credit Wiktionary and kaikki.org on an About screen; the dictionary file stays under its own licence.
+      - Effort: `dictgen` 1–2 evenings, `App::lookup` and lemma suggestions about one, the flavour setup once the Android project exists.
 24. **Phrase selection.** Long-press and drag across tokens to select a phrase, saved as a multi-word term. Phrases are matched in `open_chapter` (longest match first).
     - **Done when** a saved idiom is highlighted wherever it appears.
     - *Added 2026-11-24:* a phrase's key is the `term_key` of the whole phrase. Matching compares the keys of consecutive word tokens, so punctuation and line breaks between words don't break a match.
