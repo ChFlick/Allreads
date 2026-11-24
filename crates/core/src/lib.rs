@@ -1,0 +1,16 @@
+//! Domain logic for Allreads. Books, text, vocabulary and storage live here.
+
+/// Returns the version of the core library.
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_matches_package_version() {
+        assert_eq!(version(), env!("CARGO_PKG_VERSION"));
+    }
+}

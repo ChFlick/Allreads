@@ -1,0 +1,40 @@
+# Progress
+
+Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes. Add the date and any notes.
+
+## Phase 0: toolchain and repo setup
+- [ ] 1. Install the toolchain
+- [ ] 2. Create the repo
+- [ ] 3. Set up CI
+- [ ] 4. Port the language presets
+
+## Phase 1 (M0): Rust ↔ Kotlin spike
+- [ ] 5. Hello from Rust
+- [ ] 6. Records and errors across the boundary
+- [ ] 7. EPUB spike
+
+## Phase 2 (M1): reading MVP
+- [ ] 8. Database and the `App` object
+- [ ] 9. Book import and library
+- [ ] 10. Text pipeline
+- [ ] 11. `open_chapter`
+- [ ] 12. Reader screen
+- [ ] 13. Word sheet and saving
+- [ ] 14. Translator
+- [ ] 15. Settings and polish
+
+## Phase 3 (M2): AnkiDroid integration
+- [ ] 16. Connect to AnkiDroid
+- [ ] 17. Note type and deck
+- [ ] 18. Push and update
+- [ ] 19. Outbox and retry
+- [ ] 20. `.apkg` and CSV export
+
+## Phases 4–6 (M3–M5)
+- [ ] 21. Sentence translation and parallel mode
+- [ ] 22. AI "Explain"
+- [ ] 23. Offline dictionaries
+- [ ] 24. Phrase selection
+- [ ] 25. Audio
+- [ ] 26. Library, stats and backup
+- [ ] 27. Release
