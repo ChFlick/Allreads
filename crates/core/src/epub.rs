@@ -3,11 +3,48 @@
 use std::path::{Path, PathBuf};
 
 use rbook::prelude::*;
-use scraper::{Html, Selector};
+use scraper::{node::Node, ElementRef, Html};
 use thiserror::Error;
 
+/// Elements that start and end a paragraph in the reader.
+const BLOCK_TAGS: &[&str] = &[
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "dd",
+    "div",
+    "dl",
+    "dt",
+    "figcaption",
+    "figure",
+    "footer",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "header",
+    "hr",
+    "li",
+    "main",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "td",
+    "th",
+    "tr",
+    "ul",
+];
+
+/// Elements whose contents are never reading text.
+const SKIPPED_TAGS: &[&str] = &["head", "script", "style"];
+
 /// Basic facts about a book, read from its EPUB metadata.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BookMeta {
     pub title: Option<String>,
     pub author: Option<String>,
@@ -16,8 +53,8 @@ pub struct BookMeta {
     pub chapters: usize,
 }
 
-/// Errors from reading an EPUB file.
-#[derive(Debug, Error, PartialEq)]
+/// Errors from opening or reading an EPUB file.
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum EpubError {
     #[error("file not found: {}", .0.display())]
     NotFound(PathBuf),
@@ -27,69 +64,153 @@ pub enum EpubError {
     ChapterOutOfRange { index: usize, count: usize },
 }
 
-fn open(path: &Path) -> Result<rbook::Epub, EpubError> {
-    if !path.exists() {
-        return Err(EpubError::NotFound(path.to_path_buf()));
+/// An open EPUB. Opening parses the archive once; reads then reuse it.
+pub struct Book {
+    epub: rbook::Epub,
+}
+
+impl Book {
+    /// Opens the EPUB at `path`.
+    ///
+    /// # Errors
+    /// Returns `NotFound` if `path` is not a file, and `Invalid` if the file is not a readable EPUB.
+    pub fn open(path: &Path) -> Result<Self, EpubError> {
+        if !path.is_file() {
+            return Err(EpubError::NotFound(path.to_path_buf()));
+        }
+        let epub = rbook::Epub::open(path).map_err(|e| EpubError::Invalid(e.to_string()))?;
+        Ok(Self { epub })
     }
-    rbook::Epub::open(path).map_err(|e| EpubError::Invalid(e.to_string()))
-}
 
-/// Reads the title, first author, language and chapter count of an EPUB file.
-pub fn read_meta(path: &Path) -> Result<BookMeta, EpubError> {
-    let epub = open(path)?;
-    let metadata = epub.metadata();
-    let title = metadata.title().map(|t| t.value().to_string());
-    let author = metadata.creators().next().map(|c| c.value().to_string());
-    let language = metadata.language().map(|l| l.value().to_string());
-    let chapters = epub.reader().len();
-    Ok(BookMeta {
-        title,
-        author,
-        language,
-        chapters,
-    })
-}
+    /// The book's title, author, language and chapter count.
+    #[must_use]
+    pub fn meta(&self) -> BookMeta {
+        let metadata = self.epub.metadata();
+        let creators: Vec<_> = metadata.creators().collect();
+        // Prefer a creator whose main role is "aut", then one with no role,
+        // and finally whoever is listed first.
+        let author = creators
+            .iter()
+            .find(|c| c.main_role().is_some_and(|role| role.code() == "aut"))
+            .or_else(|| creators.iter().find(|c| c.main_role().is_none()))
+            .or_else(|| creators.first())
+            .map(|c| c.value().to_string());
 
-/// Returns the paragraphs of one chapter (0-based, in reading order).
-pub fn chapter_text(path: &Path, index: usize) -> Result<Vec<String>, EpubError> {
-    let epub = open(path)?;
-    let reader = epub.reader();
-    let count = reader.len();
-    if index >= count {
-        return Err(EpubError::ChapterOutOfRange { index, count });
+        BookMeta {
+            title: metadata.title().map(|t| t.value().to_string()),
+            author,
+            language: metadata.language().map(|l| l.value().to_string()),
+            chapters: self.epub.reader().len(),
+        }
     }
-    let content = reader
-        .get(index)
-        .map_err(|e| EpubError::Invalid(e.to_string()))?;
-    Ok(html_to_paragraphs(content.content()))
+
+    /// Number of readable chapters in reading order.
+    #[must_use]
+    pub fn chapter_count(&self) -> usize {
+        self.epub.reader().len()
+    }
+
+    /// Returns the paragraphs of one chapter (0-based, in reading order).
+    ///
+    /// # Errors
+    /// Returns `ChapterOutOfRange` if `index` is past the last chapter, and `Invalid` if the chapter cannot be read.
+    pub fn chapter_text(&self, index: usize) -> Result<Vec<String>, EpubError> {
+        let reader = self.epub.reader();
+        let count = reader.len();
+        if index >= count {
+            return Err(EpubError::ChapterOutOfRange { index, count });
+        }
+        let content = reader
+            .get(index)
+            .map_err(|e| EpubError::Invalid(e.to_string()))?;
+        Ok(html_to_paragraphs(content.content()))
+    }
 }
 
-/// Turns XHTML into one string per heading or paragraph.
+/// Turns XHTML into one string per paragraph, heading or other block.
 ///
-/// Whitespace is collapsed to single spaces, and empty blocks are dropped.
-/// Inline markup such as `<i>` and `<b>` is flattened into plain text for now.
+/// Inline markup (`<i>`, `<b>`, `<span>`) stays inside its block. Text that sits
+/// directly inside a container such as `<div>` or `<body>` also becomes a
+/// paragraph. Whitespace runs collapse to one space, but non-breaking spaces are
+/// kept, since French typography relies on them. `<br>` becomes a space, and
+/// empty blocks are dropped.
+#[must_use]
 pub fn html_to_paragraphs(html: &str) -> Vec<String> {
     let document = Html::parse_document(html);
-    let blocks = Selector::parse("h1, h2, h3, h4, h5, h6, p").expect("selector is valid");
-    document
-        .select(&blocks)
-        .map(|block| block.text().collect::<Vec<_>>().join(""))
-        .map(|text| text.split_whitespace().collect::<Vec<_>>().join(" "))
-        .filter(|text| !text.is_empty())
-        .collect()
+    let mut paragraphs = Vec::new();
+    let mut buffer = String::new();
+    collect_blocks(document.root_element(), &mut paragraphs, &mut buffer);
+    flush(&mut buffer, &mut paragraphs);
+    paragraphs
+}
+
+fn collect_blocks(node: ElementRef, paragraphs: &mut Vec<String>, buffer: &mut String) {
+    for child in node.children() {
+        match child.value() {
+            Node::Text(text) => buffer.push_str(text),
+            Node::Element(element) => {
+                let name = element.name();
+                if SKIPPED_TAGS.contains(&name) {
+                    continue;
+                }
+                if name == "br" {
+                    buffer.push(' ');
+                    continue;
+                }
+                let Some(child_element) = ElementRef::wrap(child) else {
+                    continue;
+                };
+                if BLOCK_TAGS.contains(&name) {
+                    flush(buffer, paragraphs);
+                    collect_blocks(child_element, paragraphs, buffer);
+                    flush(buffer, paragraphs);
+                } else {
+                    collect_blocks(child_element, paragraphs, buffer);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Moves the buffered text into `paragraphs` if it isn't blank, then clears it.
+fn flush(buffer: &mut String, paragraphs: &mut Vec<String>) {
+    let text = normalize_whitespace(buffer);
+    buffer.clear();
+    if !text.trim().is_empty() {
+        paragraphs.push(text);
+    }
+}
+
+/// Collapses runs of ASCII whitespace to one space and trims the ends.
+/// Non-breaking spaces (U+00A0) are left alone.
+fn normalize_whitespace(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    for word in text
+        .split(|c: char| c.is_ascii_whitespace())
+        .filter(|word| !word.is_empty())
+    {
+        if !normalized.is_empty() {
+            normalized.push(' ');
+        }
+        normalized.push_str(word);
+    }
+    normalized
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn fixture() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.epub")
+    fn fixture(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name)
     }
 
     #[test]
     fn reads_metadata_from_epub() {
-        let meta = read_meta(&fixture()).expect("fixture should open");
+        let meta = Book::open(&fixture("tiny.epub")).unwrap().meta();
         assert_eq!(meta.title.as_deref(), Some("Le Petit Test"));
         assert_eq!(meta.author.as_deref(), Some("Jean Exemple"));
         assert_eq!(meta.language.as_deref(), Some("fr"));
@@ -98,9 +219,9 @@ mod tests {
 
     #[test]
     fn reads_first_chapter_as_paragraphs() {
-        let paragraphs = chapter_text(&fixture(), 0).expect("chapter 0 should load");
+        let book = Book::open(&fixture("tiny.epub")).unwrap();
         assert_eq!(
-            paragraphs,
+            book.chapter_text(0).unwrap(),
             vec![
                 "Chapitre un".to_string(),
                 "Il était une fois un homme qui lisait.".to_string(),
@@ -111,28 +232,116 @@ mod tests {
     }
 
     #[test]
+    fn one_book_serves_several_chapters() {
+        let book = Book::open(&fixture("tiny.epub")).unwrap();
+        assert_eq!(book.chapter_count(), 2);
+        assert_eq!(
+            book.chapter_text(1).unwrap(),
+            vec!["Chapitre deux", "La suite commence ici."]
+        );
+        assert_eq!(book.chapter_text(0).unwrap().len(), 4);
+    }
+
+    #[test]
     fn missing_file_is_not_found() {
         let missing = Path::new("does/not/exist.epub");
         assert_eq!(
-            read_meta(missing),
-            Err(EpubError::NotFound(missing.to_path_buf()))
+            Book::open(missing).err(),
+            Some(EpubError::NotFound(missing.to_path_buf()))
         );
     }
 
     #[test]
+    fn non_epub_file_is_invalid() {
+        let result = Book::open(&fixture("broken.epub"));
+        assert!(matches!(result, Err(EpubError::Invalid(_))));
+    }
+
+    #[test]
     fn chapter_past_the_end_is_out_of_range() {
+        let book = Book::open(&fixture("tiny.epub")).unwrap();
         assert_eq!(
-            chapter_text(&fixture(), 5),
+            book.chapter_text(5),
             Err(EpubError::ChapterOutOfRange { index: 5, count: 2 })
         );
     }
 
     #[test]
-    fn html_keeps_headings_and_drops_empty_blocks() {
-        let html = "<h2>Titre</h2><p>  Un   <i>deux</i> </p><p> </p>";
+    fn author_prefers_the_author_role_over_an_illustrator() {
+        let meta = Book::open(&fixture("layout.epub")).unwrap().meta();
+        assert_eq!(meta.author.as_deref(), Some("Jules Auteur"));
+    }
+
+    #[test]
+    fn layout_chapter_keeps_text_from_divs_and_bare_body() {
+        let book = Book::open(&fixture("layout.epub")).unwrap();
         assert_eq!(
-            html_to_paragraphs(html),
-            vec!["Titre".to_string(), "Un deux".to_string()]
+            book.chapter_text(0).unwrap(),
+            vec![
+                "Texte nu.",
+                "Premier paragraphe & co.",
+                "Un deux",
+                "Il dit\u{a0}: oui.",
+                "Citation",
+                "Un",
+                "Deux trois",
+            ]
+        );
+    }
+
+    #[test]
+    fn headings_keep_their_text_and_drop_blank_blocks() {
+        assert_eq!(
+            html_to_paragraphs("<h2>Titre</h2><h3>   </h3><p> </p>"),
+            vec!["Titre".to_string()]
+        );
+    }
+
+    #[test]
+    fn inline_markup_stays_in_its_block() {
+        assert_eq!(
+            html_to_paragraphs("<p>Un <i>deux</i>, <b>trois</b>.</p>"),
+            vec!["Un deux, trois.".to_string()]
+        );
+    }
+
+    #[test]
+    fn nested_blocks_are_not_duplicated() {
+        assert_eq!(
+            html_to_paragraphs("<div><div><p>Once</p></div></div>"),
+            vec!["Once".to_string()]
+        );
+    }
+
+    #[test]
+    fn scripts_and_styles_are_ignored() {
+        assert_eq!(
+            html_to_paragraphs("<p>Avant</p><script>alert(1)</script><style>p{}</style>"),
+            vec!["Avant".to_string()]
+        );
+    }
+
+    #[test]
+    fn non_breaking_space_is_kept() {
+        assert_eq!(
+            html_to_paragraphs("<p>Il dit\u{a0}: non.</p>"),
+            vec!["Il dit\u{a0}: non.".to_string()]
+        );
+    }
+
+    #[test]
+    fn line_breaks_become_spaces() {
+        assert_eq!(
+            html_to_paragraphs("<p>ligne un<br/>ligne deux</p>"),
+            vec!["ligne un ligne deux".to_string()]
+        );
+    }
+
+    #[test]
+    fn entities_are_decoded() {
+        assert_eq!(
+            html_to_paragraphs("<p>Tom &amp; Jerry &lt;3</p>"),
+            vec!["Tom & Jerry <3".to_string()]
         );
     }
 }

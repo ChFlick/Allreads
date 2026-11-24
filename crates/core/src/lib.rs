@@ -4,6 +4,7 @@ pub mod epub;
 pub mod presets;
 
 /// Returns the version of the core library.
+#[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
