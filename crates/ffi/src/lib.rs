@@ -2,6 +2,9 @@
 //! a few coarse calls that return plain records, never per-word calls.
 
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+use allreads_core::db::Database;
 
 uniffi::setup_scaffolding!();
 
@@ -46,6 +49,18 @@ pub enum AllreadsError {
     InvalidEpub { message: String },
     #[error("chapter {index} is out of range; the book has {count} chapters")]
     ChapterOutOfRange { index: u32, count: u32 },
+    #[error("data folder not found: {path}")]
+    DataFolderMissing { path: String },
+    #[error("database error: {message}")]
+    Database { message: String },
+}
+
+impl From<allreads_core::db::DbError> for AllreadsError {
+    fn from(error: allreads_core::db::DbError) -> Self {
+        AllreadsError::Database {
+            message: error.to_string(),
+        }
+    }
 }
 
 impl From<allreads_core::epub::EpubError> for AllreadsError {
@@ -61,6 +76,44 @@ impl From<allreads_core::epub::EpubError> for AllreadsError {
                 count: saturate_u32(count),
             },
         }
+    }
+}
+
+/// The app's library: one `SQLite` database in the app's data folder.
+///
+/// Create it once and keep it for the life of the app. Kotlin calls it on
+/// `Dispatchers.IO`, so the database sits behind a `Mutex`.
+#[derive(uniffi::Object)]
+pub struct App {
+    db: Mutex<Database>,
+}
+
+#[uniffi::export]
+impl App {
+    /// Opens the library in `data_dir`, creating the database on first run.
+    ///
+    /// # Errors
+    /// Returns `DataFolderMissing` if the folder does not exist, and `Database`
+    /// if the database cannot be opened or migrated.
+    #[uniffi::constructor]
+    pub fn new(data_dir: String) -> Result<Arc<Self>, AllreadsError> {
+        let folder = Path::new(&data_dir);
+        if !folder.is_dir() {
+            return Err(AllreadsError::DataFolderMissing { path: data_dir });
+        }
+        let db = Database::open(&folder.join("allreads.db"))?;
+        Ok(Arc::new(Self { db: Mutex::new(db) }))
+    }
+
+    /// The version of the database schema. Useful to check after an update.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn schema_version(&self) -> Result<i64, AllreadsError> {
+        let db = self.db.lock().map_err(|_| AllreadsError::Database {
+            message: "database lock is poisoned".into(),
+        })?;
+        Ok(db.schema_version()?)
     }
 }
 
@@ -98,6 +151,32 @@ mod tests {
             .join(name)
             .display()
             .to_string()
+    }
+
+    #[test]
+    fn app_creates_the_database_on_first_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = App::new(dir.path().display().to_string()).expect("app opens");
+        assert_eq!(app.schema_version().unwrap(), 1);
+        assert!(dir.path().join("allreads.db").is_file());
+    }
+
+    #[test]
+    fn app_reopens_an_existing_library() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().display().to_string();
+        drop(App::new(folder.clone()).unwrap());
+        let reopened = App::new(folder).expect("second open succeeds");
+        assert_eq!(reopened.schema_version().unwrap(), 1);
+    }
+
+    #[test]
+    fn app_refuses_a_missing_data_folder() {
+        let result = App::new("/no/such/allreads/folder".to_string());
+        assert!(matches!(
+            result,
+            Err(AllreadsError::DataFolderMissing { .. })
+        ));
     }
 
     #[test]

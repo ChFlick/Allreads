@@ -1,5 +1,6 @@
 //! Domain logic for Allreads. Books, text, vocabulary and storage live here.
 
+pub mod db;
 pub mod epub;
 pub mod presets;
 

@@ -1,0 +1,293 @@
+//! Saved vocabulary terms and their statuses.
+
+use rusqlite::{params, OptionalExtension, Row};
+
+use super::book::require_one_changed;
+use super::{require_text, Database, DbError};
+
+/// A word's status. A word with no saved term is "new".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Status {
+    /// Being learned, at level 1 to 5.
+    Learning(u8),
+    /// Status 98: never highlight or review.
+    Ignored,
+    /// Status 99: known well enough to need no card.
+    WellKnown,
+}
+
+impl Status {
+    /// A learning status at `level`, or `None` if the level is not 1 to 5.
+    #[must_use]
+    pub fn learning(level: u8) -> Option<Self> {
+        (1..=5).contains(&level).then_some(Self::Learning(level))
+    }
+
+    /// The number stored in the database.
+    #[must_use]
+    pub fn code(self) -> u8 {
+        match self {
+            Self::Learning(level) => level,
+            Self::Ignored => 98,
+            Self::WellKnown => 99,
+        }
+    }
+
+    /// The status for a stored number, or `None` if the number is not a status.
+    #[must_use]
+    pub fn from_code(code: u8) -> Option<Self> {
+        match code {
+            98 => Some(Self::Ignored),
+            99 => Some(Self::WellKnown),
+            _ => Self::learning(code),
+        }
+    }
+}
+
+/// A term to save. Saving the same language and text again updates the term.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewTerm {
+    pub language_code: String,
+    pub text: String,
+    pub lemma: Option<String>,
+    pub status: Status,
+    pub translation: String,
+    pub notes: String,
+    /// The lemma this form links to, if any.
+    pub parent_id: Option<i64>,
+}
+
+/// A saved term.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Term {
+    pub id: i64,
+    pub language_code: String,
+    pub text: String,
+    pub lemma: Option<String>,
+    pub status: Status,
+    pub translation: String,
+    pub notes: String,
+    pub parent_id: Option<i64>,
+}
+
+const COLUMNS: &str = "id, language_code, text, lemma, status, translation, notes, parent_id";
+
+impl Database {
+    /// Saves a term and returns its id. An existing term with the same language
+    /// and text keeps its id and is updated.
+    ///
+    /// # Errors
+    /// Returns `InvalidValue` for blank text, and a database error if the
+    /// language is not stored or the parent term does not exist.
+    pub fn save_term(&self, term: &NewTerm) -> Result<i64, DbError> {
+        require_text("term text", &term.text)?;
+        let id = self.conn().query_row(
+            "INSERT INTO term (language_code, text, lemma, status, translation, notes, parent_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT (language_code, text) DO UPDATE SET
+                 lemma = excluded.lemma,
+                 status = excluded.status,
+                 translation = excluded.translation,
+                 notes = excluded.notes,
+                 parent_id = excluded.parent_id
+             RETURNING id",
+            params![
+                term.language_code,
+                term.text,
+                term.lemma,
+                term.status.code(),
+                term.translation,
+                term.notes,
+                term.parent_id,
+            ],
+            |row| row.get(0),
+        )?;
+        Ok(id)
+    }
+
+    /// The term with this id, if it exists.
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn term(&self, id: i64) -> Result<Option<Term>, DbError> {
+        let sql = format!("SELECT {COLUMNS} FROM term WHERE id = ?1");
+        Ok(self
+            .conn()
+            .query_row(&sql, [id], term_from_row)
+            .optional()?)
+    }
+
+    /// The saved term for this word in this language, if there is one.
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn find_term(&self, language_code: &str, text: &str) -> Result<Option<Term>, DbError> {
+        let sql = format!("SELECT {COLUMNS} FROM term WHERE language_code = ?1 AND text = ?2");
+        Ok(self
+            .conn()
+            .query_row(&sql, params![language_code, text], term_from_row)
+            .optional()?)
+    }
+
+    /// All saved terms in a language, sorted by text.
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn terms(&self, language_code: &str) -> Result<Vec<Term>, DbError> {
+        let sql = format!("SELECT {COLUMNS} FROM term WHERE language_code = ?1 ORDER BY text");
+        let mut statement = self.conn().prepare(&sql)?;
+        let rows = statement.query_map([language_code], term_from_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Deletes a term. Its `AnkiDroid` link and queue entry go with it; the card
+    /// itself stays in `AnkiDroid`.
+    ///
+    /// # Errors
+    /// Returns `NotFound` if no term has this id.
+    pub fn delete_term(&self, id: i64) -> Result<(), DbError> {
+        let changed = self
+            .conn()
+            .execute("DELETE FROM term WHERE id = ?1", [id])?;
+        require_one_changed(changed, || format!("term {id}"))
+    }
+}
+
+fn term_from_row(row: &Row) -> rusqlite::Result<Term> {
+    let code: i64 = row.get(4)?;
+    let status = u8::try_from(code)
+        .ok()
+        .and_then(Status::from_code)
+        .ok_or(rusqlite::Error::IntegralValueOutOfRange(4, code))?;
+    Ok(Term {
+        id: row.get(0)?,
+        language_code: row.get(1)?,
+        text: row.get(2)?,
+        lemma: row.get(3)?,
+        status,
+        translation: row.get(5)?,
+        notes: row.get(6)?,
+        parent_id: row.get(7)?,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::tests_support::french_db;
+
+    fn new_term(text: &str, status: Status) -> NewTerm {
+        NewTerm {
+            language_code: "fr".into(),
+            text: text.into(),
+            lemma: None,
+            status,
+            translation: String::new(),
+            notes: String::new(),
+            parent_id: None,
+        }
+    }
+
+    #[test]
+    fn status_codes_round_trip() {
+        for code in 0..=255u8 {
+            match Status::from_code(code) {
+                Some(status) => assert_eq!(status.code(), code),
+                None => assert!(!matches!(code, 1..=5 | 98 | 99)),
+            }
+        }
+    }
+
+    #[test]
+    fn learning_levels_outside_one_to_five_are_refused() {
+        assert_eq!(Status::learning(0), None);
+        assert_eq!(Status::learning(6), None);
+        assert_eq!(Status::learning(3), Some(Status::Learning(3)));
+    }
+
+    #[test]
+    fn saved_term_can_be_read_back() {
+        let db = french_db();
+        let mut term = new_term("chat", Status::Learning(2));
+        term.translation = "cat".into();
+        let id = db.save_term(&term).unwrap();
+        let saved = db.term(id).unwrap().unwrap();
+        assert_eq!(saved.text, "chat");
+        assert_eq!(saved.status, Status::Learning(2));
+        assert_eq!(saved.translation, "cat");
+    }
+
+    #[test]
+    fn saving_the_same_word_updates_the_row_instead_of_duplicating() {
+        let db = french_db();
+        let first = db
+            .save_term(&new_term("chat", Status::Learning(1)))
+            .unwrap();
+        let mut update = new_term("chat", Status::Learning(4));
+        update.translation = "cat".into();
+        let second = db.save_term(&update).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(db.terms("fr").unwrap().len(), 1);
+        assert_eq!(db.term(first).unwrap().unwrap().status, Status::Learning(4));
+    }
+
+    #[test]
+    fn find_term_matches_language_and_text() {
+        let db = french_db();
+        let id = db.save_term(&new_term("chat", Status::Ignored)).unwrap();
+        assert_eq!(db.find_term("fr", "chat").unwrap().map(|t| t.id), Some(id));
+        assert_eq!(db.find_term("de", "chat").unwrap(), None);
+        assert_eq!(db.find_term("fr", "chien").unwrap(), None);
+    }
+
+    #[test]
+    fn terms_are_sorted_by_text() {
+        let db = french_db();
+        db.save_term(&new_term("chien", Status::Learning(1)))
+            .unwrap();
+        db.save_term(&new_term("abeille", Status::Learning(1)))
+            .unwrap();
+        let texts: Vec<String> = db
+            .terms("fr")
+            .unwrap()
+            .into_iter()
+            .map(|t| t.text)
+            .collect();
+        assert_eq!(texts, ["abeille", "chien"]);
+    }
+
+    #[test]
+    fn blank_text_is_refused() {
+        let db = french_db();
+        assert!(matches!(
+            db.save_term(&new_term("  ", Status::Learning(1))),
+            Err(DbError::InvalidValue(_))
+        ));
+    }
+
+    #[test]
+    fn database_refuses_a_status_outside_the_allowed_codes() {
+        let db = french_db();
+        let result = db.conn().execute(
+            "INSERT INTO term (language_code, text, status) VALUES ('fr', 'x', 7)",
+            [],
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn deleting_a_parent_clears_the_link_on_its_children() {
+        let db = french_db();
+        let lemma = db
+            .save_term(&new_term("manger", Status::Learning(1)))
+            .unwrap();
+        let mut form = new_term("mange", Status::Learning(1));
+        form.parent_id = Some(lemma);
+        let form_id = db.save_term(&form).unwrap();
+        db.delete_term(lemma).unwrap();
+        assert_eq!(db.term(form_id).unwrap().unwrap().parent_id, None);
+    }
+
+    #[test]
+    fn deleting_a_missing_term_is_not_found() {
+        let db = french_db();
+        assert!(matches!(db.delete_term(5), Err(DbError::NotFound { .. })));
+    }
+}

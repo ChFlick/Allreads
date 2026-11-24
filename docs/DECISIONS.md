@@ -12,3 +12,6 @@
 | 2026-11-24 | EPUB reading goes through `epub::Book`, which opens the file once | Re-parsing the zip on every call is too slow for chapter navigation; the step 8 `App` will hold the open book |
 | 2026-11-24 | Preset files are validated and duplicate codes are rejected at load | A typo in a preset should fail loudly in tests, not silently in the app |
 | 2026-11-24 | Upgrade rbook to 0.7.13, which moves zip from 7.x to 9.x | Dependabot flagged zip 7.4.0; rbook 0.6 pins zip 7.x, so the upgrade is the only route to the patched release. The only code change was dropping an unused prelude import |
+| 2026-11-24 | Pin rusqlite to 0.39 | refinery 0.9 (the newest that works with our Rust 1.91 minimum) only supports rusqlite up to 0.39. refinery 0.10 needs Rust 1.92 |
+| 2026-11-24 | Deleting a term removes its AnkiDroid link and queue entry, but the card stays in AnkiDroid | Closes the open question from the plan: deleting in Allreads never deletes the user's Anki card. Status sync back from Anki is still out of scope |
+| 2026-11-24 | Status is stored as a number with a CHECK constraint (1 to 5, 98, 99); a word with no row is "new" | Matches the plan's status model and stops bad values at the database, not just in Rust |

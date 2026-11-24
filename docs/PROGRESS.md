@@ -14,7 +14,7 @@ Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes
 - [ ] 7. EPUB spike (Rust side done 2026-11-24: epub::Book with meta and chapter_text, using rbook and scraper. Tested on generated fixtures, including div-only markup, NBSP and creator roles. Pending: real Gutenberg EPUB and the phone scroll check)
 
 ## Phase 2 (M1): reading MVP
-- [ ] 8. Database and the `App` object
+- [x] 8. Database and the `App` object (2026-11-24: migrations V1 with all seven tables; repositories in crates/core/src/db with 65 core tests on an in-memory database; ffi `App` holds the open database behind a Mutex)
 - [ ] 9. Book import and library
 - [ ] 10. Text pipeline
 - [ ] 11. `open_chapter`
