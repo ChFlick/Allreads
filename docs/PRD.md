@@ -15,7 +15,7 @@ Reading real books is one of the best ways to learn a language, but looking up w
 | Goal | Measure |
 | --- | --- |
 | G1. Read a real EPUB with one-tap lookups | Tap to translation in under 100 ms (dictionary) or 1 s (online) |
-| G2. Every saved word becomes an Anki card with its context | Saved terms show up in AnkiDroid without manual steps |
+| G2. Every word saved for learning (status 1–4) becomes an Anki card with its context | Those terms show up in AnkiDroid without manual steps |
 | G3. See progress | Known-word count and % of a chapter known, per book |
 | G4. Private and offline by default | Reading and saving work in flight mode; no account, no telemetry |
 
@@ -100,7 +100,7 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 
 **Open questions:**
 
-- [ ] Note type: basic cards (word → meaning), sentence cards with the word bolded, or both as card templates?
+- [x] Note type: both, as two card templates (word → meaning, and sentence → meaning), as in implementation step 17.
 - [ ] Which dictionary source per language pair (French → English, French → German), and how big is it after filtering?
 - [ ] Should statuses sync back from Anki (for example, mark a word known once its card is mature)?
 - [x] Name and licence: Allreads, MIT (decided 2026-11-24).

@@ -55,10 +55,10 @@ All the logic lives in a Rust library, built for Android with `cargo-ndk`. UniFF
 | UI | Jetpack Compose + Material 3, Navigation Compose | Kotlin | Native rendering and accessibility, with tappable words drawn directly |
 | Bindings | UniFFI (Mozilla) | Both | Generates Kotlin now and Swift later from one interface |
 | Build | `cargo-ndk` called from a Gradle task | Both | Builds `.so` libraries for arm64, armv7 and x86_64 |
-| EPUB parsing | `rbook` (or `epub`) + `scraper` for XHTML | Rust | Chapters become clean paragraphs, no WebView needed |
+| EPUB parsing | `rbook` + `scraper` for XHTML | Rust | Chapters become clean paragraphs, no WebView needed |
 | Tokenizing | `unicode-segmentation`, plus the ported Lukaisu rules; `lindera` (Japanese) and `jieba-rs` (Chinese) later | Rust | Offline and fast, CJK without a server |
 | Storage | `rusqlite` (bundled SQLite) + `refinery` migrations | Rust | One database file, easy to back up |
-| HTTP | `reqwest` (rustls) + `tokio` | Rust | Translator and AI clients |
+| HTTP | `reqwest` blocking client (rustls), no async runtime | Rust | Translator and AI clients; the core stays synchronous and Kotlin calls it on `Dispatchers.IO` |
 | Translation | `Translator` trait: DeepL, LibreTranslate, LLM | Rust | Swappable; Bergamot offline later |
 | AI | `AiProvider` trait: OpenAI-compatible + Anthropic, bring your own key | Rust | No backend to run; answers cached per sentence |
 | Dictionaries | Wiktionary extracts (kaikki.org, CC BY-SA), downloaded per language | Rust | Offline, with lemmas and inflections |
@@ -95,10 +95,14 @@ Opening a chapter, the Kotlin side calls `open_chapter(book, index)`. Rust parse
 | --- | --- | --- |
 | Language | code, name, split rules, RTL, TTS locale | Seeded from Lukaisu's presets |
 | Book | title, author, language, file path, cover, position (chapter + paragraph) | EPUB, or a TXT wrapped as one chapter |
-| Term | language, text, lemma, status (1–5 / 98 / 99), translation, notes, parent term | A multi-word phrase is just a term with spaces |
+| Term | language, key, display text, lemma, status (1–5 / 98 / 99), translation, notes, parent term | The key is the lower-case `term_key`; the display text keeps the form as first seen. A multi-word phrase is just a term with spaces |
 | AnkiLink | term, AnkiDroid note id, deck, last pushed | Lets edits update the existing card |
-| SentenceCache | hash of the sentence text, translation, AI explanation, provider | Avoids paying twice for the same sentence |
+| AnkiOutbox | term, attempts, queued at | Pushes waiting for AnkiDroid; one row per term |
+| SentenceCache | hash of the normalised sentence, source and target language, provider, translation, AI explanation | Avoids paying twice for the same sentence |
 | ReadingStat | day, book, words read, new terms | Drives progress and known-word counts |
+| BookChapter | book, index, title | The table of contents |
+| ChapterCache | book, chapter index, parser version, tokens blob | A parsed chapter, reused only while the parser version matches |
+| Setting | key, value | Translator choice, Anki deck and note type ids, reading preferences. Never API keys |
 
 Word occurrences aren't stored; each chapter is tokenized when it's opened.
 

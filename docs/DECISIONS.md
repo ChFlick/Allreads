@@ -18,3 +18,7 @@
 | 2026-11-24 | Rust work runs ahead of the plan order while Android Studio is unavailable; device and Gradle checks are batched | Keeps progress going. The risk (an unproven Android build) is reduced by building the Android libraries in CI next |
 | 2026-11-24 | Term keys are lower case, built by one shared `term_key` function (NFC, preset substitutions, lower case, collapsed whitespace); the first-seen form is kept for display | "Le" and "le" must be one term, and ’ and ' must match. German nouns need their capital letter on the card |
 | 2026-11-24 | Drop the F-Droid requirement; release APKs on GitHub | Chosen by Christoph. Dependencies no longer need to be F-Droid-safe |
+| 2026-11-24 | EPUB parsing uses `rbook` (not the `epub` crate) | Already in use, maintained, handles EPUB 2 and 3, and thread-safe by default |
+| 2026-11-24 | HTTP uses the blocking `reqwest` client with rustls, and no `tokio` | The core is synchronous and Kotlin calls it on `Dispatchers.IO`, so an async runtime adds size and complexity for nothing |
+| 2026-11-24 | Only terms saved with status 1–4 become Anki cards; PRD goal G2 now says so | Matches F20. Words saved as 5, ignored or known need no review |
+| 2026-11-24 | The note type has both card templates (word → meaning, sentence → meaning) | Closes the PRD open question, as step 17 already specified |
