@@ -85,6 +85,7 @@ import uniffi.allreads_ffi.WordStatus
 fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val speaking by viewModel.speaking.collectAsStateWithLifecycle()
+    val downloads by viewModel.dictionaryDownloads.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // Speech stops when the reader closes.
     DisposableEffect(Unit) { onDispose { viewModel.stopSpeaking() } }
@@ -194,6 +195,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             onSpeak = viewModel::speakWord,
             onShowLemma = viewModel::showLemma,
             onDownloadDictionary = viewModel::downloadDictionary,
+            dictionaryDownload = word.dictionaryOffer?.let { downloads[it.pair] },
             onSave = viewModel::saveWord,
             onDismiss = viewModel::dismissWord,
         )

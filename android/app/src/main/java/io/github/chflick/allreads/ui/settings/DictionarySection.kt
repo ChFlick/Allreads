@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chflick.allreads.data.Dictionaries
 import io.github.chflick.allreads.data.DownloadState
+import io.github.chflick.allreads.ui.megabytes
 import java.util.Locale
 import kotlinx.coroutines.launch
 import uniffi.allreads_ffi.AvailableDictionary
@@ -139,7 +140,6 @@ private fun DictionaryRow(
 fun pairName(pair: String): String =
     pair.split('-').joinToString(" → ") { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH) }
 
-private fun megabytes(bytes: Long): String = "%.1f MB".format(Locale.ENGLISH, bytes / 1_000_000.0)
 
 /** True on a metered connection (usually mobile data). */
 fun onMobileData(context: Context): Boolean =

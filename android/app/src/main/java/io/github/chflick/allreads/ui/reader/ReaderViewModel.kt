@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.data.DownloadState
 import kotlinx.coroutines.flow.first
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.AvailableDictionary
@@ -89,6 +90,9 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
 
     /** What is being read aloud: a row key, [WORD_UTTERANCE], or `null`. */
     val speaking: StateFlow<String?> = services.speech.speaking
+
+    /** Running dictionary downloads, so the drawer can show progress. */
+    val dictionaryDownloads: StateFlow<Map<String, DownloadState>> = services.dictionaries.downloads
     private var openJob: Job? = null
     private var selectJob: Job? = null
 

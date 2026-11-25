@@ -1,5 +1,10 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.ui.settings.onMobileData
+import androidx.compose.material3.AlertDialog
+import io.github.chflick.allreads.data.DownloadState
+import io.github.chflick.allreads.ui.megabytes
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.PaddingValues
 import uniffi.allreads_ffi.DictionaryEntry
 import androidx.compose.foundation.layout.Spacer
@@ -60,6 +65,7 @@ fun WordSheet(
     onSpeak: () -> Unit,
     onShowLemma: (String) -> Unit,
     onDownloadDictionary: () -> Unit,
+    dictionaryDownload: DownloadState?,
     onSave: (WordStatus, String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -133,7 +139,7 @@ fun WordSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            OfflineDictionary(word, onShowLemma, onDownloadDictionary)
+            OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 wordStatusChoices.forEach { choice ->
                     FilterChip(
@@ -180,12 +186,49 @@ fun WordSheet(
 
 /** The offline dictionary's part of the drawer: forms, meanings, or a download offer. */
 @Composable
-private fun OfflineDictionary(word: SelectedWord, onShowLemma: (String) -> Unit, onDownload: () -> Unit) {
+private fun OfflineDictionary(
+    word: SelectedWord,
+    download: DownloadState?,
+    onShowLemma: (String) -> Unit,
+    onDownload: () -> Unit,
+) {
     val lookup = word.dictionary
     if (lookup == null) {
-        word.dictionaryOffer?.let { offer ->
-            TextButton(onClick = onDownload) {
-                Text("Get the offline dictionary (${"%.0f".format(offer.downloadBytes.toDouble() / 1_000_000)} MB)")
+        val offer = word.dictionaryOffer ?: return
+        val context = LocalContext.current
+        var confirm by remember { mutableStateOf(false) }
+        val start = { if (onMobileData(context)) confirm = true else onDownload() }
+        if (confirm) {
+            AlertDialog(
+                onDismissRequest = { confirm = false },
+                title = { Text("Download on mobile data?") },
+                text = { Text("The dictionary is a ${megabytes(offer.downloadBytes.toLong())} download.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirm = false
+                        onDownload()
+                    }) { Text("Download") }
+                },
+                dismissButton = { TextButton(onClick = { confirm = false }) { Text("Not now") } },
+            )
+        }
+        when (download) {
+            is DownloadState.Running -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                LinearProgressIndicator(
+                    progress = { (download.bytes.toFloat() / download.total.coerceAtLeast(1)).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "Downloading the dictionary: ${megabytes(download.bytes)} of ${megabytes(download.total)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            is DownloadState.Failed -> Column {
+                Text(download.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = start) { Text("Try the download again") }
+            }
+            null -> TextButton(onClick = start) {
+                Text("Get the offline dictionary (${megabytes(offer.downloadBytes.toLong())})")
             }
         }
         return
