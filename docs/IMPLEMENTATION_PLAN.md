@@ -190,6 +190,7 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
       - **Sub-steps:** 23a `dictgen` and its workflow (with the measured fixes: keep form tags, drop duplicate form rows); 23b core install, lookup and FFI with tests on a tiny fixture dictionary; 23c the Settings section, download and drawer.
 24. **Phrase selection.** Long-press and drag across tokens to select a phrase, saved as a multi-word term. Phrases are matched in `open_chapter` (longest match first).
     - **Done when** a saved idiom is highlighted wherever it appears.
+    - *Decided 2026-11-25:* the offline dictionary also suggests phrases. Tapping a word shows the dictionary's multi-word entries found around it in the sentence (e.g. "pierre précieuse: gemstone" when tapping "Pierre"), with "Save as phrase". Long-press and drag stays, for phrases the dictionary does not know. The French dictionary has about 17,500 multi-word entries.
     - *Added 2026-11-24:* a phrase's key is the `term_key` of the whole phrase. Matching compares the keys of consecutive word tokens, so punctuation and line breaks between words don't break a match.
 25. **Read-aloud.** *Scoped with Christoph 2026-11-25.* Android `TextToSpeech`, all in Kotlin: the reader already has each sentence's text and the preset has its `tts_locale`, so Rust needs no new calls.
     - **What is spoken:** the tapped word (a speaker button in the word drawer) and one sentence (a play button on each sentence row, next to translate). No whole-chapter playback in v1.

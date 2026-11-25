@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.reader.textForTranslation
 import io.github.chflick.allreads.data.DownloadState
 import kotlinx.coroutines.flow.first
 import uniffi.allreads_ffi.DictionaryLookup
@@ -254,7 +255,9 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         val word = _state.value.selected ?: return
         _state.update { it.copy(selected = word.copy(translating = true, translationError = null)) }
         viewModelScope.launch {
-            val result = translate(word.text, context = word.sentence)
+            // The dictionary's entry was added before this runs, when one is installed.
+            val text = textForTranslation(word.text, _state.value.selected?.dictionary)
+            val result = translate(text, context = word.sentence)
             _state.update { state ->
                 val current = state.selected?.takeIf { it.text == word.text } ?: return@update state
                 state.copy(
