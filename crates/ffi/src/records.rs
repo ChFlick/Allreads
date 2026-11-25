@@ -164,6 +164,13 @@ pub struct LanguageInfo {
     pub right_to_left: bool,
 }
 
+/// A DeepL key's monthly usage, returned when the key works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct DeepLUsage {
+    pub characters_used: u64,
+    pub character_limit: u64,
+}
+
 /// A machine translation, and whether it came from the cache (free and instant).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Translation {

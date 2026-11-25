@@ -118,6 +118,56 @@ fn error_message(body: &str, trace_id: Option<&str>) -> String {
     }
 }
 
+/// How much of the monthly character quota a key has used, from `GET /v2/usage`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct Usage {
+    pub character_count: u64,
+    pub character_limit: u64,
+}
+
+impl DeepL {
+    /// Checks the key and reads its usage. This costs no quota, so it is the
+    /// way to test a newly entered key.
+    ///
+    /// # Errors
+    /// Returns `Unauthorized` for a rejected key, `Network` when offline, and
+    /// the other `TranslateError`s like a translation would.
+    pub fn usage(&self) -> Result<Usage, TranslateError> {
+        let mut response = self
+            .agent
+            .get(format!("{}/v2/usage", self.base_url))
+            .header("Authorization", format!("DeepL-Auth-Key {}", self.key))
+            .call()
+            .map_err(|e| TranslateError::Network(e.to_string()))?;
+        let status = response.status().as_u16();
+        let trace_id = response
+            .headers()
+            .get("X-Trace-ID")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let text = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| TranslateError::Network(e.to_string()))?;
+        check_status(status, &text, trace_id.as_deref())?;
+        serde_json::from_str(&text).map_err(|e| TranslateError::BadResponse(e.to_string()))
+    }
+}
+
+/// Maps DeepL's error statuses to `TranslateError`; `Ok` for 200.
+fn check_status(status: u16, body: &str, trace_id: Option<&str>) -> Result<(), TranslateError> {
+    match status {
+        200 => Ok(()),
+        401 | 403 => Err(TranslateError::Unauthorized),
+        456 => Err(TranslateError::QuotaExceeded),
+        429 | 529 => Err(TranslateError::RateLimited),
+        _ => Err(TranslateError::Http {
+            status,
+            message: error_message(body, trace_id),
+        }),
+    }
+}
+
 #[derive(Deserialize)]
 struct Response {
     translations: Vec<Translation>,
@@ -156,18 +206,7 @@ impl Translator for DeepL {
             break (status, text, trace_id);
         };
 
-        match status {
-            200 => {}
-            401 | 403 => return Err(TranslateError::Unauthorized),
-            456 => return Err(TranslateError::QuotaExceeded),
-            429 | 529 => return Err(TranslateError::RateLimited),
-            _ => {
-                return Err(TranslateError::Http {
-                    status,
-                    message: error_message(&text, trace_id.as_deref()),
-                })
-            }
-        }
+        check_status(status, &text, trace_id.as_deref())?;
         let parsed: Response =
             serde_json::from_str(&text).map_err(|e| TranslateError::BadResponse(e.to_string()))?;
         parsed
@@ -308,6 +347,28 @@ mod tests {
         server.join().unwrap();
         assert_eq!(error, TranslateError::Unauthorized);
         assert!(!error.to_string().contains("secret-key"));
+    }
+
+    #[test]
+    fn usage_checks_the_key_and_reads_the_quota() {
+        let (url, server) =
+            serve_once(200, r#"{"character_count":12345,"character_limit":500000}"#);
+        let usage = DeepL::with_base_url("good-key:fx", &url).usage().unwrap();
+        assert_eq!(
+            usage,
+            Usage {
+                character_count: 12345,
+                character_limit: 500_000
+            }
+        );
+        let raw = server.join().unwrap();
+        assert!(raw.starts_with("GET /v2/usage "), "{raw}");
+        assert!(raw.contains("DeepL-Auth-Key good-key:fx"), "{raw}");
+
+        let (url, server) = serve_once(403, r#"{"message":"Forbidden"}"#);
+        let error = DeepL::with_base_url("bad-key", &url).usage().unwrap_err();
+        server.join().unwrap();
+        assert_eq!(error, TranslateError::Unauthorized);
     }
 
     #[test]

@@ -32,6 +32,12 @@ class TokenText(val tokens: List<Token>) {
         return low
     }
 
+    /** The character ranges of the tokens that match, e.g. every new word. */
+    fun ranges(matches: (Token) -> Boolean): List<IntRange> =
+        tokens.indices
+            .filter { matches(tokens[it]) && tokens[it].text.isNotEmpty() }
+            .map { starts[it] until starts[it] + tokens[it].text.length }
+
     /**
      * The word token at a tapped offset. A tap on the right half of a word's
      * last letter reports the offset after it, so the token before is tried too.

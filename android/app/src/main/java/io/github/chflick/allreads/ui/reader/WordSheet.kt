@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,8 +52,9 @@ fun WordSheet(
     onSave: (WordStatus, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // A first tap on a new word suggests level 1, the usual choice.
-    var status by rememberSaveable(word.text) {
+    // A first tap on a new word suggests level 1, the usual choice. A WordStatus
+    // cannot go into Android's saved state, so this uses remember, not rememberSaveable.
+    var status by remember(word.text) {
         mutableStateOf(if (word.status == WordStatus.New) WordStatus.Learning(1u) else word.status)
     }
     var translation by rememberSaveable(word.text) { mutableStateOf(word.saved?.translation ?: "") }

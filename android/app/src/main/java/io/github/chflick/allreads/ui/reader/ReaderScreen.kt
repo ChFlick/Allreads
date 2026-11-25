@@ -41,7 +41,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -51,7 +54,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -189,6 +191,8 @@ private fun SentenceRow(
 ) {
     val dark = LocalDarkTheme.current
     val text = remember(row, dark) { styledText(row, dark) }
+    val newWords = remember(row) { row.content.ranges { it.status == WordStatus.New } }
+    val underline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val rowStyle = when (row.headingLevel) {
         null -> style
@@ -205,7 +209,9 @@ private fun SentenceRow(
                 text = text,
                 style = rowStyle,
                 onTextLayout = { layout = it },
-                modifier = Modifier.pointerInput(row) {
+                modifier = Modifier
+                    .drawBehind { layout?.let { drawFaintUnderlines(it, newWords, underline) } }
+                    .pointerInput(row) {
                     detectTapGestures { position ->
                         val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures
                         row.content.wordAt(offset)?.let(onWord)
@@ -249,18 +255,39 @@ private fun TranslateButton(shown: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** A sentence's tokens with italic, bold and a background per word status. */
+/**
+ * A sentence's tokens with italic, bold, and a background for words being
+ * learned. New words get no fill here; [drawFaintUnderlines] marks them.
+ */
 private fun styledText(row: ReaderRow, dark: Boolean): AnnotatedString = buildAnnotatedString {
     row.content.tokens.forEach { token ->
         val status = token.status
         val style = SpanStyle(
             fontStyle = if (token.italic) FontStyle.Italic else null,
             fontWeight = if (token.bold) FontWeight.Bold else null,
-            background = status?.highlight(dark) ?: Color.Unspecified,
-            // New words are also underlined, so colour is not the only cue.
-            textDecoration = if (status == WordStatus.New) TextDecoration.Underline else null,
+            background = status?.takeIf { it != WordStatus.New }?.highlight(dark) ?: Color.Unspecified,
         )
         withStyle(style) { append(token.text) }
+    }
+}
+
+/**
+ * A thin, faint line under each range, one segment per text line. Compose's
+ * own underline always has the text's colour and weight, which is too loud
+ * when most words on a page are new.
+ */
+private fun DrawScope.drawFaintUnderlines(layout: TextLayoutResult, ranges: List<IntRange>, color: Color) {
+    val stroke = 1.dp.toPx()
+    val gap = 2.dp.toPx()
+    for (range in ranges) {
+        val firstLine = layout.getLineForOffset(range.first)
+        val lastLine = layout.getLineForOffset(range.last)
+        for (line in firstLine..lastLine) {
+            val start = if (line == firstLine) layout.getBoundingBox(range.first).left else layout.getLineLeft(line)
+            val end = if (line == lastLine) layout.getBoundingBox(range.last).right else layout.getLineRight(line)
+            val y = layout.getLineBaseline(line) + gap
+            drawLine(color, Offset(minOf(start, end), y), Offset(maxOf(start, end), y), strokeWidth = stroke)
+        }
     }
 }
 

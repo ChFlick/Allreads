@@ -41,6 +41,8 @@ import io.github.chflick.allreads.BuildConfig
 import io.github.chflick.allreads.data.AppSettings
 import io.github.chflick.allreads.data.Services
 import io.github.chflick.allreads.data.ThemeMode
+import io.github.chflick.allreads.ui.NO_DEEPL_KEY
+import io.github.chflick.allreads.ui.describe
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -125,16 +127,61 @@ private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 }
 
-/** Paste, replace or remove the DeepL key. The saved key is never shown, only its last four characters. */
+/** The result of checking the saved DeepL key. */
+private sealed interface KeyCheck {
+    data object Checking : KeyCheck
+    data class Works(val used: ULong, val limit: ULong) : KeyCheck
+    data class Failed(val message: String) : KeyCheck
+}
+
+/**
+ * Paste, replace, check or remove the DeepL key. A newly saved key is checked
+ * at once against DeepL's usage endpoint, which costs no quota. The saved key
+ * is never shown, only its last four characters.
+ */
 @Composable
 private fun DeeplKeyField(services: Services, hasKey: Boolean) {
     var input by rememberSaveable { mutableStateOf("") }
     val hint by services.apiKeys.deeplKeyHint.collectAsStateWithLifecycle()
+    var check by remember { mutableStateOf<KeyCheck?>(null) }
     val scope = rememberCoroutineScope()
+
+    fun runCheck(newKey: String?) {
+        check = KeyCheck.Checking
+        scope.launch {
+            // Keystore work and the network call both stay off the main thread.
+            val key = withContext(Dispatchers.IO) {
+                newKey?.also { services.apiKeys.saveDeeplKey(it) } ?: services.apiKeys.deeplKey()
+            }
+            check = if (key == null) {
+                KeyCheck.Failed(NO_DEEPL_KEY)
+            } else {
+                runCatching { services.repository.checkDeeplKey(key) }.fold(
+                    { KeyCheck.Works(it.charactersUsed, it.characterLimit) },
+                    { KeyCheck.Failed(describe(it)) },
+                )
+            }
+        }
+    }
+
     Text(
         if (hint != null) "DeepL API key saved (…$hint)" else "No DeepL API key yet. Get a free one at deepl.com/pro-api.",
         style = MaterialTheme.typography.bodyMedium,
     )
+    when (val result = check) {
+        null -> Unit
+        KeyCheck.Checking -> Text("Checking the key with DeepL…", style = MaterialTheme.typography.bodySmall)
+        is KeyCheck.Works -> Text(
+            "✓ The key works · ${"%,d".format(result.used.toLong())} of ${"%,d".format(result.limit.toLong())} characters used this month",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        is KeyCheck.Failed -> Text(
+            result.message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
     OutlinedTextField(
         value = input,
         onValueChange = { input = it },
@@ -147,14 +194,17 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
         Button(
             enabled = input.isNotBlank(),
             onClick = {
-                val key = input
+                val key = input.trim()
                 input = ""
-                // Encrypting goes through the Android Keystore, so keep it off the main thread.
-                scope.launch { withContext(Dispatchers.IO) { services.apiKeys.saveDeeplKey(key) } }
+                runCheck(key)
             },
         ) { Text("Save key") }
         if (hasKey) {
-            OutlinedButton(onClick = { services.apiKeys.clearDeeplKey() }) { Text("Remove key") }
+            OutlinedButton(onClick = { runCheck(null) }) { Text("Check key") }
+            OutlinedButton(onClick = {
+                services.apiKeys.clearDeeplKey()
+                check = null
+            }) { Text("Remove") }
         }
     }
 }

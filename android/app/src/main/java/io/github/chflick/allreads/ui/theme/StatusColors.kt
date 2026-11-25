@@ -4,10 +4,11 @@ import androidx.compose.ui.graphics.Color
 import uniffi.allreads_ffi.WordStatus
 
 /**
- * The background a word gets in the reader. New words are blue, words being
- * learned fade from orange (level 1) to green (level 5), and known or ignored
- * words stay plain. Dark mode uses deep tones so light text stays readable.
- * Colour is not the only cue: new words are also underlined.
+ * The background a word gets. Words being learned fade from orange (level 1)
+ * to green (level 5); dark mode uses deep tones so light text stays readable.
+ * Known and ignored words stay plain. In the reader, new words get no fill,
+ * only a faint underline, so a fresh book is not a wall of colour; the Words
+ * tab uses the blue for its status dots.
  */
 fun WordStatus.highlight(dark: Boolean): Color? = when (this) {
     WordStatus.New -> if (dark) Color(0xFF27496D) else Color(0xFFBBDEFB)

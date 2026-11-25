@@ -46,7 +46,7 @@ COVER_PNG = base64.b64decode(
 )
 
 
-def opf(title, creators, identifier, cover=False):
+def opf(title, creators, identifier, cover=False, cover_page=False):
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -61,13 +61,23 @@ def opf(title, creators, identifier, cover=False):
     <item id="c1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
     <item id="c2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
 {{cover_item}}
+{{cover_page_item}}
   </manifest>
   <spine>
+{{cover_page_ref}}
     <itemref idref="c1"/>
     <itemref idref="c2"/>
   </spine>
-</package>""".replace("{cover_item}", COVER_ITEM if cover else "")
+</package>""".replace("{cover_item}", COVER_ITEM if cover else "").replace(
+        "{cover_page_item}", COVER_PAGE_ITEM if cover_page else ""
+    ).replace("{cover_page_ref}", '    <itemref idref="coverpage"/>' if cover_page else "")
 
+
+# An image-only page in the reading order, as many real EPUBs have; the
+# reader must skip it.
+COVER_PAGE_ITEM = (
+    '    <item id="coverpage" href="coverpage.xhtml" media-type="application/xhtml+xml"/>'
+)
 
 COVER_ITEM = (
     '    <item id="cover" href="cover.png" media-type="image/png" properties="cover-image"/>'
@@ -110,7 +120,9 @@ LAYOUT_FILES = {
     <meta refines="#c2" property="role" scheme="marc:relators">aut</meta>""",
         "allreads-layout-fixture",
         cover=True,
+        cover_page=True,
     ),
+    "OEBPS/coverpage.xhtml": xhtml("Couverture", '  <div><img src="cover.png" alt=""/></div>'),
     "OEBPS/cover.png": COVER_PNG,
     "OEBPS/nav.xhtml": NAV,
     "OEBPS/chapter1.xhtml": xhtml("Mise en page", """  Texte nu.

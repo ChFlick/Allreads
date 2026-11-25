@@ -11,19 +11,35 @@ use crate::text::normalize_whitespace;
 /// An open EPUB. Opening parses the archive once; reads then reuse it.
 pub struct Book {
     epub: rbook::Epub,
+    /// The positions, in the EPUB's reading order, of the chapters that have
+    /// text. Image-only pages (covers, title pages) and empty files are left
+    /// out, so the reader never shows a blank chapter.
+    readable: Vec<usize>,
 }
 
 impl Book {
-    /// Opens the EPUB at `path`.
+    /// Opens the EPUB at `path` and finds its chapters with text.
     ///
     /// # Errors
-    /// Returns `NotFound` if `path` is not a file, and `Invalid` if the file is not a readable EPUB.
+    /// Returns `NotFound` if `path` is not a file, and `Invalid` if the file is
+    /// not a readable EPUB.
     pub fn open(path: &Path) -> Result<Self, BookError> {
         if !path.is_file() {
             return Err(BookError::NotFound(path.to_path_buf()));
         }
         let epub = rbook::Epub::open(path).map_err(|e| BookError::Invalid(e.to_string()))?;
-        Ok(Self { epub })
+        let reader = epub.reader();
+        let mut readable = Vec::new();
+        for position in 0..reader.len() {
+            let content = reader
+                .get(position)
+                .map_err(|e| BookError::Invalid(e.to_string()))?;
+            if !html_to_blocks(content.content()).is_empty() {
+                readable.push(position);
+            }
+        }
+        drop(reader);
+        Ok(Self { epub, readable })
     }
 
     /// The book's title, author, language and chapter count.
@@ -44,14 +60,14 @@ impl Book {
             title: metadata.title().map(|t| t.value().to_string()),
             author,
             language: metadata.language().map(|l| l.value().to_string()),
-            chapters: self.epub.reader().len(),
+            chapters: self.readable.len(),
         }
     }
 
-    /// Number of readable chapters in reading order.
+    /// Number of chapters with text, in reading order.
     #[must_use]
     pub fn chapter_count(&self) -> usize {
-        self.epub.reader().len()
+        self.readable.len()
     }
 
     /// The cover image and a file extension for it, if the book has a cover in
@@ -76,31 +92,33 @@ impl Book {
     /// # Errors
     /// Returns `Invalid` if a chapter cannot be read.
     pub fn chapter_titles(&self) -> Result<Vec<Option<String>>, BookError> {
-        let reader = self.epub.reader();
-        (0..reader.len())
-            .map(|index| {
-                let content = reader
-                    .get(index)
-                    .map_err(|e| BookError::Invalid(e.to_string()))?;
-                Ok(first_heading(content.content()))
-            })
+        (0..self.readable.len())
+            .map(|index| Ok(first_heading(&self.chapter_html(index)?)))
             .collect()
     }
 
     /// One chapter's blocks with their inline styles (0-based, in reading order).
     ///
     /// # Errors
-    /// Returns `ChapterOutOfRange` if `index` is past the last chapter, and `Invalid` if the chapter cannot be read.
+    /// Returns `ChapterOutOfRange` if `index` is past the last chapter, and
+    /// `Invalid` if the chapter cannot be read.
     pub fn chapter_blocks(&self, index: usize) -> Result<Vec<Block>, BookError> {
-        let reader = self.epub.reader();
-        let count = reader.len();
-        if index >= count {
-            return Err(BookError::ChapterOutOfRange { index, count });
-        }
-        let content = reader
+        Ok(html_to_blocks(&self.chapter_html(index)?))
+    }
+
+    /// The XHTML of readable chapter `index`.
+    fn chapter_html(&self, index: usize) -> Result<String, BookError> {
+        let count = self.readable.len();
+        let position = *self
+            .readable
             .get(index)
+            .ok_or(BookError::ChapterOutOfRange { index, count })?;
+        let content = self
+            .epub
+            .reader()
+            .get(position)
             .map_err(|e| BookError::Invalid(e.to_string()))?;
-        Ok(html_to_blocks(content.content()))
+        Ok(content.content().to_string())
     }
 }
 
@@ -253,9 +271,17 @@ mod tests {
     }
 
     #[test]
-    fn cover_is_not_a_chapter() {
+    fn image_only_pages_are_not_chapters() {
+        // layout.epub's reading order starts with an image-only cover page.
         let layout = Book::open(&fixture("layout.epub")).unwrap();
         assert_eq!(layout.chapter_count(), 2);
+        assert_eq!(layout.meta().chapters, 2);
+        assert_eq!(paragraphs(&layout, 0).unwrap()[0], "Texte nu.");
+        assert_eq!(paragraphs(&layout, 1).unwrap(), ["Fin."]);
+        assert!(matches!(
+            layout.chapter_blocks(2),
+            Err(BookError::ChapterOutOfRange { index: 2, count: 2 })
+        ));
     }
 
     #[test]

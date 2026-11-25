@@ -154,7 +154,8 @@ private fun TermEditor(
     onSave: (WordStatus, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var status by rememberSaveable(term.id) { mutableStateOf(term.status) }
+    // A WordStatus cannot go into Android's saved state, so this uses remember.
+    var status by remember(term.id) { mutableStateOf(term.status) }
     var translation by rememberSaveable(term.id) { mutableStateOf(term.translation) }
     var notes by rememberSaveable(term.id) { mutableStateOf(term.notes) }
     ModalBottomSheet(onDismissRequest = onDismiss) {

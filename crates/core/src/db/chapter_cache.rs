@@ -51,6 +51,16 @@ impl Database {
         Ok(())
     }
 
+    /// Removes every cached chapter of a book, e.g. when its chapter list changed.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn clear_chapter_cache(&self, book_id: i64) -> Result<(), DbError> {
+        self.conn()
+            .execute("DELETE FROM chapter_cache WHERE book_id = ?1", [book_id])?;
+        Ok(())
+    }
+
     /// Every saved term's status in a language, by term key. One query, so a
     /// chapter's statuses are joined without a lookup per word.
     ///

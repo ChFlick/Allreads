@@ -17,8 +17,8 @@ use allreads_core::translate::{TranslationRequest, Translator};
 
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
-    saturate_u32, BookMeta, BookSummary, Chapter, ChapterBlock, LanguageInfo, SavedTerm, TermInput,
-    Token, Translation, WordStatus,
+    saturate_u32, BookMeta, BookSummary, Chapter, ChapterBlock, DeepLUsage, LanguageInfo,
+    SavedTerm, TermInput, Token, Translation, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -61,8 +61,26 @@ impl App {
         let row = self.book_row(book_id)?;
         // Parse without holding any lock; another thread may race us, which is harmless.
         let book = Arc::new(OpenedBook::open(Path::new(&row.file_path))?);
+        self.repair_chapter_list(&row, &book)?;
         self.remember_open_book(book_id, Arc::clone(&book))?;
         Ok(book)
+    }
+
+    /// Brings the stored chapter list in line with the book file, e.g. for a
+    /// book imported before empty chapters were skipped: titles are rewritten,
+    /// cached chapters dropped, and a position past the end reset.
+    fn repair_chapter_list(&self, row: &BookRow, book: &OpenedBook) -> Result<(), AllreadsError> {
+        let count = book.meta().chapters;
+        let db = self.db()?;
+        if db.chapter_titles(row.id)?.len() == count {
+            return Ok(());
+        }
+        db.set_chapter_titles(row.id, &book.chapter_titles()?)?;
+        db.clear_chapter_cache(row.id)?;
+        if row.chapter_index as usize >= count {
+            db.save_position(row.id, 0, 0)?;
+        }
+        Ok(())
     }
 
     /// Adds a book to the recently opened list, dropping the oldest past [`OPEN_BOOKS`].
@@ -512,6 +530,28 @@ impl App {
         self.remove_owned_file(Path::new(&row.file_path));
         Ok(())
     }
+}
+
+/// Checks a DeepL key by reading its usage, which costs no quota. Call it after
+/// the user enters a key, to tell them at once whether it works.
+///
+/// # Errors
+/// Returns `TranslationKeyRejected` for a bad key, `TranslationUnavailable`
+/// when offline, and `InvalidInput` for an empty key.
+// UniFFI exported functions must take owned arguments, so `String` stays by value.
+#[uniffi::export]
+#[allow(clippy::needless_pass_by_value)]
+pub fn check_deepl_key(api_key: String) -> Result<DeepLUsage, AllreadsError> {
+    if api_key.trim().is_empty() {
+        return Err(AllreadsError::InvalidInput {
+            reason: "the DeepL API key is empty".into(),
+        });
+    }
+    let usage = DeepL::new(&api_key).usage()?;
+    Ok(DeepLUsage {
+        characters_used: usage.character_count,
+        character_limit: usage.character_limit,
+    })
 }
 
 /// Reads a book file's title, author, language and chapter count without
@@ -1047,6 +1087,37 @@ mod tests {
             Some("Le Petit Test".to_string())
         );
         assert_eq!(app.book(id + 1).unwrap(), None);
+    }
+
+    #[test]
+    fn a_stale_chapter_list_is_repaired_when_the_book_opens() {
+        let dir = tempfile::tempdir().unwrap();
+        let id = new_app(&dir)
+            .import_book(copy_in(&dir, "layout.epub"), "fr".into())
+            .unwrap()
+            .id;
+        // Simulate an import from before empty chapters were skipped.
+        let app = new_app(&dir);
+        {
+            let db = app.db().unwrap();
+            db.set_chapter_titles(id, &[None, None, None]).unwrap();
+            db.store_chapter_cache(id, 0, PARSER_VERSION, b"stale")
+                .unwrap();
+            db.save_position(id, 2, 5).unwrap();
+        }
+        let chapter = app.open_chapter(id, 0).unwrap();
+        assert_eq!(chapter.blocks[0].tokens[0].text, "Texte");
+        let book = app.book(id).unwrap().unwrap();
+        assert_eq!(book.chapter_count, 2);
+        assert_eq!((book.chapter_index, book.paragraph_index), (0, 0));
+    }
+
+    #[test]
+    fn an_empty_deepl_key_is_invalid_input() {
+        assert!(matches!(
+            check_deepl_key("  ".into()),
+            Err(AllreadsError::InvalidInput { .. })
+        ));
     }
 
     #[test]

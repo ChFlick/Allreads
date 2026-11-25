@@ -71,6 +71,13 @@ class ReaderTextTest {
     }
 
     @Test
+    fun rangesCoverTheMatchingTokens() {
+        val text = TokenText(blocks[1].tokens)
+        // "L'homme lit. Fin." – the words, by character range.
+        assertEquals(listOf(0..1, 2..6, 8..10, 13..15), text.ranges { it.termKey != null })
+    }
+
+    @Test
     fun aTapJustAfterAWordStillPicksTheWord() {
         val text = TokenText(blocks[1].tokens)
         assertEquals(1, text.wordAt(7))
