@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.anki
 
+import uniffi.allreads_ffi.AnkiNoteType
+
 /** Whether the app can talk to AnkiDroid right now. */
 enum class AnkiAccess {
     /** AnkiDroid is not installed (or too old to share its cards). */
@@ -14,7 +16,8 @@ data class AnkiDeck(val id: Long, val name: String)
 
 /**
  * Everything the app asks of AnkiDroid. An interface, so the sync logic can be
- * tested on the JVM with a fake; [AnkiDroidBridge] is the real one.
+ * tested on the JVM with a fake; [AnkiDroidBridge] is the real one. Calls
+ * other than [access] need [AnkiAccess.Connected] and run off the main thread.
  */
 interface AnkiBridge {
     fun access(): AnkiAccess
@@ -24,4 +27,10 @@ interface AnkiBridge {
 
     /** Creates a deck and returns its id, or `null` if AnkiDroid refused. */
     fun addDeck(name: String): Long?
+
+    /** The ids of every note type in AnkiDroid. */
+    fun noteTypeIds(): Set<Long>
+
+    /** Creates a note type, with `deckId` as its default deck; `null` if AnkiDroid refused. */
+    fun addNoteType(noteType: AnkiNoteType, deckId: Long): Long?
 }

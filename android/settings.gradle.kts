@@ -11,6 +11,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // AnkiDroid's API library is only published on JitPack; nothing else comes from there.
+        maven("https://jitpack.io") {
+            content { includeGroup("com.github.ankidroid") }
+        }
     }
 }
 

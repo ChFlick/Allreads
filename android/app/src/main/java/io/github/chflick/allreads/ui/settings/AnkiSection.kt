@@ -7,7 +7,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.util.Locale
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +45,8 @@ private data class AnkiState(
     val access: AnkiAccess? = null,
     val decks: List<AnkiDeck> = emptyList(),
     val deckId: Long? = null,
+    /** Languages whose note type is in AnkiDroid, e.g. "French". */
+    val noteTypesReady: List<String> = emptyList(),
     val error: String? = null,
 )
 
@@ -53,6 +62,38 @@ fun AnkiSection(services: Services) {
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(AnkiState()) }
 
+    /** Step 17: creates the note type of every language in the library, if missing. */
+    suspend fun prepareNoteTypes(deckId: Long) {
+        val wordCard = services.settings.settings.value.ankiWordCard
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                val languages = services.repository.library().map { it.languageCode }.distinct().sorted()
+                languages.map { code ->
+                    val id = services.ankiNoteTypes.ensure(code, deckId, wordCard)
+                    code to id
+                }
+            }
+        }
+        result.onSuccess { pairs ->
+            val failed = pairs.filter { it.second == null }.map { it.first }
+            state = state.copy(
+                noteTypesReady = pairs.filter { it.second != null }.map { Locale.forLanguageTag(it.first).displayLanguage },
+                error = if (failed.isEmpty()) null else "AnkiDroid could not create the card type for ${failed.joinToString()}.",
+            )
+        }.onFailure { state = state.copy(error = describe(it)) }
+    }
+
+    fun chooseDeck(id: Long) {
+        scope.launch {
+            runCatching { services.repository.setAnkiDeckId(id) }
+                .onSuccess {
+                    state = state.copy(deckId = id, error = null)
+                    prepareNoteTypes(id)
+                }
+                .onFailure { state = state.copy(error = describe(it)) }
+        }
+    }
+
     fun refresh() {
         scope.launch {
             // ContentProvider queries and the database both stay off the main thread.
@@ -66,14 +107,10 @@ fun AnkiSection(services: Services) {
                     )
                 }
             }.getOrElse { state.copy(error = describe(it)) }
-        }
-    }
-
-    fun chooseDeck(id: Long) {
-        scope.launch {
-            runCatching { services.repository.setAnkiDeckId(id) }
-                .onSuccess { state = state.copy(deckId = id, error = null) }
-                .onFailure { state = state.copy(error = describe(it)) }
+            val deck = state.deckId
+            if (state.access == AnkiAccess.Connected && deck != null && state.decks.any { it.id == deck }) {
+                prepareNoteTypes(deck)
+            }
         }
     }
 
@@ -118,6 +155,26 @@ fun AnkiSection(services: Services) {
                 color = MaterialTheme.colorScheme.primary,
             )
             DeckPicker(state, onChoose = ::chooseDeck, onCreate = ::createDeck)
+            if (state.noteTypesReady.isNotEmpty()) {
+                Text(
+                    "Card types in AnkiDroid: ${state.noteTypesReady.joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            val settings by services.settings.settings.collectAsStateWithLifecycle()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Also add a word card", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "Word → meaning, next to the sentence card. Applies to card types created from now on.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = settings.ankiWordCard,
+                    onCheckedChange = { on -> services.settings.update { it.copy(ankiWordCard = on) } },
+                )
+            }
         }
     }
     state.error?.let {

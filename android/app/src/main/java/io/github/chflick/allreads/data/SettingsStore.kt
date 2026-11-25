@@ -15,6 +15,8 @@ data class AppSettings(
     val fontScale: Float = 1.0f,
     val lineSpacing: Float = 1.4f,
     val theme: ThemeMode = ThemeMode.System,
+    /** Adds a word → meaning card next to the sentence card in new note types. */
+    val ankiWordCard: Boolean = false,
 ) {
     companion object {
         /** DeepL target languages offered in Settings. */
@@ -37,6 +39,7 @@ class SettingsStore(context: Context) {
             .putFloat("font_scale", next.fontScale)
             .putFloat("line_spacing", next.lineSpacing)
             .putString("theme", next.theme.name)
+            .putBoolean("anki_word_card", next.ankiWordCard)
             .apply()
         _settings.value = next
     }
@@ -50,6 +53,7 @@ class SettingsStore(context: Context) {
             theme = prefs.getString("theme", null)
                 ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
                 ?: defaults.theme,
+            ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),
         )
     }
 }

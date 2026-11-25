@@ -1,8 +1,10 @@
 package io.github.chflick.allreads.data
 
+import io.github.chflick.allreads.anki.NoteTypeStore
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import uniffi.allreads_ffi.AnkiNoteType
 import uniffi.allreads_ffi.App
 import uniffi.allreads_ffi.BookMeta
 import uniffi.allreads_ffi.BookSummary
@@ -19,7 +21,7 @@ import uniffi.allreads_ffi.readBookMeta
  * screens never block the main thread. The Rust library (database, migrations,
  * presets) is opened on the first call, which is also on [Dispatchers.IO].
  */
-class Repository(val dataDir: File) {
+class Repository(val dataDir: File) : NoteTypeStore {
     private val app: App by lazy { App(dataDir.absolutePath) }
 
     /** Where imported book files are copied. */
@@ -76,6 +78,14 @@ class Repository(val dataDir: File) {
     suspend fun ankiDeckId(): Long? = io { app.ankiDeckId() }
 
     suspend fun setAnkiDeckId(deckId: Long) = io { app.setAnkiDeckId(deckId) }
+
+    override suspend fun modelId(languageCode: String): Long? = io { app.ankiModelId(languageCode) }
+
+    override suspend fun setModelId(languageCode: String, modelId: Long) =
+        io { app.setAnkiModelId(languageCode, modelId) }
+
+    override suspend fun noteType(languageCode: String, includeWordCard: Boolean): AnkiNoteType =
+        io { app.ankiNoteType(languageCode, includeWordCard) }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
