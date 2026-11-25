@@ -186,8 +186,14 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
 24. **Phrase selection.** Long-press and drag across tokens to select a phrase, saved as a multi-word term. Phrases are matched in `open_chapter` (longest match first).
     - **Done when** a saved idiom is highlighted wherever it appears.
     - *Added 2026-11-24:* a phrase's key is the `term_key` of the whole phrase. Matching compares the keys of consecutive word tokens, so punctuation and line breaks between words don't break a match.
-25. **Audio.** Use Android `TextToSpeech` with an `UtteranceProgressListener`. Rust supplies sentence ranges, and the reader highlights the sentence being spoken. Add a speak button in the word sheet.
-    - **Done when** "read chapter aloud" follows along correctly. M4 is complete.
+25. **Read-aloud.** *Scoped with Christoph 2026-11-25.* Android `TextToSpeech`, all in Kotlin: the reader already has each sentence's text and the preset has its `tts_locale`, so Rust needs no new calls.
+    - **What is spoken:** the tapped word (a speaker button in the word drawer) and one sentence (a play button on each sentence row, next to translate). No whole-chapter playback in v1.
+    - **While a sentence plays,** its row is tinted; no auto-scroll. Tapping play again, or another play button, stops it first. Leaving the reader stops speech.
+    - **Settings:** a speed slider (0.5× to 1.5×); a "Speak words when tapped" switch, off by default; and a voice picker per language in the library, listing the installed voices for that language with a test button. Without a choice, the best installed voice for the preset's locale is used, offline voices first.
+    - **No voice installed** for the book's language: the speaker buttons explain this and open Android's text-to-speech settings to download one.
+    - **Built for a cloud voice later:** a `Speech` interface (speak word, speak sentence, stop, voices) with the phone's TTS behind it, so a provider such as Google Cloud or Azure can be added as another implementation.
+    - **Anki cards** keep Anki's `{{tts}}` tag; no audio files for now (revisit with cloud voices).
+    - **Done when** on a phone: the word button and sentence buttons speak in the book's language at the chosen speed and voice, the playing row is tinted, and a missing voice leads to the TTS settings. M4 is complete.
 26. **Library, stats and backup.** Browse Standard Ebooks and Project Gutenberg through their OPDS catalogues (parsed in Rust with `quick-xml`) and download books in the chosen language. Add a stats screen (F25), and back up and restore everything as one zip file (F27).
     - **Done when** you can find, download and start a new French book without leaving the app.
 27. **Release.** Set up a release keystore and signing, reproducible-build settings, and fastlane metadata with screenshots.

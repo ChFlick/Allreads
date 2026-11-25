@@ -67,7 +67,7 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 | F20 | Anki | Push a note when a term is saved with status 1–4; update the same note when the term is edited; no duplicates | P0 | M2 |
 | F21 | Anki | Queue pushes when AnkiDroid is unavailable and retry later | P1 | M2 |
 | F22 | Anki | ~~Export terms as `.apkg` and CSV~~ Dropped 2026-11-25 | — | — |
-| F23 | Audio | Read the current sentence or chapter aloud, highlighting the sentence being read; speak a word from the sheet | P1 | M4 |
+| F23 | Audio | Read a sentence aloud (its row tinted while it plays) or the tapped word, with the phone's voices; speed and voice per language in Settings; optional speak-on-tap. Whole-chapter playback and cloud voices later (2026-11-25) | P1 | M4 |
 | F24 | Settings | Languages (from presets), translator, AI provider and key, Anki deck, and reading preferences | P0 | M1 |
 | F25 | Stats | Known words per language, new terms per day, % known per chapter | P1 | M5 |
 | F26 | Discover | Browse and download from Project Gutenberg and Standard Ebooks by language | P2 | M5 |

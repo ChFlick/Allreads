@@ -113,7 +113,7 @@ M1 is the real MVP: reading a French EPUB and saving words. M2 makes it complete
 2. **M1: Reading MVP.** Import EPUB and TXT, tokenize, colour words by status, tap a word for a machine translation, save it with a status, and resume where you stopped.
 3. **M2: Anki.** Push saved terms to AnkiDroid with the sentence as context, and update them on edit. (`.apkg` export dropped 2026-11-25.)
 4. **M3: Translation and AI.** Sentence translation, parallel mode, "explain this" with your own key, offline dictionaries, all cached.
-5. **M4: Audio.** Read aloud with sentence highlighting, and word pronunciation.
+5. **M4: Audio.** Read a sentence or the tapped word aloud with the phone's voices, with speed and voice settings. Whole-chapter playback and cloud voices later.
 6. **M5: Library and ship.** A Gutenberg and Standard Ebooks browser, then a signed APK on GitHub releases.
 7. **Later.** iOS via Swift bindings, Japanese and Chinese tokenizers, offline translation (Bergamot), backup and sync.
 
