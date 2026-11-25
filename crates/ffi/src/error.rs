@@ -2,6 +2,7 @@
 
 use allreads_core::book::BookError;
 use allreads_core::db::DbError;
+use allreads_core::dictionary::DictionaryError;
 use allreads_core::library::ImportError;
 use allreads_core::translate::TranslateError;
 
@@ -45,6 +46,27 @@ pub enum AllreadsError {
     InvalidInput { reason: String },
     #[error("database error: {reason}")]
     Database { reason: String },
+    /// The downloaded dictionary does not match its checksum; download it again.
+    #[error("the dictionary download is damaged")]
+    DictionaryDamaged,
+    /// A dictionary file that cannot be used (wrong format, pair, or broken).
+    #[error("the dictionary cannot be used: {reason}")]
+    DictionaryInvalid { reason: String },
+}
+
+impl From<DictionaryError> for AllreadsError {
+    fn from(error: DictionaryError) -> Self {
+        match error {
+            DictionaryError::ChecksumMismatch => AllreadsError::DictionaryDamaged,
+            DictionaryError::Invalid(reason) => AllreadsError::DictionaryInvalid { reason },
+            DictionaryError::Io(e) => AllreadsError::Storage {
+                reason: e.to_string(),
+            },
+            DictionaryError::Sqlite(e) => AllreadsError::Database {
+                reason: e.to_string(),
+            },
+        }
+    }
 }
 
 impl From<DbError> for AllreadsError {

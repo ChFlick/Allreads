@@ -208,7 +208,10 @@ impl Database {
     }
 
     /// The term key for `text` in a language, or `None` if the language is not stored.
-    fn term_key(&self, language_code: &str, text: &str) -> Result<Option<String>, DbError> {
+    ///
+    /// # Errors
+    /// Returns a database error if the language cannot be read.
+    pub fn term_key(&self, language_code: &str, text: &str) -> Result<Option<String>, DbError> {
         Ok(self.language(language_code)?.map(|language| {
             let substitutions = parse_substitutions(&language.character_substitutions);
             term_key(text, &substitutions)

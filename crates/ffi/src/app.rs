@@ -1,5 +1,6 @@
 //! `App`: the library object Kotlin creates once, and the calls it offers.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -8,6 +9,7 @@ use allreads_core::db::book::Book as BookRow;
 use allreads_core::db::term::NewTerm;
 use allreads_core::db::translation_cache::CacheKey;
 use allreads_core::db::Database;
+use allreads_core::dictionary::{self, Dictionary};
 use allreads_core::library::{self, OpenedBook};
 use allreads_core::presets::builtin_presets;
 use allreads_core::reader::{parse_blocks, ParsedChapter};
@@ -17,8 +19,9 @@ use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
 
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
-    saturate_u32, AnkiNote, AnkiNoteType, BookMeta, BookSummary, Chapter, ChapterBlock,
-    DeepLKeyStatus, LanguageInfo, SavedTerm, TermInput, Token, Translation, WordStatus,
+    saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookMeta, BookSummary, Chapter,
+    ChapterBlock, DeepLKeyStatus, DictionaryLookup, InstalledDictionary, LanguageInfo, SavedTerm,
+    TermInput, Token, Translation, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -35,6 +38,8 @@ pub struct App {
     /// Recently opened books, most recent last, so reading a chapter does not
     /// re-parse the file. Capped at [`OPEN_BOOKS`] to bound memory and file handles.
     open_books: Mutex<Vec<(i64, Arc<OpenedBook>)>>,
+    /// Installed dictionaries opened so far, by pair (e.g. `fr-en`).
+    dictionaries: Mutex<HashMap<String, Dictionary>>,
 }
 
 impl App {
@@ -48,6 +53,10 @@ impl App {
 
     fn db(&self) -> Result<MutexGuard<'_, Database>, AllreadsError> {
         self.db.lock().map_err(|_| poisoned())
+    }
+
+    fn dictionaries_dir(&self) -> PathBuf {
+        self.data_dir.join("dictionaries")
     }
 
     fn covers_dir(&self) -> PathBuf {
@@ -226,6 +235,7 @@ impl App {
             db: Mutex::new(db),
             data_dir: folder,
             open_books: Mutex::new(Vec::new()),
+            dictionaries: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -625,6 +635,89 @@ impl App {
             .set_setting(&model_key(&language_code), &model_id.to_string())?)
     }
 
+    /// The installed offline dictionaries, for Settings.
+    ///
+    /// # Errors
+    /// Returns `Storage` if the dictionaries folder cannot be read.
+    pub fn installed_dictionaries(&self) -> Result<Vec<InstalledDictionary>, AllreadsError> {
+        Ok(dictionary::installed(&self.dictionaries_dir())?
+            .into_iter()
+            .map(InstalledDictionary::from)
+            .collect())
+    }
+
+    /// Installs a downloaded dictionary (the `.gz` at `download_path`) after
+    /// checking it against the manifest's `sha256`. Kotlin deletes the
+    /// download afterwards, whatever the result.
+    ///
+    /// # Errors
+    /// Returns `DictionaryDamaged` for a corrupt download, `DictionaryInvalid`
+    /// for a file that is not a usable dictionary for `pair`, and `Storage` if
+    /// it cannot be written.
+    pub fn install_dictionary(
+        &self,
+        download_path: String,
+        sha256: String,
+        pair: String,
+    ) -> Result<InstalledDictionary, AllreadsError> {
+        // Close an open copy first, so the new file is opened on next lookup.
+        self.dictionaries
+            .lock()
+            .map_err(|_| poisoned())?
+            .remove(&pair);
+        let info = dictionary::install(
+            Path::new(&download_path),
+            &sha256,
+            &pair,
+            &self.dictionaries_dir(),
+        )?;
+        Ok(info.into())
+    }
+
+    /// Deletes an installed dictionary. Returns `false` if it was not installed.
+    ///
+    /// # Errors
+    /// Returns `DictionaryInvalid` for a bad pair name, `Storage` if deleting fails.
+    pub fn remove_dictionary(&self, pair: String) -> Result<bool, AllreadsError> {
+        self.dictionaries
+            .lock()
+            .map_err(|_| poisoned())?
+            .remove(&pair);
+        Ok(dictionary::remove(&self.dictionaries_dir(), &pair)?)
+    }
+
+    /// Looks a word up in the language's `-en` dictionary. `None` if no
+    /// dictionary is installed for it; an empty lookup if the word is not in it.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown language, and `DictionaryInvalid` if
+    /// the installed file cannot be read.
+    pub fn lookup_word(
+        &self,
+        language_code: String,
+        text: String,
+    ) -> Result<Option<DictionaryLookup>, AllreadsError> {
+        let pair = format!("{}-en", language_code.to_lowercase());
+        if !dictionary::valid_pair(&pair) {
+            return Ok(None);
+        }
+        let key = self
+            .db()?
+            .term_key(&language_code, text.trim())?
+            .ok_or_else(|| AllreadsError::Missing {
+                what: format!("language {language_code}"),
+            })?;
+        let mut open = self.dictionaries.lock().map_err(|_| poisoned())?;
+        if !open.contains_key(&pair) {
+            let path = self.dictionaries_dir().join(format!("{pair}.sqlite"));
+            if !path.is_file() {
+                return Ok(None);
+            }
+            open.insert(pair.clone(), Dictionary::open(&path)?);
+        }
+        Ok(Some(open[&pair].lookup(&key)?.into()))
+    }
+
     /// Deletes a book, its cover, and its file if the file is in app storage.
     ///
     /// # Errors
@@ -648,6 +741,20 @@ const ANKI_DECK: &str = "anki.deck";
 
 fn model_key(language_code: &str) -> String {
     format!("anki.model.{}", language_code.to_lowercase())
+}
+
+/// Reads the published `dictionaries.json`, keeping the dictionaries this
+/// app version can use.
+///
+/// # Errors
+/// Returns `DictionaryInvalid` if the text is not a manifest.
+#[uniffi::export]
+#[allow(clippy::needless_pass_by_value)]
+pub fn parse_dictionary_manifest(json: String) -> Result<Vec<AvailableDictionary>, AllreadsError> {
+    Ok(dictionary::parse_manifest(&json)?
+        .into_iter()
+        .map(AvailableDictionary::from)
+        .collect())
 }
 
 /// Checks a DeepL key right after the user enters it. It first reads the
@@ -973,6 +1080,98 @@ mod tests {
         assert_eq!(notes[0].note_id, Some(55));
         assert_eq!(notes[0].fields[4], "The man stopped.");
         app.record_anki_failure(saved.id).unwrap();
+    }
+
+    /// A gzipped tiny French dictionary and its checksum, as the release would have.
+    fn tiny_dictionary_download(dir: &std::path::Path) -> (String, String) {
+        use std::io::Write;
+        let plain = dir.join("plain.sqlite");
+        let conn = rusqlite::Connection::open(&plain).unwrap();
+        conn.execute_batch(allreads_core::dictionary::SCHEMA)
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO entry (id, key, word, pos, ipa) VALUES (1, 'lire', 'lire', 'verb', '/liʁ/');
+             INSERT INTO sense (entry_id, position, gloss) VALUES (1, 0, 'to read');
+             INSERT INTO form (key, lemma, pos, tags)
+                 VALUES ('lisait', 'lire', 'verb', 'imperfect indicative singular third-person');
+             INSERT INTO meta (key, value) VALUES ('format', '1'), ('pair', 'fr-en'), ('built', '2026-11-25');",
+        )
+        .unwrap();
+        drop(conn);
+        let gz = dir.join("fr-en.sqlite.gz");
+        let mut encoder = flate2::write::GzEncoder::new(
+            fs::File::create(&gz).unwrap(),
+            flate2::Compression::fast(),
+        );
+        encoder.write_all(&fs::read(&plain).unwrap()).unwrap();
+        encoder.finish().unwrap();
+        let sum = allreads_core::dictionary::file_sha256(&gz).unwrap();
+        (gz.display().to_string(), sum)
+    }
+
+    #[test]
+    fn a_dictionary_installs_looks_words_up_and_is_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        // Nothing installed: no lookup, not an error.
+        assert_eq!(app.lookup_word("fr".into(), "Lisait".into()).unwrap(), None);
+        assert!(app.installed_dictionaries().unwrap().is_empty());
+
+        let (gz, sum) = tiny_dictionary_download(dir.path());
+        assert!(matches!(
+            app.install_dictionary(gz.clone(), "00".into(), "fr-en".into()),
+            Err(AllreadsError::DictionaryDamaged)
+        ));
+        let installed = app.install_dictionary(gz, sum, "fr-en".into()).unwrap();
+        assert_eq!(installed.built, "2026-11-25");
+        assert_eq!(app.installed_dictionaries().unwrap(), [installed]);
+
+        // Looked up by term key, so case does not matter.
+        let lookup = app
+            .lookup_word("fr".into(), "Lisait".into())
+            .unwrap()
+            .unwrap();
+        assert!(lookup.entries.is_empty());
+        assert_eq!(lookup.suggested_lemma.as_deref(), Some("lire"));
+        assert_eq!(
+            lookup.forms[0].tags,
+            "imperfect indicative singular third-person"
+        );
+        let lire = app
+            .lookup_word("fr".into(), "lire".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(lire.entries[0].senses, ["to read"]);
+        assert_eq!(lire.entries[0].part_of_speech, "verb");
+        // A word the dictionary does not know is an empty lookup.
+        assert!(app
+            .lookup_word("fr".into(), "xyz".into())
+            .unwrap()
+            .unwrap()
+            .entries
+            .is_empty());
+        // Other languages have no dictionary.
+        assert_eq!(app.lookup_word("de".into(), "Haus".into()).unwrap(), None);
+
+        assert!(app.remove_dictionary("fr-en".into()).unwrap());
+        assert_eq!(app.lookup_word("fr".into(), "lire".into()).unwrap(), None);
+        assert!(matches!(
+            app.remove_dictionary("../x".into()),
+            Err(AllreadsError::DictionaryInvalid { .. })
+        ));
+    }
+
+    #[test]
+    fn the_manifest_is_parsed_for_kotlin() {
+        let list = parse_dictionary_manifest(
+            r#"{"format": 1, "dictionaries": [{"pair": "fr-en", "language": "fr",
+               "url": "https://example.org/fr-en.sqlite.gz", "built": "2026-11-25",
+               "download_bytes": 10, "installed_bytes": 40, "sha256": "ab"}]}"#
+                .into(),
+        )
+        .unwrap();
+        assert_eq!(list[0].language_code, "fr");
+        assert!(parse_dictionary_manifest("nope".into()).is_err());
     }
 
     #[test]

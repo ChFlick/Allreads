@@ -20,4 +20,6 @@ workspace = true
 
 [dev-dependencies]
 allreads-core = { path = "../core", features = ["test-support"] }
+flate2 = "1.1"
+rusqlite = { version = "0.39", features = ["bundled"] }
 tempfile = "3.27.0"

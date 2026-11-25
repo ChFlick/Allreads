@@ -273,3 +273,105 @@ impl From<allreads_core::anki::AnkiNote> for AnkiNote {
         }
     }
 }
+
+/// A dictionary offered for download, from the published manifest.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AvailableDictionary {
+    /// e.g. `fr-en`.
+    pub pair: String,
+    /// The book language it is for, e.g. `fr`.
+    pub language_code: String,
+    pub url: String,
+    pub built: String,
+    pub download_bytes: u64,
+    pub installed_bytes: u64,
+    /// Pass back to `install_dictionary`.
+    pub sha256: String,
+}
+
+impl From<allreads_core::dictionary::AvailableDictionary> for AvailableDictionary {
+    fn from(d: allreads_core::dictionary::AvailableDictionary) -> Self {
+        AvailableDictionary {
+            pair: d.pair,
+            language_code: d.language,
+            url: d.url,
+            built: d.built,
+            download_bytes: d.download_bytes,
+            installed_bytes: d.installed_bytes,
+            sha256: d.sha256,
+        }
+    }
+}
+
+/// An installed dictionary, for Settings.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct InstalledDictionary {
+    pub pair: String,
+    pub built: String,
+    pub bytes: u64,
+}
+
+impl From<allreads_core::dictionary::InstalledDictionary> for InstalledDictionary {
+    fn from(d: allreads_core::dictionary::InstalledDictionary) -> Self {
+        InstalledDictionary {
+            pair: d.pair,
+            built: d.built,
+            bytes: d.bytes,
+        }
+    }
+}
+
+/// A headword: "lit" (noun), /li/, with its meanings.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DictionaryEntry {
+    pub word: String,
+    pub part_of_speech: String,
+    pub ipa: String,
+    pub senses: Vec<String>,
+}
+
+/// The word is a form of `lemma`, e.g. "lisait" of "lire".
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DictionaryForm {
+    pub lemma: String,
+    pub part_of_speech: String,
+    /// Readings separated by "; ", e.g. "imperfect indicative singular third-person".
+    pub tags: String,
+}
+
+/// What the offline dictionary says about a word.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DictionaryLookup {
+    pub entries: Vec<DictionaryEntry>,
+    pub forms: Vec<DictionaryForm>,
+    /// The dictionary form to prefill the Lemma field with, if any.
+    pub suggested_lemma: Option<String>,
+}
+
+impl From<allreads_core::dictionary::Lookup> for DictionaryLookup {
+    fn from(lookup: allreads_core::dictionary::Lookup) -> Self {
+        let suggested_lemma = lookup.suggested_lemma().map(str::to_string);
+        DictionaryLookup {
+            entries: lookup
+                .entries
+                .into_iter()
+                .map(|e| DictionaryEntry {
+                    word: e.word,
+                    part_of_speech: e.pos,
+                    ipa: e.ipa,
+                    senses: e.senses,
+                })
+                .collect(),
+            forms: lookup
+                .forms
+                .into_iter()
+                .map(|f| DictionaryForm {
+                    lemma: f.lemma,
+                    part_of_speech: f.pos,
+                    tags: f.tags,
+                })
+                .collect(),
+            suggested_lemma,
+        }
+    }
+}
