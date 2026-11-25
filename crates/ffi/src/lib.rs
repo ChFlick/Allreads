@@ -456,7 +456,7 @@ impl App {
             reason: e.to_string(),
         })?;
         for preset in &presets {
-            db.add_language_if_missing(preset)?;
+            db.sync_builtin_language(preset)?;
         }
         Ok(Arc::new(Self {
             db: Mutex::new(db),

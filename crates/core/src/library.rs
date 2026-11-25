@@ -215,7 +215,7 @@ mod tests {
     fn library_db(path: &Path) -> Database {
         let db = Database::open(path).unwrap();
         for preset in builtin_presets().unwrap() {
-            db.add_language_if_missing(&preset).unwrap();
+            db.sync_builtin_language(&preset).unwrap();
         }
         db
     }

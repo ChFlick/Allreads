@@ -52,16 +52,37 @@ impl Database {
         Ok(())
     }
 
-    /// Stores a language only if its code is not stored yet, so settings the
-    /// user changed later are kept.
+    /// Stores a built-in preset: adds it if missing, and refreshes it unless
+    /// the user has edited it, so preset fixes reach existing installs.
     ///
     /// # Errors
-    /// Returns a database error if the statement fails.
-    pub fn add_language_if_missing(&self, language: &LanguagePreset) -> Result<(), DbError> {
-        if self.language(&language.code)?.is_none() {
+    /// Returns a database error if a statement fails.
+    pub fn sync_builtin_language(&self, language: &LanguagePreset) -> Result<(), DbError> {
+        let edited: Option<bool> = self
+            .conn()
+            .query_row(
+                "SELECT edited_by_user FROM language WHERE code = ?1",
+                [&language.code],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if edited != Some(true) {
             self.upsert_language(language)?;
         }
         Ok(())
+    }
+
+    /// Marks a language as changed by the user, so built-in presets no longer
+    /// overwrite it.
+    ///
+    /// # Errors
+    /// Returns `NotFound` if the language is not stored.
+    pub fn mark_language_edited(&self, code: &str) -> Result<(), DbError> {
+        let changed = self.conn().execute(
+            "UPDATE language SET edited_by_user = 1 WHERE code = ?1",
+            [code],
+        )?;
+        super::book::require_one_changed(changed, || format!("language {code}"))
     }
 
     /// The language with this code, if it has been stored.
@@ -149,18 +170,32 @@ mod tests {
     }
 
     #[test]
-    fn adding_a_missing_language_keeps_an_existing_one() {
+    fn built_in_sync_adds_and_refreshes_unedited_languages() {
         let db = test_database();
+        db.sync_builtin_language(&preset("xx", "Old preset"))
+            .unwrap();
+        db.sync_builtin_language(&preset("xx", "Fixed preset"))
+            .unwrap();
+        assert_eq!(db.language("xx").unwrap().unwrap().name, "Fixed preset");
+    }
+
+    #[test]
+    fn built_in_sync_leaves_a_user_edited_language_alone() {
+        let db = test_database();
+        db.sync_builtin_language(&preset("xx", "Built-in")).unwrap();
         db.upsert_language(&preset("xx", "Edited by the user"))
             .unwrap();
-        db.add_language_if_missing(&preset("xx", "Built-in"))
+        db.mark_language_edited("xx").unwrap();
+        db.sync_builtin_language(&preset("xx", "Newer built-in"))
             .unwrap();
-        db.add_language_if_missing(&preset("yy", "New")).unwrap();
         assert_eq!(
             db.language("xx").unwrap().unwrap().name,
             "Edited by the user"
         );
-        assert_eq!(db.language("yy").unwrap().unwrap().name, "New");
+        assert!(matches!(
+            db.mark_language_edited("zz"),
+            Err(DbError::NotFound { .. })
+        ));
     }
 
     #[test]

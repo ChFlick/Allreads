@@ -56,7 +56,8 @@ pub struct NewTerm {
     pub status: Status,
     pub translation: String,
     pub notes: String,
-    /// The lemma this form links to, if any.
+    /// The lemma this form links to. `None` keeps an existing link, so
+    /// re-saving a word from the reader never unlinks it.
     pub parent_id: Option<i64>,
 }
 
@@ -112,7 +113,7 @@ impl Database {
                  status = excluded.status,
                  translation = excluded.translation,
                  notes = excluded.notes,
-                 parent_id = excluded.parent_id
+                 parent_id = COALESCE(excluded.parent_id, term.parent_id)
              RETURNING id",
             params![
                 term.language_code,
@@ -520,6 +521,24 @@ mod tests {
             db.mark_known("zz", &pairs(&["x"])),
             Err(DbError::NotFound { .. })
         ));
+    }
+
+    #[test]
+    fn re_saving_without_a_parent_keeps_the_existing_link() {
+        let db = french_db();
+        let lemma = db
+            .save_term(&new_term("manger", Status::Learning(1)))
+            .unwrap();
+        let mut form = new_term("mange", Status::Learning(1));
+        form.parent_id = Some(lemma);
+        let id = db.save_term(&form).unwrap();
+        db.save_term(&new_term("mange", Status::Learning(3)))
+            .unwrap();
+        let saved = db.term(id).unwrap().unwrap();
+        assert_eq!(
+            (saved.parent_id, saved.status),
+            (Some(lemma), Status::Learning(3))
+        );
     }
 
     #[test]

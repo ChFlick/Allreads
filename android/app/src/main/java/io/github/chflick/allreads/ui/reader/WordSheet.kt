@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.chflick.allreads.ui.theme.label
@@ -128,7 +130,13 @@ fun WordSheet(
             word.saved?.lemma?.let { Text("Dictionary form: $it", style = MaterialTheme.typography.bodyMedium) }
             word.dictionaryUrl?.let { url ->
                 OutlinedButton(
-                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                    onClick = {
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "No browser is installed to open the dictionary.", Toast.LENGTH_LONG).show()
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
                 ) { Text("Look up in the web dictionary") }
             }

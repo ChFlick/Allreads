@@ -1,7 +1,8 @@
 # Language preset: German. Ported from Lukaisu (MIT), see NOTICE.
 name = "German"
 code = "de"
-word_characters = "a-zA-ZäöüÄÖÜß"
+# The full Latin range, so loanwords like "Café" or "naïv" stay whole.
+word_characters = "a-zA-ZÀ-ÖØ-öø-ȳẞ"
 sentence_end_chars = ".!?:;"
 sentence_exceptions = "[A-Z].|Dr."
 character_substitutions = "´='|`='|’='|‘='|...=…|..=‥"

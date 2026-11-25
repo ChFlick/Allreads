@@ -129,6 +129,15 @@ mod tests {
     }
 
     #[test]
+    fn german_and_spanish_keep_accented_loanwords_whole() {
+        assert_eq!(
+            words("Café naïv Straße GROẞ", "de"),
+            ["Café", "naïv", "Straße", "GROẞ"]
+        );
+        assert_eq!(words("garçon déjà vu", "es"), ["garçon", "déjà", "vu"]);
+    }
+
+    #[test]
     fn hyphenated_words_are_one_word() {
         assert_eq!(words("peut-être est-ce", "fr"), ["peut-être", "est-ce"]);
     }
