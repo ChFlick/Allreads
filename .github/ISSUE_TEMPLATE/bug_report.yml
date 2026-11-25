@@ -1,0 +1,36 @@
+name: Bug report
+description: Something does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a French EPUB
+        2. Tap a word
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Settings → About, e.g. 0.1.0-build.45
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: e.g. Pixel 7, Android 15
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, the book's language, whether AnkiDroid or the offline dictionary is involved. Please don't paste API keys.

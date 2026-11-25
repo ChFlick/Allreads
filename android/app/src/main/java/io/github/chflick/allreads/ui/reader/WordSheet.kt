@@ -71,6 +71,35 @@ fun WordSheet(
     onSave: (WordStatus, String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        WordSheetContent(
+            word = word,
+            onTranslate = onTranslate,
+            speakingWord = speakingWord,
+            onSpeak = onSpeak,
+            onShowLemma = onShowLemma,
+            onDownloadDictionary = onDownloadDictionary,
+            dictionaryDownload = dictionaryDownload,
+            onChoosePhrase = onChoosePhrase,
+            onSave = onSave,
+        )
+    }
+}
+
+/** The drawer's contents, without the sheet around it, for previews and screenshots. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun WordSheetContent(
+    word: SelectedWord,
+    onTranslate: () -> Unit,
+    speakingWord: Boolean,
+    onSpeak: () -> Unit,
+    onShowLemma: (String) -> Unit,
+    onDownloadDictionary: () -> Unit,
+    dictionaryDownload: DownloadState?,
+    onChoosePhrase: (PhraseChoice) -> Unit,
+    onSave: (WordStatus, String, String, String) -> Unit,
+) {
     // A first tap on a new word suggests level 1, the usual choice. A WordStatus
     // cannot go into Android's saved state, so this uses remember, not rememberSaveable.
     var status by remember(word.text) {
@@ -91,107 +120,105 @@ fun WordSheet(
     }
     val context = LocalContext.current
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            // --- What the half-open drawer shows ---
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // --- What the half-open drawer shows ---
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                word.saved?.displayText ?: word.text,
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            IconButton(onClick = onSpeak) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = "Say the word",
+                    tint = if (speakingWord) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = { onSave(status, translation, notes, lemma) }) {
+                Text(if (status == WordStatus.New) "Forget" else "Save")
+            }
+        }
+        // Dictionary phrases around the word come first, so they show in the half-open drawer.
+        word.phraseSuggestions.forEach { choice ->
+            FilledTonalButton(onClick = { onChoosePhrase(choice) }, modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    word.saved?.displayText ?: word.text,
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                IconButton(onClick = onSpeak) {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = "Say the word",
-                        tint = if (speakingWord) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Button(onClick = { onSave(status, translation, notes, lemma) }) {
-                    Text(if (status == WordStatus.New) "Forget" else "Save")
-                }
-            }
-            // Dictionary phrases around the word come first, so they show in the half-open drawer.
-            word.phraseSuggestions.forEach { choice ->
-                FilledTonalButton(onClick = { onChoosePhrase(choice) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "Phrase: ${choice.suggestion.text}" +
-                            if (choice.suggestion.gloss.isBlank()) "" else " · ${choice.suggestion.gloss}",
-                        maxLines = 2,
-                    )
-                }
-            }
-            when {
-                word.translating -> Text("Translating…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                word.translationError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        word.translationError,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = onTranslate) { Text("Retry") }
-                }
-                word.machineTranslation != null && word.machineTranslation != translation -> Text(
-                    "DeepL: ${word.machineTranslation}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    "Phrase: ${choice.suggestion.text}" +
+                        if (choice.suggestion.gloss.isBlank()) "" else " · ${choice.suggestion.gloss}",
+                    maxLines = 2,
                 )
             }
-            OutlinedTextField(
-                value = translation,
-                onValueChange = { translation = it },
-                label = { Text("Translation") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+        }
+        when {
+            word.translating -> Text("Translating…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            word.translationError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    word.translationError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onTranslate) { Text("Retry") }
+            }
+            word.machineTranslation != null && word.machineTranslation != translation -> Text(
+                "DeepL: ${word.machineTranslation}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                wordStatusChoices.forEach { choice ->
-                    FilterChip(
-                        selected = status == choice,
-                        onClick = { status = choice },
-                        label = { Text(choice.label()) },
-                    )
-                }
+        }
+        OutlinedTextField(
+            value = translation,
+            onValueChange = { translation = it },
+            label = { Text("Translation") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            wordStatusChoices.forEach { choice ->
+                FilterChip(
+                    selected = status == choice,
+                    onClick = { status = choice },
+                    label = { Text(choice.label()) },
+                )
             }
+        }
 
-            // --- Pull the drawer up for more context ---
-            HorizontalDivider(Modifier.padding(top = 8.dp))
-            Text("In this sentence", style = MaterialTheme.typography.labelLarge)
-            Text(word.sentence, style = MaterialTheme.typography.bodyLarge)
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                label = { Text("Notes") },
-                minLines = 2,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = lemma,
-                onValueChange = { lemma = it },
-                label = { Text("Dictionary form (lemma)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            word.dictionaryUrl?.let { url ->
-                OutlinedButton(
-                    onClick = {
-                        try {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        } catch (e: ActivityNotFoundException) {
-                            Toast.makeText(context, "No browser is installed to open the dictionary.", Toast.LENGTH_LONG).show()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-                ) { Text("Look up in the web dictionary") }
-            }
+        // --- Pull the drawer up for more context ---
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        Text("In this sentence", style = MaterialTheme.typography.labelLarge)
+        Text(word.sentence, style = MaterialTheme.typography.bodyLarge)
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it },
+            label = { Text("Notes") },
+            minLines = 2,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = lemma,
+            onValueChange = { lemma = it },
+            label = { Text("Dictionary form (lemma)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        word.dictionaryUrl?.let { url ->
+            OutlinedButton(
+                onClick = {
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    } catch (e: ActivityNotFoundException) {
+                        Toast.makeText(context, "No browser is installed to open the dictionary.", Toast.LENGTH_LONG).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            ) { Text("Look up in the web dictionary") }
         }
     }
 }

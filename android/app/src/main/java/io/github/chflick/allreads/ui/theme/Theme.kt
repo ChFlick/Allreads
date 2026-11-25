@@ -16,9 +16,12 @@ import io.github.chflick.allreads.data.ThemeMode
 /** True when the dark theme is showing; the reader uses it for status colours. */
 val LocalDarkTheme = staticCompositionLocalOf { false }
 
-/** The app theme: the phone's wallpaper colours on Android 12+, Material defaults before. */
+/**
+ * The app theme: the phone's wallpaper colours on Android 12+, Material
+ * defaults before. Screenshots pass `wallpaperColors = false` for fixed colours.
+ */
 @Composable
-fun AllreadsTheme(mode: ThemeMode, content: @Composable () -> Unit) {
+fun AllreadsTheme(mode: ThemeMode, wallpaperColors: Boolean = true, content: @Composable () -> Unit) {
     val dark = when (mode) {
         ThemeMode.System -> isSystemInDarkTheme()
         ThemeMode.Light -> false
@@ -26,7 +29,7 @@ fun AllreadsTheme(mode: ThemeMode, content: @Composable () -> Unit) {
     }
     val context = LocalContext.current
     val colors = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+        wallpaperColors && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         dark -> darkColorScheme()
         else -> lightColorScheme()

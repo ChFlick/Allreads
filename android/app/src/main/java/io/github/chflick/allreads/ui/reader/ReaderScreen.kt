@@ -95,7 +95,6 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
     val listState = remember(state.chapterIndex, state.rows.isEmpty()) {
         LazyListState(firstVisibleItemIndex = state.rows.firstRowOf(state.startBlock))
     }
-    var menuOpen by remember { mutableStateOf(false) }
     BackHandler(onBack = onBack)
 
     LaunchedEffect(state.message) {
@@ -124,70 +123,23 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             .collect { index -> state.rows.getOrNull(index)?.let { viewModel.savePosition(it.blockIndex) } }
     }
 
-    val textStyle = readerTextStyle(settings)
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        val number = state.chapterIndex.toInt() + 1
-                        Text(state.chapterTitle ?: "Chapter $number", maxLines = 1)
-                        state.book?.let {
-                            Text(it.title, style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the library")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Mark the rest of this chapter as known") },
-                            onClick = {
-                                menuOpen = false
-                                val block = state.rows.getOrNull(listState.firstVisibleItemIndex)?.blockIndex ?: 0
-                                viewModel.markRestKnown(block)
-                            },
-                        )
-                    }
-                },
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 24.dp),
-        ) {
-            items(state.rows, key = { it.key }) { row ->
-                SentenceRow(
-                    row = row,
-                    style = textStyle,
-                    translation = state.translations[row.key],
-                    playing = speaking == row.key,
-                    onWord = { tokenIndex -> viewModel.select(row, tokenIndex) },
-                    onSelectRange = { range -> viewModel.selectRange(row, range) },
-                    onTranslate = { viewModel.toggleTranslation(row) },
-                    onSpeak = { viewModel.toggleSpeaking(row) },
-                )
-            }
-            item {
-                ChapterButtons(
-                    canGoBack = state.chapterIndex > 0u,
-                    canGoOn = state.book?.let { state.chapterIndex + 1u < it.chapterCount } ?: false,
-                    onPrevious = viewModel::previousChapter,
-                    onNext = viewModel::nextChapter,
-                )
-            }
-        }
-    }
+    ReaderContent(
+        state = state,
+        settings = settings,
+        speaking = speaking,
+        listState = listState,
+        snackbar = snackbar,
+        actions = ReaderActions(
+            onBack = onBack,
+            onMarkRestKnown = viewModel::markRestKnown,
+            onWord = viewModel::select,
+            onSelectRange = viewModel::selectRange,
+            onTranslate = viewModel::toggleTranslation,
+            onSpeak = viewModel::toggleSpeaking,
+            onPreviousChapter = viewModel::previousChapter,
+            onNextChapter = viewModel::nextChapter,
+        ),
+    )
 
     state.selected?.let { word ->
         WordSheet(
@@ -404,3 +356,92 @@ fun openTtsSettings(context: Context) {
     }
 }
 
+/** What the reader's rows and bars can ask for. */
+data class ReaderActions(
+    val onBack: () -> Unit = {},
+    val onMarkRestKnown: (block: Int) -> Unit = {},
+    val onWord: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
+    val onSelectRange: (ReaderRow, IntRange) -> Unit = { _, _ -> },
+    val onTranslate: (ReaderRow) -> Unit = {},
+    val onSpeak: (ReaderRow) -> Unit = {},
+    val onPreviousChapter: () -> Unit = {},
+    val onNextChapter: () -> Unit = {},
+)
+
+/** The reader without its view model, so it can be shown in previews and screenshots. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReaderContent(
+    state: ReaderState,
+    settings: AppSettings,
+    speaking: String?,
+    listState: LazyListState,
+    snackbar: SnackbarHostState,
+    actions: ReaderActions,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val textStyle = readerTextStyle(settings)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        val number = state.chapterIndex.toInt() + 1
+                        Text(state.chapterTitle ?: "Chapter $number", maxLines = 1)
+                        state.book?.let {
+                            Text(it.title, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = actions.onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the library")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Mark the rest of this chapter as known") },
+                            onClick = {
+                                menuOpen = false
+                                val block = state.rows.getOrNull(listState.firstVisibleItemIndex)?.blockIndex ?: 0
+                                actions.onMarkRestKnown(block)
+                            },
+                        )
+                    }
+                },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 24.dp),
+        ) {
+            items(state.rows, key = { it.key }) { row ->
+                SentenceRow(
+                    row = row,
+                    style = textStyle,
+                    translation = state.translations[row.key],
+                    playing = speaking == row.key,
+                    onWord = { tokenIndex -> actions.onWord(row, tokenIndex) },
+                    onSelectRange = { range -> actions.onSelectRange(row, range) },
+                    onTranslate = { actions.onTranslate(row) },
+                    onSpeak = { actions.onSpeak(row) },
+                )
+            }
+            item {
+                ChapterButtons(
+                    canGoBack = state.chapterIndex > 0u,
+                    canGoOn = state.book?.let { state.chapterIndex + 1u < it.chapterCount } ?: false,
+                    onPrevious = actions.onPreviousChapter,
+                    onNext = actions.onNextChapter,
+                )
+            }
+        }
+    }
+}

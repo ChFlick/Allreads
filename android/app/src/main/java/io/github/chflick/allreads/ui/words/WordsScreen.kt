@@ -62,66 +62,14 @@ fun WordsScreen(viewModel: WordsViewModel) {
         }
     }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Words") }) },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                state.languages.forEach { code ->
-                    FilterChip(
-                        selected = code == state.language,
-                        onClick = { viewModel.chooseLanguage(code) },
-                        label = { Text(code.uppercase()) },
-                    )
-                }
-            }
-            Text(
-                "${state.knownCount} known · ${state.learningCount} learning",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = viewModel::search,
-                label = { Text("Search words or translations") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            )
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                WordFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = filter == state.filter,
-                        onClick = { viewModel.filter(filter) },
-                        label = { Text(filter.label) },
-                    )
-                }
-            }
-            HorizontalDivider()
-            val visible = state.visible
-            if (visible.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (state.terms.isEmpty()) "No saved words yet. Tap a word while reading to save it."
-                        else "No words match.",
-                        modifier = Modifier.padding(24.dp),
-                    )
-                }
-            } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(visible, key = { it.id }) { term ->
-                        TermRow(term, onClick = { viewModel.edit(term) })
-                    }
-                }
-            }
-        }
-    }
+    WordsContent(
+        state = state,
+        snackbar = snackbar,
+        onLanguage = viewModel::chooseLanguage,
+        onSearch = viewModel::search,
+        onFilter = viewModel::filter,
+        onEdit = viewModel::edit,
+    )
 
     state.editing?.let { term ->
         TermEditor(
@@ -187,6 +135,79 @@ private fun TermEditor(
                 onClick = { onSave(status, translation, notes) },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             ) { Text(if (status == WordStatus.New) "Forget this word" else "Save") }
+        }
+    }
+}
+
+/** The word list without its view model, so it can be shown in previews and screenshots. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WordsContent(
+    state: WordsState,
+    snackbar: SnackbarHostState,
+    onLanguage: (String) -> Unit,
+    onSearch: (String) -> Unit,
+    onFilter: (WordFilter) -> Unit,
+    onEdit: (SavedTerm) -> Unit,
+) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Words") }) },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                state.languages.forEach { code ->
+                    FilterChip(
+                        selected = code == state.language,
+                        onClick = { onLanguage(code) },
+                        label = { Text(code.uppercase()) },
+                    )
+                }
+            }
+            Text(
+                "${state.knownCount} known · ${state.learningCount} learning",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = onSearch,
+                label = { Text("Search words or translations") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                WordFilter.entries.forEach { filter ->
+                    FilterChip(
+                        selected = filter == state.filter,
+                        onClick = { onFilter(filter) },
+                        label = { Text(filter.label) },
+                    )
+                }
+            }
+            HorizontalDivider()
+            val visible = state.visible
+            if (visible.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (state.terms.isEmpty()) "No saved words yet. Tap a word while reading to save it."
+                        else "No words match.",
+                        modifier = Modifier.padding(24.dp),
+                    )
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(visible, key = { it.id }) { term ->
+                        TermRow(term, onClick = { onEdit(term) })
+                    }
+                }
+            }
         }
     }
 }

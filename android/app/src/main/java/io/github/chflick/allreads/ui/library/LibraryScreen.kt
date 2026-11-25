@@ -70,31 +70,13 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit) {
         }
     }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Allreads") }) },
-        snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { picker.launch(arrayOf("application/epub+zip", "text/plain")) },
-            ) { Text("Import book") }
-        },
-    ) { padding ->
-        if (state.books.isEmpty() && !state.loading) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No books yet. Import an EPUB or TXT file.")
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(state.books, key = { it.id }) { book ->
-                    BookRow(book, onOpen = { onOpen(book) }, onLongPress = { toDelete = book })
-                }
-            }
-        }
-    }
+    LibraryContent(
+        state = state,
+        snackbar = snackbar,
+        onImport = { picker.launch(arrayOf("application/epub+zip", "text/plain")) },
+        onOpen = onOpen,
+        onLongPress = { toDelete = it },
+    )
 
     state.pending?.let { pending ->
         LanguageDialog(pending, onConfirm = viewModel::confirmImport, onDismiss = viewModel::cancelImport)
@@ -171,4 +153,41 @@ private fun LanguageDialog(pending: PendingImport, onConfirm: (String) -> Unit, 
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** The library without its view model, so it can be shown in previews and screenshots. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LibraryContent(
+    state: LibraryState,
+    snackbar: SnackbarHostState,
+    onImport: () -> Unit,
+    onOpen: (BookSummary) -> Unit,
+    onLongPress: (BookSummary) -> Unit,
+) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Allreads") }) },
+        snackbarHost = { SnackbarHost(snackbar) },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onImport,
+            ) { Text("Import book") }
+        },
+    ) { padding ->
+        if (state.books.isEmpty() && !state.loading) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text("No books yet. Import an EPUB or TXT file.")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(state.books, key = { it.id }) { book ->
+                    BookRow(book, onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
+                }
+            }
+        }
+    }
 }
