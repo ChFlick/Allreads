@@ -571,6 +571,14 @@ impl App {
             .record_anki_push(term_id, queue_id, note_id, deck_id)?)
     }
 
+    /// How many words are waiting to go to `AnkiDroid`, for Settings.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn pending_anki_count(&self) -> Result<u32, AllreadsError> {
+        Ok(saturate_u32(self.db()?.anki_queue()?.len()))
+    }
+
     /// Records a failed push; the note stays queued for the next try.
     ///
     /// # Errors
@@ -950,6 +958,7 @@ mod tests {
         app.save_term(input("le", WordStatus::WellKnown)).unwrap();
         let notes = app.pending_anki_notes().unwrap();
         assert_eq!(notes.len(), 1);
+        assert_eq!(app.pending_anki_count().unwrap(), 1);
         assert_eq!(notes[0].term_id, saved.id);
         assert_eq!(notes[0].fields[3], "L’<b>homme</b> s’arrêta.");
         assert_eq!(notes[0].fields[5], "Le Livre — Un");

@@ -83,6 +83,8 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore {
 
     override suspend fun pendingNotes(): List<AnkiNote> = io { app.pendingAnkiNotes() }
 
+    override suspend fun waitingCount(): Int = io { app.pendingAnkiCount().toInt() }
+
     override suspend fun recordPush(note: AnkiNote, noteId: Long, deckId: Long) =
         io { app.recordAnkiPush(note.termId, note.queueId, noteId, deckId) }
 

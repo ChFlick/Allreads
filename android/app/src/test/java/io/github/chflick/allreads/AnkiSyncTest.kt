@@ -24,6 +24,7 @@ class FakeQueue : SyncStore {
 
     override suspend fun deckId() = deck
     override suspend fun pendingNotes() = queue.values.toList()
+    override suspend fun waitingCount() = queue.size
     override suspend fun recordPush(note: AnkiNote, noteId: Long, deckId: Long) {
         links[note.termId] = noteId
         queue.remove(note.termId)
@@ -101,8 +102,10 @@ class AnkiSyncTest {
         anki.failAdds = true
         assertEquals(SyncResult.Done(pushed = 0, failed = 1), sync.drain())
         assertEquals(1, queue.failures[1])
+        assertEquals(1, sync.waiting.value)
         anki.failAdds = false
         assertEquals(SyncResult.Done(pushed = 1, failed = 0), sync.drain())
         assertEquals(1, anki.notes.size)
+        assertEquals(0, sync.waiting.value)
     }
 }

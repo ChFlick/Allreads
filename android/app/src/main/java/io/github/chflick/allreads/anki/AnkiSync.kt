@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.anki
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import uniffi.allreads_ffi.AnkiNote
@@ -8,6 +11,7 @@ import uniffi.allreads_ffi.AnkiNote
 interface SyncStore {
     suspend fun deckId(): Long?
     suspend fun pendingNotes(): List<AnkiNote>
+    suspend fun waitingCount(): Int
     suspend fun recordPush(note: AnkiNote, noteId: Long, deckId: Long)
     suspend fun recordFailure(note: AnkiNote)
 }
@@ -35,11 +39,29 @@ class AnkiSync(
     // Two drains at once could add the same word twice.
     private val lock = Mutex()
 
+    private val _waiting = MutableStateFlow<Int?>(null)
+
+    /** Words still queued after the last drain or count; `null` before the first. */
+    val waiting: StateFlow<Int?> = _waiting.asStateFlow()
+
+    /** Re-reads the queue size, e.g. when Settings opens. */
+    suspend fun countWaiting() {
+        _waiting.value = store.waitingCount()
+    }
+
     suspend fun drain(): SyncResult = lock.withLock {
+        try {
+            drainLocked()
+        } finally {
+            _waiting.value = runCatching { store.waitingCount() }.getOrNull()
+        }
+    }
+
+    private suspend fun drainLocked(): SyncResult {
         val access = bridge.access()
         val deckId = store.deckId()
         if (access != AnkiAccess.Connected || deckId == null) {
-            return@withLock SyncResult.NotReady(access.takeIf { it != AnkiAccess.Connected }, store.pendingNotes().size)
+            return SyncResult.NotReady(access.takeIf { it != AnkiAccess.Connected }, store.waitingCount())
         }
         var pushed = 0
         var failed = 0
@@ -53,7 +75,7 @@ class AnkiSync(
                 failed++
             }
         }
-        SyncResult.Done(pushed, failed)
+        return SyncResult.Done(pushed, failed)
     }
 
     /** The note id the word now has in AnkiDroid, or `null` on failure. */

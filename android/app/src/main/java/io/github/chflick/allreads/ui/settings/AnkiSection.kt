@@ -26,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -183,6 +184,7 @@ fun AnkiSection(services: Services) {
             }
         }
     }
+    WaitingWords(services, state.access)
     state.error?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     }
@@ -292,3 +294,32 @@ private fun openStore(context: android.content.Context) {
         runCatching { context.startActivity(web) }
     }
 }
+
+/**
+ * Step 19: how many words have not reached AnkiDroid yet, with a button to
+ * send them now. Words wait while AnkiDroid is missing, not allowed, or no
+ * deck is chosen, and go over by themselves once it is ready.
+ */
+@Composable
+private fun WaitingWords(services: Services, access: AnkiAccess?) {
+    val waiting by services.ankiSync.waiting.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { runCatching { withContext(Dispatchers.IO) { services.ankiSync.countWaiting() } } }
+    val count = waiting ?: return
+    if (count == 0) {
+        if (access == AnkiAccess.Connected) {
+            Text("All saved words are in AnkiDroid.", style = MaterialTheme.typography.bodySmall)
+        }
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            if (count == 1) "1 word waiting for AnkiDroid" else "$count words waiting for AnkiDroid",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        if (access == AnkiAccess.Connected) {
+            OutlinedButton(onClick = services::syncAnki) { Text("Send now") }
+        }
+    }
+}
+
