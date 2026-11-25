@@ -2,9 +2,12 @@ package io.github.chflick.allreads.ui.reader
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.chflick.allreads.data.Repository
-import io.github.chflick.allreads.reader.BlockText
-import io.github.chflick.allreads.ui.library.describe
+import io.github.chflick.allreads.data.Services
+import io.github.chflick.allreads.reader.ReaderRow
+import io.github.chflick.allreads.reader.dictionaryLink
+import io.github.chflick.allreads.reader.readerRows
+import io.github.chflick.allreads.ui.NO_DEEPL_KEY
+import io.github.chflick.allreads.ui.describe
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,30 +18,46 @@ import uniffi.allreads_ffi.SavedTerm
 import uniffi.allreads_ffi.TermInput
 import uniffi.allreads_ffi.WordStatus
 
-/** The word the reader tapped, with what the word sheet needs. */
+/** A sentence's translation, as shown under it. */
+sealed interface SentenceTranslation {
+    data object Loading : SentenceTranslation
+    data class Shown(val text: String) : SentenceTranslation
+    data class Failed(val message: String) : SentenceTranslation
+}
+
+/** The word in the drawer, with what the drawer shows. */
 data class SelectedWord(
     val text: String,
     val sentence: String,
     val status: WordStatus,
     val saved: SavedTerm?,
+    /** DeepL's in-context translation, when it has arrived. */
+    val machineTranslation: String? = null,
+    val translating: Boolean = false,
+    val translationError: String? = null,
+    val dictionaryUrl: String? = null,
 )
 
 data class ReaderState(
     val book: BookSummary? = null,
     val chapterIndex: UInt = 0u,
     val chapterTitle: String? = null,
-    val blocks: List<BlockText> = emptyList(),
+    val rows: List<ReaderRow> = emptyList(),
     /** The block to scroll to when a chapter opens (the saved position). */
     val startBlock: Int = 0,
+    /** Translations shown under sentences, by [ReaderRow.key]. */
+    val translations: Map<String, SentenceTranslation> = emptyMap(),
     val selected: SelectedWord? = null,
     val message: String? = null,
 )
 
-class ReaderViewModel(private val repository: Repository, private val bookId: Long) : ViewModel() {
+class ReaderViewModel(private val services: Services, private val bookId: Long) : ViewModel() {
+    private val repository = services.repository
     private val _state = MutableStateFlow(ReaderState())
     val state: StateFlow<ReaderState> = _state.asStateFlow()
 
     private var titles: List<String?> = emptyList()
+    private var dictionaryTemplate: String = ""
 
     init {
         viewModelScope.launch {
@@ -48,24 +67,27 @@ class ReaderViewModel(private val repository: Repository, private val bookId: Lo
                 return@launch
             }
             titles = runCatching { repository.chapterTitles(bookId) }.getOrDefault(emptyList())
+            dictionaryTemplate = runCatching { repository.languageInfo(book.languageCode) }
+                .getOrNull()?.dictionaryUrl.orEmpty()
             _state.update { it.copy(book = book) }
             load(book.chapterIndex, startBlock = book.paragraphIndex.toInt())
         }
     }
 
     private suspend fun load(index: UInt, startBlock: Int) {
-        val result = runCatching { repository.openChapter(bookId, index) }
-        result.onSuccess { chapter ->
-            _state.update {
-                it.copy(
-                    chapterIndex = index,
-                    chapterTitle = titles.getOrNull(index.toInt()),
-                    blocks = chapter.blocks.map(::BlockText),
-                    startBlock = startBlock,
-                )
+        runCatching { repository.openChapter(bookId, index) }
+            .onSuccess { chapter ->
+                _state.update {
+                    it.copy(
+                        chapterIndex = index,
+                        chapterTitle = titles.getOrNull(index.toInt()),
+                        rows = readerRows(chapter.blocks),
+                        startBlock = startBlock,
+                        translations = emptyMap(),
+                    )
+                }
             }
-        }
-        result.onFailure { e -> _state.update { it.copy(message = describe(e)) } }
+            .onFailure { e -> _state.update { it.copy(message = describe(e)) } }
     }
 
     fun nextChapter() = goToChapter(_state.value.chapterIndex + 1u)
@@ -87,34 +109,79 @@ class ReaderViewModel(private val repository: Repository, private val bookId: Lo
     /** Remembers the first visible block, so reopening the book resumes there. */
     fun savePosition(block: Int) {
         val chapter = _state.value.chapterIndex
+        viewModelScope.launch { runCatching { repository.savePosition(bookId, chapter, block.toUInt()) } }
+    }
+
+    /** Shows the sentence's translation under it, or hides it if shown. */
+    fun toggleTranslation(row: ReaderRow) {
+        val key = row.key
+        if (_state.value.translations.containsKey(key)) {
+            _state.update { it.copy(translations = it.translations - key) }
+            return
+        }
+        _state.update { it.copy(translations = it.translations + (key to SentenceTranslation.Loading)) }
         viewModelScope.launch {
-            runCatching { repository.savePosition(bookId, chapter, block.toUInt()) }
+            val result = translate(row.sentence, context = null)
+            val shown = result.fold(
+                { SentenceTranslation.Shown(it) },
+                { SentenceTranslation.Failed(it.message ?: describe(it)) },
+            )
+            _state.update { state ->
+                if (state.translations.containsKey(key)) state.copy(translations = state.translations + (key to shown))
+                else state
+            }
         }
     }
 
-    fun select(blockIndex: Int, tokenIndex: Int) {
-        val block = _state.value.blocks.getOrNull(blockIndex) ?: return
-        val token = block.block.tokens.getOrNull(tokenIndex) ?: return
+    fun select(row: ReaderRow, tokenIndex: Int) {
+        val token = row.content.tokens.getOrNull(tokenIndex) ?: return
         val language = _state.value.book?.languageCode ?: return
         viewModelScope.launch {
             val saved = runCatching { repository.findTerm(language, token.text) }.getOrNull()
-            _state.update {
-                it.copy(
-                    selected = SelectedWord(
-                        text = token.text,
-                        sentence = block.sentenceOf(tokenIndex),
-                        status = token.status ?: WordStatus.New,
-                        saved = saved,
+            val selected = SelectedWord(
+                text = token.text,
+                sentence = row.sentence,
+                status = token.status ?: WordStatus.New,
+                saved = saved,
+                dictionaryUrl = dictionaryLink(dictionaryTemplate, token.text),
+            )
+            _state.update { it.copy(selected = selected) }
+            // Unsaved (or untranslated) words get DeepL's translation in context.
+            if (saved?.translation.isNullOrBlank()) translateSelected()
+        }
+    }
+
+    /** Fetches DeepL's translation of the selected word, with its sentence as context. */
+    fun translateSelected() {
+        val word = _state.value.selected ?: return
+        _state.update { it.copy(selected = word.copy(translating = true, translationError = null)) }
+        viewModelScope.launch {
+            val result = translate(word.text, context = word.sentence)
+            _state.update { state ->
+                val current = state.selected?.takeIf { it.text == word.text } ?: return@update state
+                state.copy(
+                    selected = current.copy(
+                        translating = false,
+                        machineTranslation = result.getOrNull(),
+                        translationError = result.exceptionOrNull()?.let { it.message ?: describe(it) },
                     ),
                 )
             }
         }
     }
 
+    private suspend fun translate(text: String, context: String?): Result<String> {
+        val book = _state.value.book ?: return Result.failure(IllegalStateException("No book"))
+        val key = services.apiKeys.deeplKey() ?: return Result.failure(IllegalStateException(NO_DEEPL_KEY))
+        val target = services.settings.settings.value.nativeLanguage
+        return runCatching { repository.translate(text, context, book.languageCode, target, key).text }
+            .recoverCatching { throw IllegalStateException(describe(it)) }
+    }
+
     fun dismissWord() = _state.update { it.copy(selected = null) }
 
     /** Saves the selected word (or forgets it for New), then recolours the chapter. */
-    fun saveWord(status: WordStatus, translation: String) {
+    fun saveWord(status: WordStatus, translation: String, notes: String) {
         val selected = _state.value.selected ?: return
         val language = _state.value.book?.languageCode ?: return
         viewModelScope.launch {
@@ -128,7 +195,7 @@ class ReaderViewModel(private val repository: Repository, private val bookId: Lo
                             text = selected.text,
                             status = status,
                             translation = translation.trim(),
-                            notes = selected.saved?.notes ?: "",
+                            notes = notes.trim(),
                             lemma = selected.saved?.lemma,
                         ),
                     )
@@ -142,11 +209,8 @@ class ReaderViewModel(private val repository: Repository, private val bookId: Lo
     /** PRD F8: marks every new word from `fromBlock` to the chapter's end as known. */
     fun markRestKnown(fromBlock: Int) {
         viewModelScope.launch {
-            val result = runCatching {
-                repository.markRestKnown(bookId, _state.value.chapterIndex, fromBlock.toUInt())
-            }
-            val message = result.fold({ "Marked $it words as known" }, ::describe)
-            _state.update { it.copy(message = message) }
+            val result = runCatching { repository.markRestKnown(bookId, _state.value.chapterIndex, fromBlock.toUInt()) }
+            _state.update { it.copy(message = result.fold({ n -> "Marked $n words as known" }, ::describe)) }
             reloadStatuses()
         }
     }
@@ -155,8 +219,7 @@ class ReaderViewModel(private val repository: Repository, private val bookId: Lo
 
     /** Reopens the chapter: the parse is cached, so only the statuses change. */
     private suspend fun reloadStatuses() {
-        val current = _state.value
-        runCatching { repository.openChapter(bookId, current.chapterIndex) }
-            .onSuccess { chapter -> _state.update { it.copy(blocks = chapter.blocks.map(::BlockText)) } }
+        runCatching { repository.openChapter(bookId, _state.value.chapterIndex) }
+            .onSuccess { chapter -> _state.update { it.copy(rows = readerRows(chapter.blocks)) } }
     }
 }

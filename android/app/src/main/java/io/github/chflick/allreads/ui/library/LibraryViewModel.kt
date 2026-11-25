@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.chflick.allreads.data.BookFiles
 import io.github.chflick.allreads.data.Repository
+import io.github.chflick.allreads.ui.describe
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -121,7 +122,3 @@ class LibraryViewModel(private val repository: Repository) : ViewModel() {
         return name to resolver.getType(uri)
     }
 }
-
-/** A short, readable error for a snackbar. */
-fun describe(error: Throwable): String =
-    "${error::class.simpleName ?: "Error"}: ${error.message ?: "something went wrong"}"

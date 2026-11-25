@@ -3,49 +3,104 @@ package io.github.chflick.allreads
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.chflick.allreads.data.Services
 import io.github.chflick.allreads.ui.library.LibraryScreen
 import io.github.chflick.allreads.ui.library.LibraryViewModel
 import io.github.chflick.allreads.ui.reader.ReaderScreen
 import io.github.chflick.allreads.ui.reader.ReaderViewModel
+import io.github.chflick.allreads.ui.settings.SettingsScreen
+import io.github.chflick.allreads.ui.theme.AllreadsTheme
+import io.github.chflick.allreads.ui.words.WordsScreen
+import io.github.chflick.allreads.ui.words.WordsViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val repository = (application as AllreadsApplication).repository
+        enableEdgeToEdge()
+        val services = (application as AllreadsApplication).services
         setContent {
-            MaterialTheme {
-                AllreadsNavigation(repository)
+            val settings by services.settings.settings.collectAsStateWithLifecycle()
+            AllreadsTheme(settings.theme) {
+                AllreadsNavigation(services)
             }
         }
     }
 }
 
-/** Two screens: the library, and the reader for one book. */
+private enum class Tab(val label: String, val icon: ImageVector) {
+    Library("Library", Icons.Default.Home),
+    Words("Words", Icons.Default.List),
+    Settings("Settings", Icons.Default.Settings),
+}
+
+/** Three tabs (Library, Words, Settings); opening a book shows the reader full screen. */
 @Composable
-private fun AllreadsNavigation(repository: io.github.chflick.allreads.data.Repository) {
-    // The open book's id, or null for the library. Survives rotation.
+private fun AllreadsNavigation(services: Services) {
+    val settings by services.settings.settings.collectAsStateWithLifecycle()
+    // The open book's id, or null for the tabs. Survives rotation.
     var openBookId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Counts book opens, so each open gets a fresh reader at the saved position.
-    var opens by rememberSaveable { mutableStateOf(0) }
+    var opens by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Library) }
+
     val bookId = openBookId
-    if (bookId == null) {
-        val library = viewModel { LibraryViewModel(repository) }
-        // Reading changes progress, so refresh whenever the library is shown.
-        LaunchedEffect(Unit) { library.refresh() }
-        LibraryScreen(library, onOpen = {
-            opens += 1
-            openBookId = it.id
-        })
-    } else {
-        val reader = viewModel(key = "reader-$bookId-$opens") { ReaderViewModel(repository, bookId) }
-        ReaderScreen(reader, onBack = { openBookId = null })
+    if (bookId != null) {
+        val reader = viewModel(key = "reader-$bookId-$opens") { ReaderViewModel(services, bookId) }
+        ReaderScreen(reader, settings, onBack = { openBookId = null })
+        return
+    }
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                Tab.entries.forEach { item ->
+                    NavigationBarItem(
+                        selected = tab == item,
+                        onClick = { tab = item },
+                        icon = { Icon(item.icon, contentDescription = null) },
+                        label = { Text(item.label) },
+                    )
+                }
+            }
+        },
+    ) { padding ->
+        Box(Modifier.padding(bottom = padding.calculateBottomPadding())) {
+            when (tab) {
+                Tab.Library -> {
+                    val library = viewModel { LibraryViewModel(services.repository) }
+                    // Reading changes progress, so refresh whenever the library is shown.
+                    LaunchedEffect(Unit) { library.refresh() }
+                    LibraryScreen(library, onOpen = {
+                        opens += 1
+                        openBookId = it.id
+                    })
+                }
+                Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository) })
+                Tab.Settings -> SettingsScreen(services)
+            }
+        }
     }
 }

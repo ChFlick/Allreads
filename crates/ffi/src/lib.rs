@@ -175,6 +175,18 @@ pub struct Chapter {
     pub blocks: Vec<ChapterBlock>,
 }
 
+/// What the app needs to know about a language.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LanguageInfo {
+    pub code: String,
+    pub name: String,
+    /// A web dictionary with `{term}` for the word, or empty for none.
+    pub dictionary_url: String,
+    /// The text-to-speech locale, e.g. `fr-FR`.
+    pub tts_locale: String,
+    pub right_to_left: bool,
+}
+
 /// A machine translation, and whether it came from the cache (free and instant).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Translation {
@@ -471,6 +483,39 @@ impl App {
             .languages()?
             .into_iter()
             .map(|language| language.code)
+            .collect())
+    }
+
+    /// Details of a stored language, or `None` if it is not stored.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn language_info(
+        &self,
+        language_code: String,
+    ) -> Result<Option<LanguageInfo>, AllreadsError> {
+        Ok(self
+            .db()?
+            .language(&language_code)?
+            .map(|language| LanguageInfo {
+                code: language.code,
+                name: language.name,
+                dictionary_url: language.dictionary_url,
+                tts_locale: language.tts_locale,
+                right_to_left: language.rtl,
+            }))
+    }
+
+    /// Every saved word in a language, sorted by term key, for the Words screen.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn list_terms(&self, language_code: String) -> Result<Vec<SavedTerm>, AllreadsError> {
+        Ok(self
+            .db()?
+            .terms(&language_code)?
+            .into_iter()
+            .map(SavedTerm::from)
             .collect())
     }
 
@@ -1200,6 +1245,34 @@ mod tests {
             app.translate_with(&offline, "   ", None, "fr", "en"),
             Err(AllreadsError::InvalidInput { .. })
         ));
+    }
+
+    #[test]
+    fn language_info_has_the_dictionary_url() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let french = app.language_info("fr".into()).unwrap().unwrap();
+        assert_eq!(french.name, "French");
+        assert!(french.dictionary_url.contains("{term}"));
+        assert_eq!(french.tts_locale, "fr-FR");
+        assert_eq!(app.language_info("zz".into()).unwrap(), None);
+    }
+
+    #[test]
+    fn list_terms_returns_saved_words_of_one_language() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        app.save_term(input("Homme", WordStatus::Learning { level: 2 }))
+            .unwrap();
+        app.save_term(input("chat", WordStatus::WellKnown)).unwrap();
+        let keys: Vec<String> = app
+            .list_terms("fr".into())
+            .unwrap()
+            .into_iter()
+            .map(|t| t.term_key)
+            .collect();
+        assert_eq!(keys, ["chat", "homme"]);
+        assert!(app.list_terms("de".into()).unwrap().is_empty());
     }
 
     #[test]

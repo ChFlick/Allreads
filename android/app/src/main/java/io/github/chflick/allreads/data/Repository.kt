@@ -7,8 +7,10 @@ import uniffi.allreads_ffi.App
 import uniffi.allreads_ffi.BookMeta
 import uniffi.allreads_ffi.BookSummary
 import uniffi.allreads_ffi.Chapter
+import uniffi.allreads_ffi.LanguageInfo
 import uniffi.allreads_ffi.SavedTerm
 import uniffi.allreads_ffi.TermInput
+import uniffi.allreads_ffi.Translation
 import uniffi.allreads_ffi.readBookMeta
 
 /**
@@ -46,6 +48,19 @@ class Repository(private val app: App, val dataDir: File) {
 
     suspend fun forgetTerm(languageCode: String, text: String): Boolean =
         io { app.forgetTerm(languageCode, text) }
+
+    suspend fun languageInfo(languageCode: String): LanguageInfo? = io { app.languageInfo(languageCode) }
+
+    suspend fun listTerms(languageCode: String): List<SavedTerm> = io { app.listTerms(languageCode) }
+
+    /** Translates with DeepL; `context` is the sentence around a word. Repeats come from the cache. */
+    suspend fun translate(
+        text: String,
+        context: String?,
+        sourceLanguage: String,
+        targetLanguage: String,
+        deeplKey: String,
+    ): Translation = io { app.translate(text, context, sourceLanguage, targetLanguage, deeplKey) }
 
     suspend fun markRestKnown(bookId: Long, chapter: UInt, fromBlock: UInt): UInt =
         io { app.markRestKnown(bookId, chapter, fromBlock) }

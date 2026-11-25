@@ -1,0 +1,55 @@
+package io.github.chflick.allreads.data
+
+import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+enum class ThemeMode { System, Light, Dark }
+
+/** Reading and app preferences. API keys are kept apart, in [ApiKeyStore]. */
+data class AppSettings(
+    /** The language DeepL translates into, e.g. `en`. */
+    val nativeLanguage: String = "en",
+    val fontScale: Float = 1.0f,
+    val lineSpacing: Float = 1.4f,
+    val theme: ThemeMode = ThemeMode.System,
+) {
+    companion object {
+        /** DeepL target languages offered in Settings. */
+        val nativeLanguages = listOf("en", "de", "fr", "es", "it", "nl", "pl", "pt", "ru", "ja", "zh")
+        val fontScales = 0.8f..1.6f
+        val lineSpacings = 1.0f..2.0f
+    }
+}
+
+/** Keeps [AppSettings] in `SharedPreferences` and publishes changes. */
+class SettingsStore(context: Context) {
+    private val prefs: SharedPreferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val _settings = MutableStateFlow(read())
+    val settings: StateFlow<AppSettings> = _settings.asStateFlow()
+
+    fun update(change: (AppSettings) -> AppSettings) {
+        val next = change(_settings.value)
+        prefs.edit()
+            .putString("native_language", next.nativeLanguage)
+            .putFloat("font_scale", next.fontScale)
+            .putFloat("line_spacing", next.lineSpacing)
+            .putString("theme", next.theme.name)
+            .apply()
+        _settings.value = next
+    }
+
+    private fun read(): AppSettings {
+        val defaults = AppSettings()
+        return AppSettings(
+            nativeLanguage = prefs.getString("native_language", null) ?: defaults.nativeLanguage,
+            fontScale = prefs.getFloat("font_scale", defaults.fontScale),
+            lineSpacing = prefs.getFloat("line_spacing", defaults.lineSpacing),
+            theme = prefs.getString("theme", null)
+                ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
+                ?: defaults.theme,
+        )
+    }
+}
