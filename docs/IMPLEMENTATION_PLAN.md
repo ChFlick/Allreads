@@ -31,7 +31,20 @@ The biggest open risk is that the M0 pipeline (Rust built for Android, called fr
 
 Android work to do in one batch once Android Studio is available: step 2's project, step 5's Gradle task and phone check, the Kotlin checks for steps 6 and 7, then the screens for steps 9, 12 and 13.
 
-## Phase 0: toolchain and repo setup
+## v1 scope and order (settled 2026-11-25, after a grilling session)
+
+1. **Phone smoke test** of the CI APK, and fixes. First run done 2026-11-25; its bugs are fixed (see `PROGRESS.md`).
+2. **AnkiDroid** (steps 17a, 16, 17b, 18, 19, 20), as planned in Phase 3.
+3. **Read-aloud** (step 25): a play button per sentence, a speak button in the word drawer, and "read chapter aloud".
+4. **Offline French→English dictionary** (step 23), in the personal build.
+5. **Phrases** (step 24).
+
+Kept as they are: untapped words stay new until marked (only "Mark the rest of this chapter as known"); five learning levels plus Known and Ignore; meanings in English (DeepL, dictionary and Anki agree); per-sentence translation only.
+
+Dropped: parallel mode (the translation half of step 21; per-sentence buttons already cover it).
+
+Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse and stats parts of step 26; backup stays in v1), and backup until step 26 (Anki keeps the cards meanwhile).
+
 
 1. **Install the toolchain.** Install `rustup` (stable), Android Studio with SDK 35 and NDK r27, the Android targets, and `cargo-ndk`:
    - `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android`

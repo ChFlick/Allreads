@@ -57,7 +57,7 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 | F10 | Lookup | Word sheet: the word, the sentence it's in, its saved translation if any, and a status picker | P0 | M1 |
 | F11 | Lookup | Machine translation of the word (in context) through the configured translator | P0 | M1 |
 | F12 | Lookup | Offline dictionary entry with lemma and part of speech, from downloaded Wiktionary data | P1 | M3 |
-| F13 | Lookup | Translate the sentence; parallel mode shows a translation under every sentence | P1 | M3 |
+| F13 | Lookup | Translate the sentence (a button per sentence). Parallel mode was dropped on 2026-11-25 | P1 | M3 |
 | F14 | Lookup | "Explain" with the user's own AI key: meaning in context, grammar, why this form; answers cached | P1 | M3 |
 | F15 | Vocabulary | Save, edit and delete terms; statuses 1–5, 98 (ignored), 99 (well known) | P0 | M1 |
 | F16 | Vocabulary | Link inflected forms to a lemma (parent term) | P1 | M3 |
