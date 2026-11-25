@@ -6,6 +6,7 @@ import uniffi.allreads_ffi.AnkiNote
 import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.InstalledDictionary
+import uniffi.allreads_ffi.PhraseSuggestion
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -118,6 +119,9 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
     /** The offline dictionary's entry for a word; `null` if no dictionary is installed for its language. */
     suspend fun lookupWord(languageCode: String, text: String): DictionaryLookup? =
         io { app.lookupWord(languageCode, text) }
+
+    suspend fun phraseSuggestions(languageCode: String, words: List<String>, index: UInt): List<PhraseSuggestion> =
+        io { app.phraseSuggestions(languageCode, words, index) }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 

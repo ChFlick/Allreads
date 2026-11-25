@@ -1,5 +1,6 @@
 //! Saved vocabulary terms and their statuses.
 
+use crate::text::LanguageRules;
 use rusqlite::{params, OptionalExtension, Row};
 
 use super::{require_one_changed, require_text, Database, DbError};
@@ -211,11 +212,18 @@ impl Database {
     ///
     /// # Errors
     /// Returns a database error if the language cannot be read.
+    /// A phrase is keyed by its words' keys (see `LanguageRules::term_key`).
     pub fn term_key(&self, language_code: &str, text: &str) -> Result<Option<String>, DbError> {
-        Ok(self.language(language_code)?.map(|language| {
-            let substitutions = parse_substitutions(&language.character_substitutions);
-            term_key(text, &substitutions)
-        }))
+        let Some(language) = self.language(language_code)? else {
+            return Ok(None);
+        };
+        if let Ok(rules) = LanguageRules::new(&language) {
+            return Ok(Some(rules.term_key(text)));
+        }
+        // A language whose word rules do not compile cannot tokenize, so fall
+        // back to plain normalisation, as single words always used.
+        let substitutions = parse_substitutions(&language.character_substitutions);
+        Ok(Some(term_key(text, &substitutions)))
     }
 
     /// The saved term for this word in this language, if there is one. The word
@@ -370,6 +378,31 @@ mod tests {
             db.term(id).unwrap().unwrap().context.sentence,
             "Un homme dort."
         );
+    }
+
+    #[test]
+    fn a_phrase_is_keyed_by_its_words_so_punctuation_and_spaces_do_not_matter() {
+        let db = french_db();
+        db.upsert_language(
+            &crate::presets::builtin_presets()
+                .unwrap()
+                .into_iter()
+                .find(|p| p.code == "fr")
+                .unwrap(),
+        )
+        .unwrap();
+        let id = db
+            .save_term(&new_term("Pierre  précieuse", Status::Learning(1)))
+            .unwrap();
+        assert_eq!(db.term(id).unwrap().unwrap().text, "pierre précieuse");
+        assert_eq!(
+            db.term_key("fr", "d’une pierre, précieuse")
+                .unwrap()
+                .as_deref(),
+            Some("d'une pierre précieuse")
+        );
+        // A single word keeps its key; trailing punctuation is not part of it.
+        assert_eq!(db.term_key("fr", "Chat.").unwrap().as_deref(), Some("chat"));
     }
 
     #[test]

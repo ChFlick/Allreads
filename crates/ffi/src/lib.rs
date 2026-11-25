@@ -14,7 +14,8 @@ pub use error::AllreadsError;
 pub use records::{
     AnkiCardTemplate, AnkiNote, AnkiNoteType, AvailableDictionary, BookMeta, BookSummary, Chapter,
     ChapterBlock, DeepLKeyStatus, DictionaryEntry, DictionaryForm, DictionaryLookup,
-    InstalledDictionary, LanguageInfo, SavedTerm, TermInput, Token, Translation, WordStatus,
+    InstalledDictionary, LanguageInfo, PhraseMark, PhraseSuggestion, SavedTerm, TermInput, Token,
+    Translation, WordStatus,
 };
 
 uniffi::setup_scaffolding!();

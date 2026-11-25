@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import uniffi.allreads_ffi.PhraseSuggestion
 import io.github.chflick.allreads.reader.textForTranslation
 import io.github.chflick.allreads.data.DownloadState
 import kotlinx.coroutines.flow.first
@@ -53,7 +54,14 @@ data class SelectedWord(
     val dictionaryOffer: AvailableDictionary? = null,
     /** The entry of a dictionary form tapped in the drawer, e.g. "lire" for "lisait". */
     val lemmaEntry: Pair<String, DictionaryLookup>? = null,
+    /** True for a phrase of several words. */
+    val isPhrase: Boolean = false,
+    /** Dictionary phrases around a tapped word, e.g. "pierre précieuse", to save instead. */
+    val phraseSuggestions: List<PhraseChoice> = emptyList(),
 )
+
+/** A dictionary phrase in the tapped word's sentence, and the tokens it covers in the row. */
+data class PhraseChoice(val suggestion: PhraseSuggestion, val tokens: IntRange)
 
 data class ReaderState(
     val book: BookSummary? = null,
@@ -186,27 +194,82 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         }
     }
 
+    /** Opens the drawer for a tapped word, or for the saved phrase it is part of. */
     fun select(row: ReaderRow, tokenIndex: Int) {
         val token = row.content.tokens.getOrNull(tokenIndex) ?: return
+        row.content.phraseRange(tokenIndex)?.let { phrase ->
+            selectRange(row, phrase)
+            return
+        }
+        open(row, token.text, token.status ?: WordStatus.New, isPhrase = false) { language ->
+            suggestPhrases(row, tokenIndex, language)
+        }
+    }
+
+    /** Opens the drawer for the words in `tokens` (a phrase), e.g. after a long-press and drag. */
+    fun selectRange(row: ReaderRow, tokens: IntRange) {
+        val words = tokens.filter { row.content.tokens[it].termKey != null }
+        if (words.size <= 1) {
+            words.firstOrNull()?.let { select(row, it) }
+            return
+        }
+        val status = row.content.tokens[tokens.first].phrase?.status ?: WordStatus.New
+        open(row, row.content.textOf(tokens), status, isPhrase = true) {}
+    }
+
+    private fun open(
+        row: ReaderRow,
+        text: String,
+        status: WordStatus,
+        isPhrase: Boolean,
+        more: suspend (language: String) -> Unit,
+    ) {
         val language = _state.value.book?.languageCode ?: return
         // A newer tap wins: an older lookup that finishes later must not replace it.
         selectJob?.cancel()
         selectJob = viewModelScope.launch {
-            val saved = runCatching { repository.findTerm(language, token.text) }.getOrNull()
+            val saved = runCatching { repository.findTerm(language, text) }.getOrNull()
             val selected = SelectedWord(
-                text = token.text,
+                text = text,
                 sentence = row.sentence,
                 rowKey = row.key,
-                status = token.status ?: WordStatus.New,
+                status = saved?.status ?: status,
                 saved = saved,
-                dictionaryUrl = dictionaryLink(dictionaryTemplate, token.text),
+                dictionaryUrl = dictionaryLink(dictionaryTemplate, text),
+                isPhrase = isPhrase,
             )
             _state.update { it.copy(selected = selected) }
             if (services.settings.settings.value.speakOnTap) speakWord()
-            lookUpSelected(language, token.text)
+            lookUpSelected(language, text)
+            more(language)
             // Unsaved (or untranslated) words get DeepL's translation in context.
             if (saved?.translation.isNullOrBlank()) translateSelected()
         }
+    }
+
+    /** Adds the dictionary's phrases around the tapped word to the drawer. */
+    private suspend fun suggestPhrases(row: ReaderRow, tokenIndex: Int, language: String) {
+        val wordTokens = row.content.wordIndexes
+        val position = wordTokens.indexOf(tokenIndex).takeIf { it >= 0 } ?: return
+        val words = wordTokens.map { row.content.tokens[it].text }
+        val suggestions = runCatching {
+            repository.phraseSuggestions(language, words, position.toUInt())
+        }.getOrDefault(emptyList())
+        val choices = suggestions.map {
+            PhraseChoice(it, wordTokens[it.firstWord.toInt()]..wordTokens[it.lastWord.toInt()])
+        }
+        val text = row.content.tokens[tokenIndex].text
+        _state.update { state ->
+            val current = state.selected?.takeIf { it.text == text } ?: return@update state
+            state.copy(selected = current.copy(phraseSuggestions = choices))
+        }
+    }
+
+    /** Switches the drawer from the tapped word to a suggested phrase. */
+    fun choosePhrase(choice: PhraseChoice) {
+        val rowKey = _state.value.selected?.rowKey ?: return
+        val row = _state.value.rows.firstOrNull { it.key == rowKey } ?: return
+        selectRange(row, choice.tokens)
     }
 
     /** Adds the offline dictionary's entry, or a download offer, to the drawer. */

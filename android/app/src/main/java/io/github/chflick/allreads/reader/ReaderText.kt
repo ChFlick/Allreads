@@ -38,6 +38,26 @@ class TokenText(val tokens: List<Token>) {
             .filter { matches(tokens[it]) && tokens[it].text.isNotEmpty() }
             .map { starts[it] until starts[it] + tokens[it].text.length }
 
+    /** The tokens of the saved phrase that token `index` is part of, or null if none. */
+    fun phraseRange(index: Int): IntRange? {
+        val id = tokens.getOrNull(index)?.phrase?.id ?: return null
+        var first = index
+        var last = index
+        while (first > 0 && tokens[first - 1].phrase?.id == id) first--
+        while (last < tokens.lastIndex && tokens[last + 1].phrase?.id == id) last++
+        return first..last
+    }
+
+    /** The text of tokens `range`, without surrounding spaces, e.g. "Pierre précieuse". */
+    fun textOf(range: IntRange): String =
+        tokens.subList(range.first, range.last + 1).joinToString("") { it.text }.trim()
+
+    /** The character range covering tokens `range`, for highlighting a selection. */
+    fun charRange(range: IntRange): IntRange = starts[range.first] until starts[range.last] + tokens[range.last].text.length
+
+    /** Token indexes of the words, in order. */
+    val wordIndexes: List<Int> by lazy { tokens.indices.filter { tokens[it].termKey != null } }
+
     /**
      * The word token at a tapped offset. A tap on the right half of a word's
      * last letter reports the offset after it, so the token before is tried too.

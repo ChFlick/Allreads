@@ -13,6 +13,7 @@ use allreads_core::dictionary::{self, Dictionary};
 use allreads_core::library::{self, OpenedBook};
 use allreads_core::presets::builtin_presets;
 use allreads_core::reader::{parse_blocks, ParsedChapter};
+use allreads_core::text::phrases::{find_phrases, WordSlot};
 use allreads_core::text::{LanguageRules, PARSER_VERSION};
 use allreads_core::translate::deepl::DeepL;
 use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
@@ -20,8 +21,8 @@ use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
     saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookMeta, BookSummary, Chapter,
-    ChapterBlock, DeepLKeyStatus, DictionaryLookup, InstalledDictionary, LanguageInfo, SavedTerm,
-    TermInput, Token, Translation, WordStatus,
+    ChapterBlock, DeepLKeyStatus, DictionaryLookup, InstalledDictionary, LanguageInfo, PhraseMark,
+    PhraseSuggestion, SavedTerm, TermInput, Token, Translation, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -53,6 +54,28 @@ impl App {
 
     fn db(&self) -> Result<MutexGuard<'_, Database>, AllreadsError> {
         self.db.lock().map_err(|_| poisoned())
+    }
+
+    /// Runs `f` on the language's `-en` dictionary, opening it on first use.
+    /// `None` if no dictionary is installed for the language.
+    fn with_dictionary<T>(
+        &self,
+        language_code: &str,
+        f: impl FnOnce(&Dictionary) -> Result<T, dictionary::DictionaryError>,
+    ) -> Result<Option<T>, AllreadsError> {
+        let pair = format!("{}-en", language_code.to_lowercase());
+        if !dictionary::valid_pair(&pair) {
+            return Ok(None);
+        }
+        let mut open = self.dictionaries.lock().map_err(|_| poisoned())?;
+        if !open.contains_key(&pair) {
+            let path = self.dictionaries_dir().join(format!("{pair}.sqlite"));
+            if !path.is_file() {
+                return Ok(None);
+            }
+            open.insert(pair.clone(), Dictionary::open(&path)?);
+        }
+        Ok(Some(f(&open[&pair])?))
     }
 
     fn dictionaries_dir(&self) -> PathBuf {
@@ -366,30 +389,55 @@ impl App {
         let row = self.book_row(book_id)?;
         let parsed = self.parsed_chapter(&row, index)?;
         let statuses = self.db()?.term_statuses(&row.language_code)?;
+        let status_of = |key: &str| {
+            statuses
+                .get(key)
+                .map_or(WordStatus::New, |status| (*status).into())
+        };
+        let mut next_phrase_id = 0;
         let blocks = parsed
             .blocks
             .into_iter()
-            .map(|block| ChapterBlock {
-                heading_level: block.heading_level,
-                tokens: block
+            .map(|block| {
+                // Saved phrases in this block, by token range.
+                let slots: Vec<WordSlot> = block
                     .tokens
-                    .into_iter()
-                    .map(|token| {
-                        let status = token.key.as_ref().map(|key| {
-                            statuses
-                                .get(key)
-                                .map_or(WordStatus::New, |status| (*status).into())
-                        });
-                        Token {
+                    .iter()
+                    .map(|t| WordSlot {
+                        key: t.key.as_deref(),
+                        sentence: t.sentence,
+                    })
+                    .collect();
+                let spans = find_phrases(&slots, &|key| statuses.contains_key(key));
+                let mut marks: Vec<Option<PhraseMark>> = vec![None; block.tokens.len()];
+                for span in spans {
+                    let mark = PhraseMark {
+                        id: next_phrase_id,
+                        status: status_of(&span.key),
+                        term_key: span.key,
+                    };
+                    next_phrase_id += 1;
+                    for slot in &mut marks[span.first..=span.last] {
+                        *slot = Some(mark.clone());
+                    }
+                }
+                ChapterBlock {
+                    heading_level: block.heading_level,
+                    tokens: block
+                        .tokens
+                        .into_iter()
+                        .zip(marks)
+                        .map(|(token, phrase)| Token {
+                            status: token.key.as_deref().map(status_of),
                             text: token.text,
                             term_key: token.key,
-                            status,
                             sentence: token.sentence,
                             italic: token.italic,
                             bold: token.bold,
-                        }
-                    })
-                    .collect(),
+                            phrase,
+                        })
+                        .collect(),
+                }
             })
             .collect();
         Ok(Chapter {
@@ -397,6 +445,46 @@ impl App {
             index,
             blocks,
         })
+    }
+
+    /// Phrases the offline dictionary knows around a tapped word: `words` are
+    /// the sentence's words in order, `index` the tapped one. Empty when no
+    /// dictionary is installed for the language.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown language, and `DictionaryInvalid` if
+    /// the installed file cannot be read.
+    pub fn phrase_suggestions(
+        &self,
+        language_code: String,
+        words: Vec<String>,
+        index: u32,
+    ) -> Result<Vec<PhraseSuggestion>, AllreadsError> {
+        let language =
+            self.db()?
+                .language(&language_code)?
+                .ok_or_else(|| AllreadsError::Missing {
+                    what: format!("language {language_code}"),
+                })?;
+        let rules = LanguageRules::new(&language)
+            .map_err(|reason| AllreadsError::InvalidInput { reason })?;
+        let keys: Vec<String> = words.iter().map(|w| rules.key(w)).collect();
+        let keys: Vec<&str> = keys.iter().map(String::as_str).collect();
+        let index = usize::try_from(index).unwrap_or(usize::MAX);
+        let hits = self.with_dictionary(&language_code, |dictionary| {
+            dictionary.phrases_around(&keys, index)
+        })?;
+        Ok(hits
+            .unwrap_or_default()
+            .into_iter()
+            .map(|hit| PhraseSuggestion {
+                first_word: saturate_u32(hit.first),
+                last_word: saturate_u32(hit.last),
+                text: hit.word,
+                term_key: hit.key,
+                gloss: hit.gloss,
+            })
+            .collect())
     }
 
     /// Saves a word (or phrase) with its status and translation. Saving a word
@@ -697,25 +785,14 @@ impl App {
         language_code: String,
         text: String,
     ) -> Result<Option<DictionaryLookup>, AllreadsError> {
-        let pair = format!("{}-en", language_code.to_lowercase());
-        if !dictionary::valid_pair(&pair) {
-            return Ok(None);
-        }
         let key = self
             .db()?
             .term_key(&language_code, text.trim())?
             .ok_or_else(|| AllreadsError::Missing {
                 what: format!("language {language_code}"),
             })?;
-        let mut open = self.dictionaries.lock().map_err(|_| poisoned())?;
-        if !open.contains_key(&pair) {
-            let path = self.dictionaries_dir().join(format!("{pair}.sqlite"));
-            if !path.is_file() {
-                return Ok(None);
-            }
-            open.insert(pair.clone(), Dictionary::open(&path)?);
-        }
-        Ok(Some(open[&pair].lookup(&key)?.into()))
+        let lookup = self.with_dictionary(&language_code, |dictionary| dictionary.lookup(&key))?;
+        Ok(lookup.map(DictionaryLookup::from))
     }
 
     /// Deletes a book, its cover, and its file if the file is in app storage.
@@ -1090,8 +1167,9 @@ mod tests {
         conn.execute_batch(allreads_core::dictionary::SCHEMA)
             .unwrap();
         conn.execute_batch(
-            "INSERT INTO entry (id, key, word, pos, ipa) VALUES (1, 'lire', 'lire', 'verb', '/liʁ/');
-             INSERT INTO sense (entry_id, position, gloss) VALUES (1, 0, 'to read');
+            "INSERT INTO entry (id, key, word, pos, ipa) VALUES (1, 'lire', 'lire', 'verb', '/liʁ/'),
+                 (2, 'pierre précieuse', 'pierre précieuse', 'noun', '');
+             INSERT INTO sense (entry_id, position, gloss) VALUES (1, 0, 'to read'), (2, 0, 'gemstone');
              INSERT INTO form (key, lemma, pos, tags)
                  VALUES ('lisait', 'lire', 'verb', 'imperfect indicative singular third-person');
              INSERT INTO meta (key, value) VALUES ('format', '1'), ('pair', 'fr-en'), ('built', '2026-11-25');",
@@ -1203,6 +1281,62 @@ mod tests {
             .filter(|t| t.term_key.as_deref() == Some(key))
             .filter_map(|t| t.status)
             .collect()
+    }
+
+    /// Step 24's check on the Rust side: a saved phrase is marked where it appears.
+    #[test]
+    fn a_saved_phrase_is_marked_wherever_it_appears() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let book = app
+            .import_book(copy_in(&dir, "sample.txt"), "fr".into())
+            .unwrap();
+        let saved = app
+            .save_term(input(
+                "Premier  paragraphe",
+                WordStatus::Learning { level: 2 },
+            ))
+            .unwrap();
+        assert_eq!(saved.term_key, "premier paragraphe");
+        let chapter = app.open_chapter(book.id, 0).unwrap();
+        let marked: Vec<(&str, u32)> = chapter
+            .blocks
+            .iter()
+            .flat_map(|b| &b.tokens)
+            .filter_map(|t| t.phrase.as_ref().map(|p| (t.text.as_str(), p.id)))
+            .collect();
+        // "premier", the space, "paragraphe": one occurrence, one id.
+        assert_eq!(marked, [("premier", 0), (" ", 0), ("paragraphe", 0)]);
+        let mark = chapter.blocks[0]
+            .tokens
+            .iter()
+            .find_map(|t| t.phrase.clone())
+            .unwrap();
+        assert_eq!(mark.term_key, "premier paragraphe");
+        assert_eq!(mark.status, WordStatus::Learning { level: 2 });
+        // The words keep their own status too.
+        assert_eq!(statuses_of(&chapter, "premier"), [WordStatus::New]);
+    }
+
+    #[test]
+    fn the_dictionary_suggests_phrases_around_a_word() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let words: Vec<String> = ["d'", "une", "Pierre", "précieuse"]
+            .map(String::from)
+            .to_vec();
+        // No dictionary yet: no suggestions.
+        assert!(app
+            .phrase_suggestions("fr".into(), words.clone(), 2)
+            .unwrap()
+            .is_empty());
+        let (gz, sum) = tiny_dictionary_download(dir.path());
+        app.install_dictionary(gz, sum, "fr-en".into()).unwrap();
+        let found = app.phrase_suggestions("fr".into(), words, 2).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!((found[0].first_word, found[0].last_word), (2, 3));
+        assert_eq!(found[0].gloss, "gemstone");
+        assert_eq!(found[0].term_key, "pierre précieuse");
     }
 
     /// Step 13's check on the Rust side: saving a word recolours every occurrence.

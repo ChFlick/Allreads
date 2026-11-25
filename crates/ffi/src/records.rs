@@ -162,6 +162,32 @@ pub struct Token {
     pub sentence: u32,
     pub italic: bool,
     pub bold: bool,
+    /// The saved phrase this token is part of, if any. Every token of the
+    /// phrase, spaces and punctuation between its words too, carries it.
+    pub phrase: Option<PhraseMark>,
+}
+
+/// One occurrence of a saved phrase in a chapter.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PhraseMark {
+    /// Unique within the chapter, so two occurrences side by side stay apart.
+    pub id: u32,
+    /// The phrase's term key, for looking it up or saving it again.
+    pub term_key: String,
+    pub status: WordStatus,
+}
+
+/// A phrase from the offline dictionary around a tapped word.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PhraseSuggestion {
+    /// Its first and last word, as indexes into the words passed in.
+    pub first_word: u32,
+    pub last_word: u32,
+    /// As the dictionary writes it, e.g. "pierre précieuse".
+    pub text: String,
+    pub term_key: String,
+    /// Its first meaning, e.g. "gemstone".
+    pub gloss: String,
 }
 
 /// A heading or paragraph.

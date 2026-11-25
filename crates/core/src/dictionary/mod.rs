@@ -10,7 +10,7 @@ mod lookup;
 mod manifest;
 
 pub use install::{file_sha256, install, installed, remove, valid_pair, InstalledDictionary};
-pub use lookup::{Dictionary, DictionaryEntry, FormOf, Lookup};
+pub use lookup::{Dictionary, DictionaryEntry, FormOf, Lookup, PhraseHit};
 pub use manifest::{parse_manifest, AvailableDictionary};
 
 /// The tables of a dictionary file. Indexes are created by
@@ -52,9 +52,10 @@ pub(crate) mod test_support {
         conn.execute_batch(
             "INSERT INTO entry (id, key, word, pos, ipa) VALUES
                  (1, 'lit', 'lit', 'noun', '/li/'),
-                 (2, 'lire', 'lire', 'verb', '/liʁ/');
+                 (2, 'lire', 'lire', 'verb', '/liʁ/'),
+                 (3, 'pierre précieuse', 'pierre précieuse', 'noun', '');
              INSERT INTO sense (entry_id, position, gloss) VALUES
-                 (1, 0, 'bed'), (1, 1, 'layer'), (2, 0, 'to read');
+                 (1, 0, 'bed'), (1, 1, 'layer'), (2, 0, 'to read'), (3, 0, 'gemstone');
              INSERT INTO form (key, lemma, pos, tags) VALUES
                  ('lit', 'lire', 'verb', 'indicative present singular third-person'),
                  ('lisait', 'lire', 'verb', 'imperfect indicative singular third-person');",

@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use crate::db::term::Term;
 use crate::db::{Database, DbError};
 use crate::presets::LanguagePreset;
+use crate::text::phrases::{find_phrases, WordSlot};
 use crate::text::tokens::tokenize;
 use crate::text::LanguageRules;
 
@@ -149,17 +150,37 @@ pub fn build_note(
     }
 }
 
-/// The sentence, HTML-escaped, with every token whose key is `key` in bold.
+/// The sentence, HTML-escaped, with every occurrence of the term in bold: a
+/// word whose key is `key`, or the run of words a phrase key matches.
 fn bold_word(sentence: &str, key: &str, rules: &LanguageRules) -> String {
+    let tokens = tokenize(sentence, rules);
+    let slots: Vec<WordSlot> = tokens
+        .iter()
+        .map(|t| WordSlot {
+            key: t.key.as_deref(),
+            sentence: 0,
+        })
+        .collect();
+    // (first, last) token indexes to bold.
+    let mut spans: Vec<(usize, usize)> = find_phrases(&slots, &|k| k == key)
+        .into_iter()
+        .map(|span| (span.first, span.last))
+        .collect();
+    spans.extend(
+        tokens
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.key.as_deref() == Some(key))
+            .map(|(i, _)| (i, i)),
+    );
     let mut html = String::with_capacity(sentence.len() + 7);
-    for token in tokenize(sentence, rules) {
-        let text = escape_html(&token.text);
-        if token.key.as_deref() == Some(key) {
+    for (i, token) in tokens.iter().enumerate() {
+        if spans.iter().any(|&(first, _)| first == i) {
             html.push_str("<b>");
-            html.push_str(&text);
+        }
+        html.push_str(&escape_html(&token.text));
+        if spans.iter().any(|&(_, last)| last == i) {
             html.push_str("</b>");
-        } else {
-            html.push_str(&text);
         }
     }
     html
@@ -368,6 +389,23 @@ mod tests {
         // Editing it queues it again, now as an update of note 1001.
         save(&db, "homme", Status::Learning(3), "Un homme.");
         assert_eq!(pending_notes(&db).unwrap()[0].note_id, Some(1001));
+    }
+
+    #[test]
+    fn a_phrase_is_bold_as_a_whole() {
+        let rules = builtin("fr");
+        assert_eq!(
+            bold_word(
+                "D’un Coq et d’une Pierre précieuse.",
+                "pierre précieuse",
+                &rules
+            ),
+            "D’un Coq et d’une <b>Pierre précieuse</b>."
+        );
+        assert_eq!(
+            bold_word("Un chat, un chat.", "chat", &rules),
+            "Un <b>chat</b>, un <b>chat</b>."
+        );
     }
 
     #[test]

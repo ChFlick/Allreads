@@ -66,6 +66,7 @@ fun WordSheet(
     onShowLemma: (String) -> Unit,
     onDownloadDictionary: () -> Unit,
     dictionaryDownload: DownloadState?,
+    onChoosePhrase: (PhraseChoice) -> Unit,
     onSave: (WordStatus, String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -140,6 +141,16 @@ fun WordSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
             OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary)
+            // Dictionary phrases around the word, e.g. "pierre précieuse: gemstone".
+            word.phraseSuggestions.forEach { choice ->
+                OutlinedButton(onClick = { onChoosePhrase(choice) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Phrase: ${choice.suggestion.text}" +
+                            if (choice.suggestion.gloss.isBlank()) "" else " · ${choice.suggestion.gloss}",
+                        maxLines = 2,
+                    )
+                }
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 wordStatusChoices.forEach { choice ->
                     FilterChip(

@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material3.SnackbarResult
@@ -172,6 +173,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
                     translation = state.translations[row.key],
                     playing = speaking == row.key,
                     onWord = { tokenIndex -> viewModel.select(row, tokenIndex) },
+                    onSelectRange = { range -> viewModel.selectRange(row, range) },
                     onTranslate = { viewModel.toggleTranslation(row) },
                     onSpeak = { viewModel.toggleSpeaking(row) },
                 )
@@ -195,6 +197,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             onSpeak = viewModel::speakWord,
             onShowLemma = viewModel::showLemma,
             onDownloadDictionary = viewModel::downloadDictionary,
+            onChoosePhrase = viewModel::choosePhrase,
             dictionaryDownload = word.dictionaryOffer?.let { downloads[it.pair] },
             onSave = viewModel::saveWord,
             onDismiss = viewModel::dismissWord,
@@ -220,12 +223,17 @@ private fun SentenceRow(
     translation: SentenceTranslation?,
     playing: Boolean,
     onWord: (Int) -> Unit,
+    onSelectRange: (IntRange) -> Unit,
     onTranslate: () -> Unit,
     onSpeak: () -> Unit,
 ) {
     val dark = LocalDarkTheme.current
     val text = remember(row, dark) { styledText(row, dark) }
-    val newWords = remember(row) { row.content.ranges { it.status == WordStatus.New } }
+    // Words inside a saved phrase take the phrase's colour, so they get no underline.
+    val newWords = remember(row) { row.content.ranges { it.status == WordStatus.New && it.phrase == null } }
+    // The words being selected by a long-press and drag, as token indexes.
+    var selection by remember(row) { mutableStateOf<IntRange?>(null) }
+    val selectionColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
     val underline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val rowStyle = when (row.headingLevel) {
@@ -249,13 +257,49 @@ private fun SentenceRow(
                 style = rowStyle,
                 onTextLayout = { layout = it },
                 modifier = Modifier
-                    .drawBehind { layout?.let { drawFaintUnderlines(it, newWords, underline) } }
-                    .pointerInput(row) {
-                    detectTapGestures { position ->
-                        val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures
-                        row.content.wordAt(offset)?.let(onWord)
+                    .drawBehind {
+                        layout?.let { textLayout ->
+                            selection?.let { tokens ->
+                                val chars = row.content.charRange(tokens)
+                                drawPath(textLayout.getPathForRange(chars.first, chars.last + 1), selectionColor)
+                            }
+                            drawFaintUnderlines(textLayout, newWords, underline)
+                        }
                     }
-                },
+                    .pointerInput(row) {
+                        detectTapGestures { position ->
+                            val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures
+                            row.content.wordAt(offset)?.let(onWord)
+                        }
+                    }
+                    // Step 24: long-press a word and drag to select a phrase.
+                    .pointerInput(row) {
+                        var anchor: Int? = null
+                        fun wordUnder(position: Offset): Int? =
+                            layout?.getOffsetForPosition(position)?.let { row.content.wordAt(it) }
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { position ->
+                                anchor = wordUnder(position)
+                                selection = anchor?.let { it..it }
+                            },
+                            onDrag = { change, _ ->
+                                val start = anchor
+                                val current = wordUnder(change.position)
+                                if (start != null && current != null) {
+                                    selection = minOf(start, current)..maxOf(start, current)
+                                }
+                            },
+                            onDragEnd = {
+                                selection?.let(onSelectRange)
+                                selection = null
+                                anchor = null
+                            },
+                            onDragCancel = {
+                                selection = null
+                                anchor = null
+                            },
+                        )
+                    },
             )
             when (translation) {
                 null -> Unit
@@ -308,10 +352,12 @@ private fun TranslateButton(shown: Boolean, onClick: () -> Unit) {
 private fun styledText(row: ReaderRow, dark: Boolean): AnnotatedString = buildAnnotatedString {
     row.content.tokens.forEach { token ->
         val status = token.status
+        // A saved phrase is coloured as one, spaces between its words too.
+        val colour = token.phrase?.status ?: status
         val style = SpanStyle(
             fontStyle = if (token.italic) FontStyle.Italic else null,
             fontWeight = if (token.bold) FontWeight.Bold else null,
-            background = status?.takeIf { it != WordStatus.New }?.highlight(dark) ?: Color.Unspecified,
+            background = colour?.takeIf { it != WordStatus.New }?.highlight(dark) ?: Color.Unspecified,
         )
         withStyle(style) { append(token.text) }
     }

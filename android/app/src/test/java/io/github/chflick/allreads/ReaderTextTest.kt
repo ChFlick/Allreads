@@ -8,14 +8,42 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import uniffi.allreads_ffi.ChapterBlock
+import uniffi.allreads_ffi.PhraseMark
 import uniffi.allreads_ffi.Token
 import uniffi.allreads_ffi.WordStatus
 
 class ReaderTextTest {
     private fun word(text: String, sentence: UInt = 0u) =
-        Token(text, text.lowercase(), WordStatus.New, sentence, false, false)
+        Token(text, text.lowercase(), WordStatus.New, sentence, false, false, null)
 
-    private fun gap(text: String, sentence: UInt = 0u) = Token(text, null, null, sentence, false, false)
+    private fun gap(text: String, sentence: UInt = 0u) = Token(text, null, null, sentence, false, false, null)
+
+    private fun Token.inPhrase(id: UInt) =
+        copy(phrase = PhraseMark(id, "pierre précieuse", WordStatus.Learning(2u)))
+
+    @Test
+    fun aPhraseIsFoundAroundAnyOfItsTokens() {
+        // "une Pierre précieuse ici", with "Pierre précieuse" saved.
+        val text = TokenText(
+            listOf(
+                word("une"), gap(" "), word("Pierre").inPhrase(0u), gap(" ").inPhrase(0u),
+                word("précieuse").inPhrase(0u), gap(" "), word("ici"),
+            ),
+        )
+        assertEquals(2..4, text.phraseRange(3))
+        assertEquals(2..4, text.phraseRange(2))
+        assertNull(text.phraseRange(0))
+        assertEquals("Pierre précieuse", text.textOf(2..4))
+        assertEquals(4 until 20, text.charRange(2..4))
+        assertEquals(listOf(0, 2, 4, 6), text.wordIndexes)
+    }
+
+    @Test
+    fun twoOccurrencesSideBySideStayApart() {
+        val text = TokenText(listOf(word("a").inPhrase(0u), word("b").inPhrase(1u)))
+        assertEquals(0..0, text.phraseRange(0))
+        assertEquals(1..1, text.phraseRange(1))
+    }
 
     // Block 0: heading "Titre". Block 1: "L'homme lit. Fin."
     private val blocks = listOf(

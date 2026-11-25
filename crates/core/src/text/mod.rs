@@ -7,6 +7,7 @@
 
 pub mod blocks;
 pub mod key;
+pub mod phrases;
 pub mod sentences;
 pub mod tokens;
 
@@ -88,10 +89,25 @@ impl LanguageRules {
         })
     }
 
-    /// The term key for a word or phrase in this language.
+    /// The term key for a single word (or any text, normalised as one).
     #[must_use]
     pub fn key(&self, text: &str) -> String {
         key::term_key(text, &self.substitutions)
+    }
+
+    /// The term key for a word or phrase as the user saved it. A phrase is
+    /// tokenized and its word keys joined (see [`phrases::join_keys`]), so it
+    /// matches the reader's tokens whatever punctuation sits between its words.
+    /// Text without a word is keyed as it is.
+    #[must_use]
+    pub fn term_key(&self, text: &str) -> String {
+        let tokens = tokens::tokenize(text, self);
+        let keys: Vec<&str> = tokens.iter().filter_map(|t| t.key.as_deref()).collect();
+        if keys.is_empty() {
+            self.key(text)
+        } else {
+            phrases::join_keys(&keys)
+        }
     }
 }
 

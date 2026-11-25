@@ -29,6 +29,19 @@ pub struct FormOf {
     pub tags: String,
 }
 
+/// A dictionary phrase found around a tapped word, e.g. "pierre précieuse".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhraseHit {
+    /// Its first and last word, as indexes into the words passed in.
+    pub first: usize,
+    pub last: usize,
+    /// The phrase as the dictionary writes it, and its term key.
+    pub word: String,
+    pub key: String,
+    /// Its first meaning.
+    pub gloss: String,
+}
+
 /// Everything the dictionary knows about one term key.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Lookup {
@@ -102,6 +115,39 @@ impl Dictionary {
         } else {
             Err(DictionaryError::Invalid(result))
         }
+    }
+
+    /// The dictionary's phrases among the words around word `index` (term
+    /// keys of a sentence's words, in order), longest first.
+    ///
+    /// # Errors
+    /// Returns `Sqlite` if a query fails.
+    pub fn phrases_around(
+        &self,
+        keys: &[&str],
+        index: usize,
+    ) -> Result<Vec<PhraseHit>, DictionaryError> {
+        use rusqlite::OptionalExtension;
+        let mut statement = self.conn.prepare_cached(
+            "SELECT e.word, (SELECT gloss FROM sense WHERE entry_id = e.id ORDER BY position LIMIT 1)
+             FROM entry e WHERE e.key = ?1 ORDER BY e.id LIMIT 1",
+        )?;
+        let mut hits = Vec::new();
+        for (first, last, key) in crate::text::phrases::runs_around(keys, index) {
+            let found: Option<(String, Option<String>)> = statement
+                .query_row([&key], |row| Ok((row.get(0)?, row.get(1)?)))
+                .optional()?;
+            if let Some((word, gloss)) = found {
+                hits.push(PhraseHit {
+                    first,
+                    last,
+                    word,
+                    key,
+                    gloss: gloss.unwrap_or_default(),
+                });
+            }
+        }
+        Ok(hits)
     }
 
     /// Entries and form links for a term key (as the reader's tokens carry).
@@ -192,6 +238,19 @@ mod tests {
                 tags: "imperfect indicative singular third-person".into()
             }]
         );
+    }
+
+    #[test]
+    fn phrases_around_a_word_are_found() {
+        let (_dir, dictionary) = tiny();
+        let hits = dictionary
+            .phrases_around(&["une", "pierre", "précieuse", "brille"], 1)
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!((hits[0].first, hits[0].last), (1, 2));
+        assert_eq!(hits[0].word, "pierre précieuse");
+        assert_eq!(hits[0].gloss, "gemstone");
+        assert!(dictionary.phrases_around(&["lit"], 0).unwrap().is_empty());
     }
 
     #[test]
