@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.material3.FilledTonalButton
 import io.github.chflick.allreads.ui.settings.onMobileData
 import androidx.compose.material3.AlertDialog
 import io.github.chflick.allreads.data.DownloadState
@@ -117,6 +118,16 @@ fun WordSheet(
                     Text(if (status == WordStatus.New) "Forget" else "Save")
                 }
             }
+            // Dictionary phrases around the word come first, so they show in the half-open drawer.
+            word.phraseSuggestions.forEach { choice ->
+                FilledTonalButton(onClick = { onChoosePhrase(choice) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Phrase: ${choice.suggestion.text}" +
+                            if (choice.suggestion.gloss.isBlank()) "" else " · ${choice.suggestion.gloss}",
+                        maxLines = 2,
+                    )
+                }
+            }
             when {
                 word.translating -> Text("Translating…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 word.translationError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -141,16 +152,6 @@ fun WordSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
             OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary)
-            // Dictionary phrases around the word, e.g. "pierre précieuse: gemstone".
-            word.phraseSuggestions.forEach { choice ->
-                OutlinedButton(onClick = { onChoosePhrase(choice) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        "Phrase: ${choice.suggestion.text}" +
-                            if (choice.suggestion.gloss.isBlank()) "" else " · ${choice.suggestion.gloss}",
-                        maxLines = 2,
-                    )
-                }
-            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 wordStatusChoices.forEach { choice ->
                     FilterChip(
