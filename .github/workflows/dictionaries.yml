@@ -1,0 +1,80 @@
+name: Dictionaries
+
+# Builds the offline dictionaries from kaikki.org's Wiktionary extracts and
+# uploads them, with a manifest the app reads, to the `dictionaries` release.
+# Run by hand from the Actions tab; Wiktionary changes slowly.
+on:
+  workflow_dispatch:
+    inputs:
+      languages:
+        description: "Space-separated language codes with a kaikki.org extract and a preset"
+        default: "fr"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build dictgen
+        run: cargo build --release --locked -p allreads-dictgen
+
+      - name: Build the dictionaries
+        env:
+          LANGUAGES: ${{ inputs.languages }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          built="$(date -u +%Y-%m-%d)"
+          for code in $LANGUAGES; do
+            case "$code" in
+              fr) name=French ;; de) name=German ;; es) name=Spanish ;;
+              *) echo "No kaikki.org name known for $code" >&2; exit 1 ;;
+            esac
+            curl -fsSL --retry 3 -o "extract-$code.jsonl.gz" \
+              "https://kaikki.org/dictionary/$name/kaikki.org-dictionary-$name.jsonl.gz"
+            target/release/allreads-dictgen --input "extract-$code.jsonl.gz" --language "$code" \
+              --output "out/$code-en.sqlite" --built "$built"
+            gzip -9 "out/$code-en.sqlite" --keep
+          done
+          python3 - "$built" $LANGUAGES <<'PY'
+          import hashlib, json, os, sys
+          built, codes = sys.argv[1], sys.argv[2:]
+          base = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/dictionaries"
+          entries = []
+          for code in codes:
+              gz = f"out/{code}-en.sqlite.gz"
+              entries.append({
+                  "pair": f"{code}-en",
+                  "language": code,
+                  "url": f"{base}/{code}-en.sqlite.gz",
+                  "built": built,
+                  "download_bytes": os.path.getsize(gz),
+                  "installed_bytes": os.path.getsize(f"out/{code}-en.sqlite"),
+                  "sha256": hashlib.sha256(open(gz, "rb").read()).hexdigest(),
+              })
+          json.dump({"format": 1, "dictionaries": entries}, open("out/dictionaries.json", "w"), indent=2)
+          PY
+          cat out/dictionaries.json
+
+      - name: Publish to the dictionaries release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view dictionaries >/dev/null 2>&1; then
+            gh release create dictionaries --title "Offline dictionaries" --latest=false \
+              --notes "Offline dictionaries for Allreads, downloaded from the app's Settings. Built from Wiktionary data via kaikki.org, licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)."
+          fi
+          gh release upload dictionaries out/*.sqlite.gz out/dictionaries.json --clobber

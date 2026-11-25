@@ -1,0 +1,23 @@
+[package]
+name = "allreads-dictgen"
+description = "Builds Allreads' offline dictionary files from kaikki.org Wiktionary extracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+allreads-core = { path = "../core" }
+clap = { version = "4.5", features = ["derive"] }
+flate2 = "1.1"
+rusqlite = { version = "0.39", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints]
+workspace = true

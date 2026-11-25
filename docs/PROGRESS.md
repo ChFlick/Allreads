@@ -38,6 +38,9 @@ First run of the CI APK on Christoph's phone. Working: all screens, EPUB import.
 - [ ] 21. Sentence translation and parallel mode
 - [ ] 22. AI "Explain"
 - [ ] 23. Offline dictionaries
+  - [x] 23a. `dictgen` and the Dictionaries workflow (2026-11-25: `crates/dictgen` streams the kaikki.org extract (plain or gzipped) into the format in `allreads_core::dictionary`; entries that only say "form of X" become form links; a form's readings from its own entry and its lemma's table are merged into one row with their tags. French: 103,459 entries, 127,545 senses, 380,616 forms; 43 MB, 10.8 MB gzipped; 7 s to build. A hand-run workflow publishes `fr-en.sqlite.gz` and `dictionaries.json` to the `dictionaries` release)
+  - [ ] 23b. Install, lookup and FFI in the core
+  - [ ] 23c. Settings section, download and word drawer
 - [ ] 24. Phrase selection
 - [x] 25. Read-aloud (2026-11-25: a `Speech` interface with Android TTS behind it; a play button per sentence row (its row tinted while it speaks, no auto-scroll) and in the word drawer; Settings has a speed slider, "Speak words when tapped" and a voice picker per library language with a test button; a missing voice offers the TTS settings; JVM tests for choosing a voice. Checked on a phone 2026-11-25)
 - [ ] 26. Library, stats and backup

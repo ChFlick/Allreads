@@ -3,6 +3,7 @@
 pub mod anki;
 pub mod book;
 pub mod db;
+pub mod dictionary;
 pub mod epub;
 pub mod library;
 pub mod presets;

@@ -73,6 +73,10 @@ cargo build -p allreads-ffi
 cargo run -p allreads-ffi --bin uniffi-bindgen -- generate \
   --library target/debug/liballreads_ffi.so --language kotlin --out-dir target/bindings
 
+# Offline dictionary from a kaikki.org extract (the Dictionaries workflow does this in CI)
+cargo run --release -p allreads-dictgen -- --input kaikki.org-dictionary-French.jsonl.gz \
+  --language fr --output fr-en.sqlite
+
 # Test fixtures (run in crates/core/tests/fixtures)
 python3 make_fixtures.py
 ```
