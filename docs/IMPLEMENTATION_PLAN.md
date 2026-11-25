@@ -36,7 +36,7 @@ Android work to do in one batch once Android Studio is available: step 2's proje
 1. **Phone smoke test** of the CI APK, and fixes. First run done 2026-11-25; its bugs are fixed (see `PROGRESS.md`).
 2. **AnkiDroid** (steps 17a, 16, 17b, 18, 19), as planned in Phase 3. Step 20 (export) was dropped.
 3. **Read-aloud** (step 25): a play button per sentence and a speak button in the word drawer. Done 2026-11-25.
-4. **Offline French→English dictionary** (step 23), in the personal build.
+4. **Offline French→English dictionary** (step 23), downloaded on demand in the app (decided 2026-11-25).
 5. **Phrases** (step 24).
 
 Kept as they are: untapped words stay new until marked (only "Mark the rest of this chapter as known"); five learning levels plus Known and Ignore; meanings in English (DeepL, dictionary and Anki agree); per-sentence translation only.
@@ -177,12 +177,16 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
       - Capping definitions at three per word saves almost nothing; the form links are most of the size, and they are what powers lemma suggestions.
       - Lookups take under 0.5 ms. Spot checks were good: "lit" gives both "third-person singular of lire" and "bed"; "allait" gives "imperfect of aller"; "aujourd'hui", "peut-être" and "l'" match our tokenizer's keys.
       - To fix in `dictgen`: keep the form tags so labels say the person and tense (some only say "inflection of manger:"), and drop duplicate form rows.
-    - *Planned 2026-11-24, personal build:*
-      - French → English only, baked into a `personal` Gradle flavour's assets. That adds about 15 MB to the APK and about 43 MB on disk, because the app copies the file to its data folder on first launch, since SQLite cannot open a file inside the APK.
-      - A `public` flavour ships without it and can offer a download later.
-      - The generated file is not committed; `dictgen` builds it, locally or in CI, into a gitignored flavour folder.
-      - Wiktionary data is CC BY-SA: credit Wiktionary and kaikki.org on an About screen; the dictionary file stays under its own licence.
-      - Effort: `dictgen` 1–2 evenings, `App::lookup` and lemma suggestions about one, the flavour setup once the Android project exists.
+    - *Planned 2026-11-24, personal build:* superseded 2026-11-25, see below.
+    - *Scoped with Christoph 2026-11-25: download on demand, no bundled flavour.*
+      - **Scope:** French → English only in v1; `dictgen` stays generic, so other pairs are a workflow input later.
+      - **Hosting:** a separate GitHub Actions workflow, run by hand (not on every push), downloads the kaikki.org extract, runs `dictgen`, and uploads `fr-en.sqlite.gz` plus a small `dictionaries.json` manifest (pair, version date, download and installed size, SHA-256) to a fixed `dictionaries` release.
+      - **Settings → Dictionaries:** each pair with its sizes ("14 MB download, 43 MB on the phone"), Download with progress, Remove, and the installed version's date. On mobile data the app asks before downloading. No update checks: Remove and Download again gets the newest.
+      - **Interrupted downloads** start over; a partial file is deleted and never used.
+      - **The word drawer** shows definitions with part of speech, and the dictionary form ("lisait → lire, imperfect, 3rd person"), tappable to show that entry. The Lemma field is prefilled from it and stays editable. With no dictionary installed, a French word's drawer shows a small "Get the offline dictionary" link.
+      - **Licence:** Wiktionary data is CC BY-SA. Credit Wiktionary and kaikki.org in Settings → About and next to the download; the file keeps its own licence.
+      - **Split of work:** Kotlin downloads the `.gz` to a temporary file with progress (no callbacks across the FFI). Rust then installs it: checks the SHA-256, unpacks, checks the schema, and moves it into place, so a broken file is never opened. Rust opens it read-only for `lookup`, which takes the word's term key and returns entries, senses and form → lemma links. Removing deletes the file.
+      - **Sub-steps:** 23a `dictgen` and its workflow (with the measured fixes: keep form tags, drop duplicate form rows); 23b core install, lookup and FFI with tests on a tiny fixture dictionary; 23c the Settings section, download and drawer.
 24. **Phrase selection.** Long-press and drag across tokens to select a phrase, saved as a multi-word term. Phrases are matched in `open_chapter` (longest match first).
     - **Done when** a saved idiom is highlighted wherever it appears.
     - *Added 2026-11-24:* a phrase's key is the `term_key` of the whole phrase. Matching compares the keys of consecutive word tokens, so punctuation and line breaks between words don't break a match.
