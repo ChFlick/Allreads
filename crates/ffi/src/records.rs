@@ -164,11 +164,12 @@ pub struct LanguageInfo {
     pub right_to_left: bool,
 }
 
-/// A DeepL key's monthly usage, returned when the key works.
+/// A working DeepL key, with its monthly usage when DeepL shares it. A key
+/// that may translate but not read usage (a scoped key) has no usage numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
-pub struct DeepLUsage {
-    pub characters_used: u64,
-    pub character_limit: u64,
+pub struct DeepLKeyStatus {
+    pub characters_used: Option<u64>,
+    pub character_limit: Option<u64>,
 }
 
 /// A machine translation, and whether it came from the cache (free and instant).

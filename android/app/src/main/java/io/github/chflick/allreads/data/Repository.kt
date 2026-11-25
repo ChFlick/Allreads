@@ -7,7 +7,7 @@ import uniffi.allreads_ffi.App
 import uniffi.allreads_ffi.BookMeta
 import uniffi.allreads_ffi.BookSummary
 import uniffi.allreads_ffi.Chapter
-import uniffi.allreads_ffi.DeepLUsage
+import uniffi.allreads_ffi.DeepLKeyStatus
 import uniffi.allreads_ffi.LanguageInfo
 import uniffi.allreads_ffi.SavedTerm
 import uniffi.allreads_ffi.TermInput
@@ -67,7 +67,7 @@ class Repository(val dataDir: File) {
     ): Translation = io { app.translate(text, context, sourceLanguage, targetLanguage, deeplKey) }
 
     /** Checks a DeepL key by reading its usage, which costs no quota. */
-    suspend fun checkDeeplKey(key: String): DeepLUsage = io { uniffi.allreads_ffi.checkDeeplKey(key) }
+    suspend fun checkDeeplKey(key: String): DeepLKeyStatus = io { uniffi.allreads_ffi.checkDeeplKey(key) }
 
     suspend fun markRestKnown(bookId: Long, chapter: UInt, fromBlock: UInt): UInt =
         io { app.markRestKnown(bookId, chapter, fromBlock) }

@@ -13,11 +13,11 @@ use allreads_core::presets::builtin_presets;
 use allreads_core::reader::{parse_blocks, ParsedChapter};
 use allreads_core::text::{LanguageRules, PARSER_VERSION};
 use allreads_core::translate::deepl::DeepL;
-use allreads_core::translate::{TranslationRequest, Translator};
+use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
 
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
-    saturate_u32, BookMeta, BookSummary, Chapter, ChapterBlock, DeepLUsage, LanguageInfo,
+    saturate_u32, BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, LanguageInfo,
     SavedTerm, TermInput, Token, Translation, WordStatus,
 };
 
@@ -532,26 +532,47 @@ impl App {
     }
 }
 
-/// Checks a DeepL key by reading its usage, which costs no quota. Call it after
-/// the user enters a key, to tell them at once whether it works.
+/// Checks a DeepL key right after the user enters it. It first reads the
+/// key's usage, which costs no quota. A scoped key may be allowed to translate
+/// but not to read usage, so if DeepL refuses that, it translates "ok" (two
+/// characters of quota) and the key counts as working if that succeeds.
 ///
 /// # Errors
-/// Returns `TranslationKeyRejected` for a bad key, `TranslationUnavailable`
+/// Returns `TranslationKeyRejected` if DeepL refuses both, `TranslationUnavailable`
 /// when offline, and `InvalidInput` for an empty key.
 // UniFFI exported functions must take owned arguments, so `String` stays by value.
 #[uniffi::export]
 #[allow(clippy::needless_pass_by_value)]
-pub fn check_deepl_key(api_key: String) -> Result<DeepLUsage, AllreadsError> {
+pub fn check_deepl_key(api_key: String) -> Result<DeepLKeyStatus, AllreadsError> {
     if api_key.trim().is_empty() {
         return Err(AllreadsError::InvalidInput {
             reason: "the DeepL API key is empty".into(),
         });
     }
-    let usage = DeepL::new(&api_key).usage()?;
-    Ok(DeepLUsage {
-        characters_used: usage.character_count,
-        character_limit: usage.character_limit,
-    })
+    check_with(&DeepL::new(&api_key))
+}
+
+/// The key check against any DeepL endpoint, so tests can use a local server.
+fn check_with(deepl: &DeepL) -> Result<DeepLKeyStatus, AllreadsError> {
+    match deepl.usage() {
+        Ok(usage) => Ok(DeepLKeyStatus {
+            characters_used: Some(usage.character_count),
+            character_limit: Some(usage.character_limit),
+        }),
+        Err(TranslateError::Unauthorized) => {
+            deepl.translate(&TranslationRequest {
+                text: "ok",
+                context: None,
+                source: "en",
+                target: "de",
+            })?;
+            Ok(DeepLKeyStatus {
+                characters_used: None,
+                character_limit: None,
+            })
+        }
+        Err(other) => Err(other.into()),
+    }
 }
 
 /// Reads a book file's title, author, language and chapter count without
@@ -1110,6 +1131,48 @@ mod tests {
         let book = app.book(id).unwrap().unwrap();
         assert_eq!(book.chapter_count, 2);
         assert_eq!((book.chapter_index, book.paragraph_index), (0, 0));
+    }
+
+    #[test]
+    fn a_key_that_reads_usage_reports_it() {
+        let (url, server) = allreads_core::translate::mock_server::serve(&[(
+            200,
+            r#"{"character_count":12,"character_limit":500000}"#,
+        )]);
+        let status = check_with(&DeepL::with_base_url("k", &url)).unwrap();
+        assert_eq!(status.characters_used, Some(12));
+        assert_eq!(server.join().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_scoped_key_that_can_only_translate_still_works() {
+        let (url, server) = allreads_core::translate::mock_server::serve(&[
+            (403, r#"{"message":"Forbidden"}"#),
+            (200, r#"{"translations":[{"text":"ok"}]}"#),
+        ]);
+        let status = check_with(&DeepL::with_base_url("k", &url)).unwrap();
+        assert_eq!(
+            status,
+            DeepLKeyStatus {
+                characters_used: None,
+                character_limit: None
+            }
+        );
+        let requests = server.join().unwrap();
+        assert!(requests[1].starts_with("POST /v2/translate "));
+    }
+
+    #[test]
+    fn a_key_refused_for_both_is_rejected() {
+        let (url, server) = allreads_core::translate::mock_server::serve(&[
+            (403, r#"{"message":"Forbidden"}"#),
+            (403, r#"{"message":"Forbidden"}"#),
+        ]);
+        assert!(matches!(
+            check_with(&DeepL::with_base_url("k", &url)),
+            Err(AllreadsError::TranslationKeyRejected)
+        ));
+        server.join().unwrap();
     }
 
     #[test]

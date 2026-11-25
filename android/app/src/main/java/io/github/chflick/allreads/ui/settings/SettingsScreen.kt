@@ -43,6 +43,7 @@ import io.github.chflick.allreads.data.Services
 import io.github.chflick.allreads.data.ThemeMode
 import io.github.chflick.allreads.ui.NO_DEEPL_KEY
 import io.github.chflick.allreads.ui.describe
+import uniffi.allreads_ffi.AllreadsException
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -127,10 +128,19 @@ private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
 }
 
+/**
+ * A key-check failure as shown on this page. Unlike the reader's messages, it
+ * never says "check Settings": the user is already here.
+ */
+private fun keyCheckMessage(error: Throwable): String = when (error) {
+    is AllreadsException.TranslationKeyRejected -> "DeepL rejected this key."
+    else -> describe(error)
+}
+
 /** The result of checking the saved DeepL key. */
 private sealed interface KeyCheck {
     data object Checking : KeyCheck
-    data class Works(val used: ULong, val limit: ULong) : KeyCheck
+    data class Works(val used: ULong?, val limit: ULong?) : KeyCheck
     data class Failed(val message: String) : KeyCheck
 }
 
@@ -158,7 +168,7 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
             } else {
                 runCatching { services.repository.checkDeeplKey(key) }.fold(
                     { KeyCheck.Works(it.charactersUsed, it.characterLimit) },
-                    { KeyCheck.Failed(describe(it)) },
+                    { KeyCheck.Failed(keyCheckMessage(it)) },
                 )
             }
         }
@@ -172,7 +182,12 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
         null -> Unit
         KeyCheck.Checking -> Text("Checking the key with DeepL…", style = MaterialTheme.typography.bodySmall)
         is KeyCheck.Works -> Text(
-            "✓ The key works · ${"%,d".format(result.used.toLong())} of ${"%,d".format(result.limit.toLong())} characters used this month",
+            if (result.used != null && result.limit != null) {
+                "✓ The key works · ${"%,d".format(result.used.toLong())} of " +
+                    "${"%,d".format(result.limit.toLong())} characters used this month"
+            } else {
+                "✓ The key works"
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
         )
