@@ -49,7 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Step 15: translation, reading and appearance settings. */
+/** Translation, AnkiDroid, reading and appearance settings. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(services: Services) {
@@ -73,6 +73,10 @@ fun SettingsScreen(services: Services) {
                     )
                 }
             }
+
+            HorizontalDivider()
+            Section("AnkiDroid")
+            AnkiSection(services)
 
             HorizontalDivider()
             Section("Reading")
@@ -116,7 +120,7 @@ fun SettingsScreen(services: Services) {
             Section("About")
             Text(
                 "Allreads ${BuildConfig.VERSION_NAME} · MIT licence. Language rules adapted from Lukaisu. " +
-                    "Translations by DeepL with your own key; nothing else leaves the phone.",
+                    "Translations by DeepL with your own key; cards go to AnkiDroid on this phone. Nothing else leaves it.",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

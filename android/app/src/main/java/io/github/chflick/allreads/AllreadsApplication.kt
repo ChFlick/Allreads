@@ -1,6 +1,7 @@
 package io.github.chflick.allreads
 
 import android.app.Application
+import io.github.chflick.allreads.anki.AnkiDroidBridge
 import io.github.chflick.allreads.data.ApiKeyStore
 import io.github.chflick.allreads.data.Repository
 import io.github.chflick.allreads.data.Services
@@ -13,6 +14,7 @@ class AllreadsApplication : Application() {
             repository = Repository(filesDir),
             settings = SettingsStore(this),
             apiKeys = ApiKeyStore(this),
+            anki = AnkiDroidBridge(this),
         )
     }
 }

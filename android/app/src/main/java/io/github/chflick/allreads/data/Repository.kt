@@ -72,6 +72,11 @@ class Repository(val dataDir: File) {
     suspend fun markRestKnown(bookId: Long, chapter: UInt, fromBlock: UInt): UInt =
         io { app.markRestKnown(bookId, chapter, fromBlock) }
 
+    /** The AnkiDroid deck chosen in Settings, if any. */
+    suspend fun ankiDeckId(): Long? = io { app.ankiDeckId() }
+
+    suspend fun setAnkiDeckId(deckId: Long) = io { app.setAnkiDeckId(deckId) }
+
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
 }

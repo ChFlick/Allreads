@@ -28,7 +28,7 @@ First run of the CI APK on Christoph's phone. Working: all screens, EPUB import.
 
 ## Phase 3 (M2): AnkiDroid integration
 - [x] 17a. Anki cards in the core (2026-11-25: words keep their sentence, its translation and the book/chapter (migration V7); one note type per language with a spoken sentence card via `{{tts}}` and an optional word card; notes built with the word in bold and HTML escaped; levels 1–4 queue a card, a word with a card is re-queued on edit; deck and note type ids stored in a `setting` table; FFI calls for Kotlin. The reader passes the sentence and the translation already shown. Pending: the AnkiDroid side, steps 16–19)
-- [ ] 16. Connect to AnkiDroid
+- [ ] 16. Connect to AnkiDroid (2026-11-25: `AnkiBridge` interface with an AnkiDroid ContentProvider implementation, the permission and `<queries>` entry, and a Settings section showing Install / Grant access / Connected with a deck picker and "Create Allreads deck". Pending: checking on a phone)
 - [ ] 17. Note type and deck
 - [ ] 18. Push and update
 - [ ] 19. Outbox and retry
