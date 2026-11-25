@@ -27,7 +27,8 @@ class RustBridgeTest {
 
     @Test
     fun coreVersionComesFromRustAndMatchesTheApp() {
-        assertEquals(BuildConfig.VERSION_NAME, coreVersion())
+        // CI builds add "-build.N" to the app's version name.
+        assertEquals(BuildConfig.VERSION_NAME.substringBefore("-build."), coreVersion())
     }
 
     /** Step 6's check: an invalid path raises a typed Kotlin exception. */
