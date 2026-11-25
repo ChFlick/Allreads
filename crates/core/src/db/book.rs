@@ -2,7 +2,7 @@
 
 use rusqlite::{params, OptionalExtension, Row};
 
-use super::{require_text, u32_column, Database, DbError};
+use super::{require_one_changed, require_text, u32_column, Database, DbError};
 
 /// A book to add to the library.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -154,17 +154,6 @@ impl Database {
         )?;
         require_one_changed(changed, || format!("book {book_id}"))
     }
-}
-
-/// Turns "no rows changed" into `NotFound`, so callers can tell a missing row apart.
-pub(crate) fn require_one_changed(
-    changed: usize,
-    what: impl FnOnce() -> String,
-) -> Result<(), DbError> {
-    if changed == 0 {
-        return Err(DbError::NotFound { what: what() });
-    }
-    Ok(())
 }
 
 fn book_from_row(row: &Row) -> rusqlite::Result<Book> {

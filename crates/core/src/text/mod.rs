@@ -18,6 +18,22 @@ pub const PARSER_VERSION: i64 = 1;
 
 use crate::presets::LanguagePreset;
 
+/// Collapses runs of ASCII whitespace to one space and trims the ends.
+/// Non-breaking spaces (U+00A0) are left alone.
+pub(crate) fn normalize_whitespace(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    for word in text
+        .split(|c: char| c.is_ascii_whitespace())
+        .filter(|word| !word.is_empty())
+    {
+        if !normalized.is_empty() {
+            normalized.push(' ');
+        }
+        normalized.push_str(word);
+    }
+    normalized
+}
+
 /// A language's tokenizing rules, compiled once from its preset.
 #[derive(Debug, Clone)]
 pub struct LanguageRules {

@@ -9,9 +9,10 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use crate::book::{BookError, BookMeta};
 use crate::db::book::NewBook;
 use crate::db::{Database, DbError};
-use crate::epub::{self, BookError, BookMeta};
+use crate::epub;
 use crate::text::blocks::{Block, BlockKind, Span, Style};
 use crate::txt::{self, TextBook};
 
@@ -54,18 +55,6 @@ impl OpenedBook {
                 language: None,
                 chapters: 1,
             },
-        }
-    }
-
-    /// The paragraphs of one chapter (0-based).
-    ///
-    /// # Errors
-    /// Returns `ChapterOutOfRange` if there is no such chapter.
-    pub fn chapter_text(&self, index: usize) -> Result<Vec<String>, BookError> {
-        match self {
-            Self::Epub(book) => book.chapter_text(index),
-            Self::Text(book) if index == 0 => Ok(book.paragraphs().to_vec()),
-            Self::Text(_) => Err(BookError::ChapterOutOfRange { index, count: 1 }),
         }
     }
 
@@ -306,9 +295,9 @@ mod tests {
     fn text_book_has_exactly_one_chapter() {
         let book = OpenedBook::open(&fixture("sample.txt")).unwrap();
         assert_eq!(book.meta().chapters, 1);
-        assert_eq!(book.chapter_text(0).unwrap().len(), 2);
+        assert_eq!(book.chapter_blocks(0).unwrap().len(), 2);
         assert!(matches!(
-            book.chapter_text(1),
+            book.chapter_blocks(1),
             Err(BookError::ChapterOutOfRange { index: 1, count: 1 })
         ));
     }

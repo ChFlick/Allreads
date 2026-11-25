@@ -82,7 +82,7 @@ impl Database {
             "UPDATE language SET edited_by_user = 1 WHERE code = ?1",
             [code],
         )?;
-        super::book::require_one_changed(changed, || format!("language {code}"))
+        super::require_one_changed(changed, || format!("language {code}"))
     }
 
     /// The language with this code, if it has been stored.

@@ -2,8 +2,7 @@
 
 use rusqlite::{params, OptionalExtension, Row};
 
-use super::book::require_one_changed;
-use super::{require_text, Database, DbError};
+use super::{require_one_changed, require_text, Database, DbError};
 use crate::text::key::{parse_substitutions, term_key};
 
 /// A word's status. A word with no saved term is "new".

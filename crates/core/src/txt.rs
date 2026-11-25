@@ -3,7 +3,8 @@
 use std::fs;
 use std::path::Path;
 
-use crate::epub::{normalize_whitespace, BookError};
+use crate::book::BookError;
+use crate::text::normalize_whitespace;
 
 /// A plain-text book. Paragraphs are separated by blank lines.
 pub struct TextBook {

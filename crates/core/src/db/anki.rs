@@ -2,8 +2,7 @@
 
 use rusqlite::{params, OptionalExtension, Row};
 
-use super::book::require_one_changed;
-use super::{u32_column, Database, DbError};
+use super::{require_one_changed, u32_column, Database, DbError};
 
 /// The `AnkiDroid` note a term was pushed as.
 #[derive(Debug, Clone, PartialEq, Eq)]

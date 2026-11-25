@@ -1,34 +1,12 @@
-//! Reading EPUB files: book metadata and chapter text as plain paragraphs.
+//! Reading EPUB files: metadata, cover, chapter titles and chapter blocks.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use scraper::{Html, Selector};
 
+use crate::book::{BookError, BookMeta};
 use crate::text::blocks::{html_to_blocks, Block};
-use thiserror::Error;
-
-/// Basic facts about a book, read from its EPUB metadata.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BookMeta {
-    pub title: Option<String>,
-    pub author: Option<String>,
-    pub language: Option<String>,
-    /// Number of readable chapters in reading order.
-    pub chapters: usize,
-}
-
-/// Errors from opening or reading a book file (EPUB or TXT).
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum BookError {
-    #[error("file not found: {}", .0.display())]
-    NotFound(PathBuf),
-    #[error("could not read the book: {0}")]
-    Invalid(String),
-    #[error("unsupported file type: {0}")]
-    Unsupported(String),
-    #[error("chapter {index} is out of range; the book has {count} chapters")]
-    ChapterOutOfRange { index: usize, count: usize },
-}
+use crate::text::normalize_whitespace;
 
 /// An open EPUB. Opening parses the archive once; reads then reuse it.
 pub struct Book {
@@ -124,34 +102,6 @@ impl Book {
             .map_err(|e| BookError::Invalid(e.to_string()))?;
         Ok(html_to_blocks(content.content()))
     }
-
-    /// Returns the paragraphs of one chapter (0-based, in reading order).
-    ///
-    /// # Errors
-    /// Returns `ChapterOutOfRange` if `index` is past the last chapter, and `Invalid` if the chapter cannot be read.
-    pub fn chapter_text(&self, index: usize) -> Result<Vec<String>, BookError> {
-        let reader = self.epub.reader();
-        let count = reader.len();
-        if index >= count {
-            return Err(BookError::ChapterOutOfRange { index, count });
-        }
-        let content = reader
-            .get(index)
-            .map_err(|e| BookError::Invalid(e.to_string()))?;
-        Ok(html_to_paragraphs(content.content()))
-    }
-}
-
-/// Turns XHTML into one string per paragraph, heading or other block.
-///
-/// Inline markup (`<i>`, `<b>`, `<span>`) stays inside its block. Text that sits
-/// directly inside a container such as `<div>` or `<body>` also becomes a
-/// paragraph. Whitespace runs collapse to one space, but non-breaking spaces are
-/// kept, since French typography relies on them. `<br>` becomes a space, and
-/// empty blocks are dropped.
-#[must_use]
-pub fn html_to_paragraphs(html: &str) -> Vec<String> {
-    html_to_blocks(html).iter().map(Block::text).collect()
 }
 
 /// The text of the first heading (`h1` to `h6`), if there is a non-blank one.
@@ -164,25 +114,24 @@ fn first_heading(html: &str) -> Option<String> {
         .find(|text| !text.trim().is_empty())
 }
 
-/// Collapses runs of ASCII whitespace to one space and trims the ends.
-/// Non-breaking spaces (U+00A0) are left alone.
-pub(crate) fn normalize_whitespace(text: &str) -> String {
-    let mut normalized = String::with_capacity(text.len());
-    for word in text
-        .split(|c: char| c.is_ascii_whitespace())
-        .filter(|word| !word.is_empty())
-    {
-        if !normalized.is_empty() {
-            normalized.push(' ');
-        }
-        normalized.push_str(word);
-    }
-    normalized
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    /// A chapter's blocks as plain strings.
+    fn paragraphs(book: &Book, index: usize) -> Result<Vec<String>, BookError> {
+        Ok(book
+            .chapter_blocks(index)?
+            .iter()
+            .map(Block::text)
+            .collect())
+    }
+
+    /// XHTML as plain strings, one per block.
+    fn html_to_paragraphs(html: &str) -> Vec<String> {
+        html_to_blocks(html).iter().map(Block::text).collect()
+    }
 
     fn fixture(name: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -203,7 +152,7 @@ mod tests {
     fn reads_first_chapter_as_paragraphs() {
         let book = Book::open(&fixture("tiny.epub")).unwrap();
         assert_eq!(
-            book.chapter_text(0).unwrap(),
+            paragraphs(&book, 0).unwrap(),
             vec![
                 "Chapitre un".to_string(),
                 "Il était une fois un homme qui lisait.".to_string(),
@@ -218,10 +167,10 @@ mod tests {
         let book = Book::open(&fixture("tiny.epub")).unwrap();
         assert_eq!(book.chapter_count(), 2);
         assert_eq!(
-            book.chapter_text(1).unwrap(),
+            paragraphs(&book, 1).unwrap(),
             vec!["Chapitre deux", "La suite commence ici."]
         );
-        assert_eq!(book.chapter_text(0).unwrap().len(), 4);
+        assert_eq!(paragraphs(&book, 0).unwrap().len(), 4);
     }
 
     #[test]
@@ -243,7 +192,7 @@ mod tests {
     fn chapter_past_the_end_is_out_of_range() {
         let book = Book::open(&fixture("tiny.epub")).unwrap();
         assert_eq!(
-            book.chapter_text(5),
+            paragraphs(&book, 5),
             Err(BookError::ChapterOutOfRange { index: 5, count: 2 })
         );
     }
@@ -258,7 +207,7 @@ mod tests {
     fn layout_chapter_keeps_text_from_divs_and_bare_body() {
         let book = Book::open(&fixture("layout.epub")).unwrap();
         assert_eq!(
-            book.chapter_text(0).unwrap(),
+            paragraphs(&book, 0).unwrap(),
             vec![
                 "Texte nu.",
                 "Premier paragraphe & co.",

@@ -89,6 +89,17 @@ pub(crate) fn require_text(field: &str, value: &str) -> Result<(), DbError> {
     Ok(())
 }
 
+/// Turns "no rows changed" into `NotFound`, so callers can tell a missing row apart.
+pub(crate) fn require_one_changed(
+    changed: usize,
+    what: impl FnOnce() -> String,
+) -> Result<(), DbError> {
+    if changed == 0 {
+        return Err(DbError::NotFound { what: what() });
+    }
+    Ok(())
+}
+
 /// Reads an INTEGER column as `u32`, failing cleanly if the value is out of range.
 pub(crate) fn u32_column(row: &rusqlite::Row, index: usize) -> rusqlite::Result<u32> {
     let value: i64 = row.get(index)?;
