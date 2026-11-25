@@ -201,6 +201,12 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
     - **Done when** on a phone: the word button and sentence buttons speak in the book's language at the chosen speed and voice, the playing row is tinted, and a missing voice leads to the TTS settings. M4 is complete.
 26. **Library, stats and backup.** Browse Standard Ebooks and Project Gutenberg through their OPDS catalogues (parsed in Rust with `quick-xml`) and download books in the chosen language. Add a stats screen (F25), and back up and restore everything as one zip file (F27).
     - **Done when** you can find, download and start a new French book without leaving the app.
+26a. **Make the repository presentable.** *Added 2026-11-25, after the repository went public.* Before v1.0, once the screens have settled:
+    - **GitHub page:** a one-line description, topics (android, rust, language-learning, epub, anki, uniffi, kotlin, jetpack-compose), and the latest release linked.
+    - **README:** what it is and who it is for, the feature list, screenshots (library, reader with colours, word drawer, Settings), how to install from Releases, the privacy promise (no telemetry; keys stay on the phone), how it works (Rust core, UniFFI, Compose), how to build, the CI badge, and credits (Lukaisu presets, Wiktionary and kaikki.org under CC BY-SA, DeepL, AnkiDroid).
+    - **Screenshots:** taken on a phone, or with Compose screenshot tests, in light and dark mode, stored in `docs/screenshots/`.
+    - **Repository files:** `CONTRIBUTING.md` (how to build, the checks to run, conventional commits), issue templates for bugs and feature ideas, and a short `SECURITY.md` on how to report a problem.
+    - **Done when** someone landing on the GitHub page can tell what the app does, see it, and install it in a few minutes.
 27. **Release.** Set up a release keystore and signing, reproducible-build settings, and fastlane metadata with screenshots.
     - Publish signed APKs on GitHub releases. F-Droid was dropped on 2026-11-24.
     - **Done when** the app installs from a GitHub release APK. M5 is complete, and v1.0 is out.
