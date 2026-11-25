@@ -15,6 +15,7 @@ impl Database {
     /// # Errors
     /// Returns a database error if the statement fails.
     pub fn upsert_language(&self, language: &LanguagePreset) -> Result<(), DbError> {
+        self.forget_rules();
         self.conn().execute(
             "INSERT INTO language (code, name, word_characters, sentence_end_chars,
                  sentence_exceptions, character_substitutions, rtl, remove_spaces,

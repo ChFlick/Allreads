@@ -12,8 +12,8 @@ fn built() -> (tempfile::TempDir, Connection) {
     let dir = tempfile::tempdir().unwrap();
     let output = dir.path().join("fr-en.sqlite");
     let counts = allreads_dictgen::build(&fixture(), &output, "fr", "fr-en", "2026-11-25").unwrap();
-    // lit (noun), lire (verb), l'homme; the form-of entries and the German one are not headwords.
-    assert_eq!(counts.entries, 3);
+    // lit (noun), lire (verb), l'homme, bon ben; the form-of entries and the German one are not headwords.
+    assert_eq!(counts.entries, 4);
     let conn = Connection::open(&output).unwrap();
     (dir, conn)
 }
@@ -95,7 +95,7 @@ fn the_file_says_what_it_is() {
     );
     assert_eq!(
         meta,
-        ["built=2026-11-25", "entries=3", "format=1", "pair=fr-en"]
+        ["built=2026-11-25", "entries=4", "format=1", "pair=fr-en"]
     );
 }
 
@@ -127,5 +127,5 @@ fn a_gzipped_extract_is_read_too() {
     let counts =
         allreads_dictgen::build(&input, &dir.path().join("out.sqlite"), "fr", "fr-en", "x")
             .unwrap();
-    assert_eq!(counts.entries, 3);
+    assert_eq!(counts.entries, 4);
 }

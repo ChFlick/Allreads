@@ -1,6 +1,5 @@
 //! Saved vocabulary terms and their statuses.
 
-use crate::text::LanguageRules;
 use rusqlite::{params, OptionalExtension, Row};
 
 use super::{require_one_changed, require_text, Database, DbError};
@@ -214,12 +213,12 @@ impl Database {
     /// Returns a database error if the language cannot be read.
     /// A phrase is keyed by its words' keys (see `LanguageRules::term_key`).
     pub fn term_key(&self, language_code: &str, text: &str) -> Result<Option<String>, DbError> {
+        if let Some(rules) = self.rules(language_code)? {
+            return Ok(Some(rules.term_key(text)));
+        }
         let Some(language) = self.language(language_code)? else {
             return Ok(None);
         };
-        if let Ok(rules) = LanguageRules::new(&language) {
-            return Ok(Some(rules.term_key(text)));
-        }
         // A language whose word rules do not compile cannot tokenize, so fall
         // back to plain normalisation, as single words always used.
         let substitutions = parse_substitutions(&language.character_substitutions);
@@ -403,6 +402,30 @@ mod tests {
         );
         // A single word keeps its key; trailing punctuation is not part of it.
         assert_eq!(db.term_key("fr", "Chat.").unwrap().as_deref(), Some("chat"));
+    }
+
+    #[test]
+    fn changing_a_language_changes_its_keys_at_once() {
+        let db = french_db();
+        let mut french = crate::presets::builtin_presets()
+            .unwrap()
+            .into_iter()
+            .find(|p| p.code == "fr")
+            .unwrap();
+        db.upsert_language(&french).unwrap();
+        assert_eq!(
+            db.term_key("fr", "précieuse").unwrap().as_deref(),
+            Some("précieuse")
+        );
+        // Without accented letters as word characters, "é" splits the word;
+        // the rules cached for the first preset must not linger.
+        french.word_characters = "a-zA-Z".into();
+        db.upsert_language(&french).unwrap();
+        assert_eq!(
+            db.term_key("fr", "précieuse").unwrap().as_deref(),
+            Some("pr cieuse")
+        );
+        assert_eq!(db.term_key("xx", "a").unwrap(), None);
     }
 
     #[test]

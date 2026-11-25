@@ -13,8 +13,12 @@ pub mod stats;
 pub mod term;
 pub mod translation_cache;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
+use crate::text::LanguageRules;
 use rusqlite::Connection;
 use thiserror::Error;
 
@@ -41,6 +45,9 @@ pub const SCHEMA_VERSION: i64 = 7;
 /// An open `SQLite` database with the schema applied.
 pub struct Database {
     conn: Connection,
+    /// Compiled word and sentence rules per language code, so keying a word
+    /// does not compile regexes every time. Cleared when a language changes.
+    rules: RefCell<HashMap<String, Arc<LanguageRules>>>,
 }
 
 impl Database {
@@ -61,7 +68,34 @@ impl Database {
     fn from_connection(mut conn: Connection) -> Result<Self, DbError> {
         conn.pragma_update(None, "foreign_keys", true)?;
         migrations::migrations::runner().run(&mut conn)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            rules: RefCell::new(HashMap::new()),
+        })
+    }
+
+    /// The compiled rules for a language, or `None` if it is not stored or its
+    /// rules do not compile.
+    pub(crate) fn rules(&self, language_code: &str) -> Result<Option<Arc<LanguageRules>>, DbError> {
+        if let Some(rules) = self.rules.borrow().get(language_code) {
+            return Ok(Some(Arc::clone(rules)));
+        }
+        let Some(language) = self.language(language_code)? else {
+            return Ok(None);
+        };
+        let Ok(rules) = LanguageRules::new(&language) else {
+            return Ok(None);
+        };
+        let rules = Arc::new(rules);
+        self.rules
+            .borrow_mut()
+            .insert(language_code.to_string(), Arc::clone(&rules));
+        Ok(Some(rules))
+    }
+
+    /// Forgets the compiled rules, after a language was added or changed.
+    pub(crate) fn forget_rules(&self) {
+        self.rules.borrow_mut().clear();
     }
 
     /// The underlying connection, for the repository modules.

@@ -96,9 +96,20 @@ class Dictionaries(
     fun download(dictionary: AvailableDictionary) {
         val pair = dictionary.pair
         synchronized(jobs) {
-            if (jobs[pair]?.isActive == true) return
-            jobs[pair] = scope.launch { run(dictionary) }
+            val previous = jobs[pair]
+            if (previous != null && previous.isActive && !previous.isCancelled) return
+            jobs[pair] = scope.launch {
+                // A cancelled download may still be blocked in a read; let it end
+                // first, so two downloads never write the same file.
+                previous?.join()
+                run(dictionary)
+            }
         }
+    }
+
+    /** Waits until the current download of `pair` (if any) has finished, either way. */
+    suspend fun awaitDownload(pair: String) {
+        synchronized(jobs) { jobs[pair] }?.join()
     }
 
     private suspend fun run(dictionary: AvailableDictionary) {
@@ -129,7 +140,8 @@ class Dictionaries(
     }
 
     fun cancel(pair: String) {
-        synchronized(jobs) { jobs.remove(pair)?.cancel() }
+        // The job stays in the map until it ends, so a new download waits for it.
+        synchronized(jobs) { jobs[pair]?.cancel() }
         setState(pair, null)
     }
 

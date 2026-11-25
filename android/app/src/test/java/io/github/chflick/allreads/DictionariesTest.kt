@@ -126,4 +126,26 @@ class DictionariesTest {
         dictionaries.remove("fr-en")
         assertTrue(dictionaries.list.value.installed.isEmpty())
     }
+
+    @Test
+    fun aDownloadCanBeAwaitedWhetherItWorksOrNot() = runBlocking {
+        fetcher.fail = true
+        dictionaries.download(french)
+        withTimeout(5_000) { dictionaries.awaitDownload("fr-en") }
+        assertTrue(dictionaries.downloads.value["fr-en"] is DownloadState.Failed)
+        fetcher.fail = false
+        dictionaries.download(french)
+        withTimeout(5_000) { dictionaries.awaitDownload("fr-en") }
+        assertEquals(listOf("fr-en"), dictionaries.list.value.installed.map { it.pair })
+    }
+
+    @Test
+    fun downloadingAgainAfterCancelWaitsForTheOldJob() = runBlocking {
+        dictionaries.download(french)
+        dictionaries.cancel("fr-en")
+        dictionaries.download(french)
+        withTimeout(5_000) { dictionaries.awaitDownload("fr-en") }
+        assertEquals("half and the rest", files.received)
+        assertTrue(temp.root.listFiles().orEmpty().isEmpty())
+    }
 }

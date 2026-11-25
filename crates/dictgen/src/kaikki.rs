@@ -84,7 +84,8 @@ const NOISE_TAGS: [&str; 5] = [
 /// table of forms (lire → lis, lisait, …).
 #[must_use]
 pub fn convert(entry: &KaikkiEntry, rules: &LanguageRules) -> (Option<Headword>, Vec<FormLink>) {
-    let key = rules.key(&entry.word);
+    // Keyed like the app keys saved terms, so phrases match: "bon, ben" is `bon ben`.
+    let key = rules.term_key(&entry.word);
     if key.is_empty() {
         return (None, Vec::new());
     }
@@ -122,7 +123,7 @@ pub fn convert(entry: &KaikkiEntry, rules: &LanguageRules) -> (Option<Headword>,
         if noise || text == entry.word || text.contains('+') || text.contains(' ') {
             continue;
         }
-        let form_key = rules.key(text);
+        let form_key = rules.term_key(text);
         if !form_key.is_empty() {
             links.push(FormLink {
                 key: form_key,

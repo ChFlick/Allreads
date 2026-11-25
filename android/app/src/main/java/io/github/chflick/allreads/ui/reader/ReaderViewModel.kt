@@ -3,7 +3,6 @@ package io.github.chflick.allreads.ui.reader
 import uniffi.allreads_ffi.PhraseSuggestion
 import io.github.chflick.allreads.reader.textForTranslation
 import io.github.chflick.allreads.data.DownloadState
-import kotlinx.coroutines.flow.first
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.AvailableDictionary
 import io.github.chflick.allreads.speech.SpeakResult
@@ -275,13 +274,20 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     /** Adds the offline dictionary's entry, or a download offer, to the drawer. */
     private suspend fun lookUpSelected(language: String, text: String) {
         val lookup = runCatching { repository.lookupWord(language, text) }.getOrNull()
-        val offer = if (lookup == null) {
-            val dictionaries = services.dictionaries
-            if (dictionaries.list.value.available == null) runCatching { dictionaries.refresh() }
-            dictionaries.availableFor(language)
-        } else {
-            null
+        val dictionaries = services.dictionaries
+        if (lookup == null && dictionaries.list.value.available == null) {
+            // Fetch the list in the background, so the tap's translation never waits on it.
+            viewModelScope.launch {
+                runCatching { dictionaries.refresh() }
+                val offer = dictionaries.availableFor(language) ?: return@launch
+                _state.update { state ->
+                    val current = state.selected?.takeIf { it.text == text && it.dictionary == null }
+                        ?: return@update state
+                    state.copy(selected = current.copy(dictionaryOffer = offer))
+                }
+            }
         }
+        val offer = if (lookup == null) dictionaries.availableFor(language) else null
         _state.update { state ->
             val current = state.selected?.takeIf { it.text == text } ?: return@update state
             state.copy(selected = current.copy(dictionary = lookup, dictionaryOffer = offer))
@@ -306,7 +312,9 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         val offer = _state.value.selected?.dictionaryOffer ?: return
         services.dictionaries.download(offer)
         viewModelScope.launch {
-            services.dictionaries.list.first { list -> list.installed.any { it.pair == offer.pair } }
+            // Wait for this download to end, whether it worked or not.
+            services.dictionaries.awaitDownload(offer.pair)
+            if (services.dictionaries.list.value.installed.none { it.pair == offer.pair }) return@launch
             val word = _state.value.selected ?: return@launch
             val language = _state.value.book?.languageCode ?: return@launch
             lookUpSelected(language, word.text)
