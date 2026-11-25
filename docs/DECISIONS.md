@@ -53,3 +53,4 @@
 | 2026-11-25 | Built-in languages are refreshed from the presets on every start unless the user edited them (`edited_by_user`, migration V6); supersedes "added only if missing" | Otherwise preset fixes (like the German and Spanish word characters, or French elision) never reach existing installs |
 | 2026-11-25 | German and Spanish use the full Latin word-character range (`À-ÖØ-öø-ȳ` plus `ẞ`), like French and English | Their old classes split loanwords such as "Café", "naïv" and "garçon" |
 | 2026-11-25 | Re-saving a term without a parent keeps its existing lemma link | The word drawer re-saves terms; it must never unlink a word from its lemma |
+| 2026-11-25 | The app's version comes from the Rust workspace's `Cargo.toml` (Gradle reads it into `versionName` and `BuildConfig`) | One version number; the Kotlin test checks that Rust and the app agree |

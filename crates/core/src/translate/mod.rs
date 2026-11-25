@@ -65,9 +65,10 @@ pub(crate) fn http_agent() -> ureq::Agent {
         .into()
 }
 
-#[cfg(test)]
-pub(crate) mod mock_server {
+#[cfg(any(test, feature = "test-support"))]
+pub mod mock_server {
     //! A local HTTP server for tests: it answers a fixed list of requests, in order.
+    //! Other crates' tests get it through the `test-support` feature.
 
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
@@ -75,7 +76,11 @@ pub(crate) mod mock_server {
 
     /// Serves one request with `status` and a JSON `body`. Returns the base URL
     /// and a handle that yields the raw request (head and body) once served.
-    pub(crate) fn serve_once(status: u16, body: &str) -> (String, JoinHandle<String>) {
+    ///
+    /// # Panics
+    /// Panics if the test server cannot bind or the request is malformed.
+    #[must_use]
+    pub fn serve_once(status: u16, body: &str) -> (String, JoinHandle<String>) {
         let (url, handle) = serve(&[(status, body)]);
         (
             url,
@@ -84,7 +89,11 @@ pub(crate) mod mock_server {
     }
 
     /// Serves one request per response, in order. The handle yields every raw request.
-    pub(crate) fn serve(responses: &[(u16, &str)]) -> (String, JoinHandle<Vec<String>>) {
+    ///
+    /// # Panics
+    /// Panics if the test server cannot bind.
+    #[must_use]
+    pub fn serve(responses: &[(u16, &str)]) -> (String, JoinHandle<Vec<String>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let responses: Vec<(u16, String)> = responses

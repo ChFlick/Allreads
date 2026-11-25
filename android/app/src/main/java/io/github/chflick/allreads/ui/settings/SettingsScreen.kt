@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.chflick.allreads.BuildConfig
 import io.github.chflick.allreads.data.AppSettings
 import io.github.chflick.allreads.data.Services
 import io.github.chflick.allreads.data.ThemeMode
@@ -111,7 +112,7 @@ fun SettingsScreen(services: Services) {
             HorizontalDivider()
             Section("About")
             Text(
-                "Allreads 0.1.0 · MIT licence. Language rules adapted from Lukaisu. " +
+                "Allreads ${BuildConfig.VERSION_NAME} · MIT licence. Language rules adapted from Lukaisu. " +
                     "Translations by DeepL with your own key; nothing else leaves the phone.",
                 style = MaterialTheme.typography.bodySmall,
             )

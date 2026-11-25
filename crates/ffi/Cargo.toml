@@ -19,4 +19,5 @@ uniffi = { version = "0.32.2", features = ["cli"] }
 workspace = true
 
 [dev-dependencies]
+allreads-core = { path = "../core", features = ["test-support"] }
 tempfile = "3.27.0"

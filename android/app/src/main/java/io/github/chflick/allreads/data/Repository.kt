@@ -26,7 +26,7 @@ class Repository(val dataDir: File) {
 
     suspend fun library(): List<BookSummary> = io { app.library() }
 
-    suspend fun book(bookId: Long): BookSummary? = io { app.library().firstOrNull { it.id == bookId } }
+    suspend fun book(bookId: Long): BookSummary? = io { app.book(bookId) }
 
     suspend fun languageCodes(): List<String> = io { app.languageCodes() }
 

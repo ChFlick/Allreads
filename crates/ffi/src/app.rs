@@ -293,6 +293,17 @@ impl App {
             .collect()
     }
 
+    /// One book, or `None` if it is not in the library.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn book(&self, book_id: i64) -> Result<Option<BookSummary>, AllreadsError> {
+        let db = self.db()?;
+        db.book(book_id)?
+            .map(|row| Self::summary(&db, row))
+            .transpose()
+    }
+
     /// The book's chapter titles in reading order. `None` means the chapter has
     /// no heading; show "Chapter N" instead.
     ///
@@ -848,24 +859,9 @@ mod tests {
         assert_eq!(app.mark_rest_known(id, 0, 1).unwrap(), 0);
     }
 
+    /// A DeepL client pointed at a local server that answers one request.
     fn mock_deepl(status: u16, body: &str) -> (DeepL, std::thread::JoinHandle<String>) {
-        // A tiny local server stands in for DeepL; it answers exactly one request.
-        use std::io::{Read, Write};
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
-        let body = body.to_string();
-        let handle = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut buffer = [0; 4096];
-            let read = stream.read(&mut buffer).unwrap();
-            let response = format!(
-                "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\n\
-                 Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            stream.write_all(response.as_bytes()).unwrap();
-            String::from_utf8_lossy(&buffer[..read]).to_string()
-        });
+        let (url, handle) = allreads_core::translate::mock_server::serve_once(status, body);
         (DeepL::with_base_url("test-key:fx", &url), handle)
     }
 
@@ -1036,6 +1032,21 @@ mod tests {
             .map(|(id, _)| *id)
             .collect();
         assert_eq!(open, [ids[2], ids[3], ids[0]]);
+    }
+
+    #[test]
+    fn a_single_book_is_found_by_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let id = app
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
+            .unwrap()
+            .id;
+        assert_eq!(
+            app.book(id).unwrap().map(|b| b.title),
+            Some("Le Petit Test".to_string())
+        );
+        assert_eq!(app.book(id + 1).unwrap(), None);
     }
 
     #[test]

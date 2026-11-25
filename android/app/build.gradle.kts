@@ -14,6 +14,12 @@ val rustJniLibs = layout.buildDirectory.dir("rustJniLibs")
 val uniffiBindings = layout.buildDirectory.dir("generated/uniffi")
 val hostLibrary = File(repoRoot, "target/debug/liballreads_ffi.so")
 
+/** The app's version is the Rust workspace's version, so the two never drift. */
+val workspaceVersion: String =
+    Regex("""(?m)^version = "([^"]+)"""").find(File(repoRoot, "Cargo.toml").readText())
+        ?.groupValues?.get(1)
+        ?: error("No version in Cargo.toml")
+
 android {
     namespace = "io.github.chflick.allreads"
     compileSdk = 35
@@ -23,7 +29,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = workspaceVersion
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
@@ -42,6 +48,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     sourceSets {
@@ -82,10 +89,20 @@ dependencies {
 
 // --- Rust --------------------------------------------------------------
 
+/** Everything the Rust build reads, so Gradle can skip it when nothing changed. */
+val rustSources = files(
+    File(repoRoot, "Cargo.toml"),
+    File(repoRoot, "Cargo.lock"),
+    fileTree(File(repoRoot, "crates")) { exclude("**/target/**") },
+    fileTree(File(repoRoot, "data/languages")),
+)
+
 /** Builds liballreads_ffi.so for the three Android ABIs at API 26. */
 val cargoNdkBuild by tasks.registering(Exec::class) {
     group = "rust"
     description = "Builds the Rust library for Android with cargo-ndk."
+    inputs.files(rustSources)
+    outputs.dir(rustJniLibs)
     workingDir = repoRoot
     commandLine(
         "cargo", "ndk",
@@ -100,6 +117,8 @@ val cargoNdkBuild by tasks.registering(Exec::class) {
 val cargoHostBuild by tasks.registering(Exec::class) {
     group = "rust"
     description = "Builds the Rust library for the host machine."
+    inputs.files(rustSources)
+    outputs.file(hostLibrary)
     workingDir = repoRoot
     commandLine("cargo", "build", "--locked", "-p", "allreads-ffi")
 }
@@ -109,6 +128,8 @@ val generateUniffiBindings by tasks.registering(Exec::class) {
     group = "rust"
     description = "Generates Kotlin bindings with uniffi-bindgen."
     dependsOn(cargoHostBuild)
+    inputs.file(hostLibrary)
+    outputs.dir(uniffiBindings)
     workingDir = repoRoot
     commandLine(
         "cargo", "run", "--locked", "-p", "allreads-ffi", "--bin", "uniffi-bindgen", "--",

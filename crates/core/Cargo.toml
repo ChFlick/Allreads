@@ -20,6 +20,10 @@ toml = "1.2.2"
 unicode-normalization = "0.1.26"
 ureq = { version = "3.5.2", features = ["json"] }
 
+[features]
+# Exposes test helpers (a local mock HTTP server) to other crates' tests.
+test-support = []
+
 [lints]
 workspace = true
 

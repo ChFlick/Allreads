@@ -26,8 +26,8 @@ class RustBridgeTest {
     private val fixtures = File(System.getProperty("allreads.fixtures") ?: error("allreads.fixtures not set"))
 
     @Test
-    fun coreVersionComesFromRust() {
-        assertEquals("0.1.0", coreVersion())
+    fun coreVersionComesFromRustAndMatchesTheApp() {
+        assertEquals(BuildConfig.VERSION_NAME, coreVersion())
     }
 
     /** Step 6's check: an invalid path raises a typed Kotlin exception. */
