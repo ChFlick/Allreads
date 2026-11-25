@@ -6,17 +6,22 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.OutlinedTextField
+import io.github.chflick.allreads.anki.newDeckName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -55,7 +60,6 @@ private data class AnkiState(
  * cards go to. Checked again whenever the screen resumes, so installing
  * AnkiDroid or changing the permission in system settings shows up at once.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AnkiSection(services: Services) {
     val context = LocalContext.current
@@ -114,9 +118,9 @@ fun AnkiSection(services: Services) {
         }
     }
 
-    fun createDeck() {
+    fun createDeck(name: String) {
         scope.launch {
-            val id = runCatching { withContext(Dispatchers.IO) { services.anki.addDeck(SUGGESTED_DECK) } }.getOrNull()
+            val id = runCatching { withContext(Dispatchers.IO) { services.anki.addDeck(name) } }.getOrNull()
             if (id == null) {
                 state = state.copy(error = "AnkiDroid could not create the deck.")
             } else {
@@ -182,25 +186,97 @@ fun AnkiSection(services: Services) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** An existing deck from a dropdown, or a new deck (top level or a subdeck). */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: () -> Unit) {
+private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (String) -> Unit) {
     val chosen = state.decks.firstOrNull { it.id == state.deckId }
-    Text(
-        if (chosen != null) "New cards go to “${chosen.name}”." else "Choose the deck for new cards.",
-        style = MaterialTheme.typography.labelLarge,
+    DeckDropdown(
+        label = "Deck for new cards",
+        selected = chosen?.name ?: "Choose a deck",
+        options = state.decks.map { it.name to it.id },
+        onSelect = onChoose,
     )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        state.decks.forEach { deck ->
-            FilterChip(
-                selected = deck.id == state.deckId,
-                onClick = { onChoose(deck.id) },
-                label = { Text(deck.name) },
-            )
-        }
+
+    var creating by remember { mutableStateOf(false) }
+    if (!creating) {
+        OutlinedButton(onClick = { creating = true }) { Text("New deck…") }
+        return
     }
-    if (state.decks.none { it.name == SUGGESTED_DECK }) {
-        OutlinedButton(onClick = onCreate) { Text("Create “$SUGGESTED_DECK” deck") }
+    var name by remember { mutableStateOf(SUGGESTED_DECK) }
+    // null means a top-level deck.
+    var parent by remember { mutableStateOf<String?>(null) }
+    Text("New deck", style = MaterialTheme.typography.labelLarge)
+    DeckDropdown(
+        label = "Inside",
+        selected = parent ?: TOP_LEVEL,
+        options = listOf<Pair<String, String?>>(TOP_LEVEL to null) + state.decks.map { it.name to it.name },
+        onSelect = { parent = it },
+    )
+    OutlinedTextField(
+        value = name,
+        onValueChange = { name = it },
+        label = { Text("Name") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    val fullName = newDeckName(parent, name)
+    val exists = state.decks.any { it.name.equals(fullName, ignoreCase = true) }
+    Text(
+        when {
+            fullName == null -> "Enter a name."
+            exists -> "“$fullName” already exists; pick it above."
+            else -> "Creates “$fullName”."
+        },
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(
+            enabled = fullName != null && !exists,
+            onClick = {
+                fullName?.let(onCreate)
+                creating = false
+            },
+        ) { Text("Create and use") }
+        OutlinedButton(onClick = { creating = false }) { Text("Cancel") }
+    }
+}
+
+private const val TOP_LEVEL = "Top level"
+
+/** A read-only dropdown: shows `selected`, offers `options` as label → value. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> DeckDropdown(
+    label: String,
+    selected: String,
+    options: List<Pair<String, T>>,
+    onSelect: (T) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (text, value) ->
+                DropdownMenuItem(
+                    text = { Text(text) },
+                    onClick = {
+                        onSelect(value)
+                        expanded = false
+                    },
+                )
+            }
+        }
     }
 }
 
