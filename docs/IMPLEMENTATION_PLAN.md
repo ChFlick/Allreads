@@ -43,7 +43,23 @@ Kept as they are: untapped words stay new until marked (only "Mark the rest of t
 
 Dropped: parallel mode (the translation half of step 21; per-sentence buttons already cover it).
 
-Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse and stats parts of step 26; backup stays in v1), and backup until step 26 (Anki keeps the cards meanwhile).
+Deferred past v1: AI "Explain" (step 22), and all of step 26: the book browser, stats, and (since 2026-11-25) backup, which Christoph does not need; Anki keeps the cards. See "Roadmap after v1" below.
+
+**What is left for v1 (2026-11-25):** step 19's phone check, then 26a (make the repository presentable) and 27 (release).
+
+## Roadmap after v1
+
+Ideas kept for later, roughly in order of interest. None is planned in detail.
+
+- **Backup and restore** (F27, from step 26): the database, books and covers as one zip, saved through the system file picker or shared; restore on a new phone. Dropped from v1 on 2026-11-25.
+- **Book browser** (from step 26): find and download books from Standard Ebooks and Project Gutenberg (OPDS catalogues) without leaving the app.
+- **Stats** (F25, from step 26): known words per language, new words per day, % known per chapter.
+- **AI "Explain"** (step 22): grammar and idioms explained by an OpenAI-compatible or Anthropic model with the user's own key.
+- **More dictionaries:** German and Spanish → English through the same Dictionaries workflow.
+- **Cloud voices and audio on cards** (from step 25): a second `Speech` implementation, and audio files saved into Anki cards.
+- **Whole-chapter read-aloud** (dropped from step 25 in v1).
+- **CSV export** (step 20 was dropped): only if someone asks.
+- **iOS:** the Rust core with UniFFI's Swift bindings.
 
 
 1. **Install the toolchain.** Install `rustup` (stable), Android Studio with SDK 35 and NDK r27, the Android targets, and `cargo-ndk`:
@@ -162,10 +178,10 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
 
 ## Phases 4–6 (M3–M5): translation and AI, audio, library and release
 
-21. **Sentence translation and parallel mode.** Add `translate_sentence` with caching. Parallel mode renders a muted translation under each sentence and pre-translates the visible blocks in the background.
+21. *(Sentence translation is done by the per-row translate button, step 12; parallel mode was dropped 2026-11-25.)* **Sentence translation and parallel mode.** Add `translate_sentence` with caching. Parallel mode renders a muted translation under each sentence and pre-translates the visible blocks in the background.
     - **Done when** parallel mode stays smooth while scrolling a chapter.
     - *Added 2026-11-24:* the sentence cache keeps case, since case changes a translation, but normalises the text first (NFC, character substitutions, collapsed whitespace) so the same sentence always hits the cache. The key must also include the source and target language. V1 keys only by hash and provider, so a French-to-English and a French-to-German translation of the same sentence would collide. Fix this with a migration before step 14 writes to the cache.
-22. **AI "Explain".** Add an `AiProvider` trait with OpenAI-compatible (which covers many hosts, including local models) and Anthropic implementations. The prompt includes the target and native language, the sentence and the word, and asks for meaning in context, grammar and why this form. Answers are cached per sentence + word, and the sheet shows a cost estimate before the call.
+22. *(Deferred past v1; see the roadmap.)* **AI "Explain".** Add an `AiProvider` trait with OpenAI-compatible (which covers many hosts, including local models) and Anthropic implementations. The prompt includes the target and native language, the sentence and the word, and asks for meaning in context, grammar and why this form. Answers are cached per sentence + word, and the sheet shows a cost estimate before the call.
     - **Done when** "Explain" answers in the sheet and repeats are free.
     - *Added 2026-11-24:* the cache key combines the normalised sentence, the word's `term_key` and the native language.
 23. **Offline dictionaries.** A separate binary, `crates/dictgen`, filters kaikki.org Wiktionary JSONL into a compact SQLite file per language pair, published as a GitHub release asset. The app downloads it on demand and uses it for lookups and lemma linking (F12, F16).
@@ -200,7 +216,7 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
     - **Built for a cloud voice later:** a `Speech` interface (speak word, speak sentence, stop, voices) with the phone's TTS behind it, so a provider such as Google Cloud or Azure can be added as another implementation.
     - **Anki cards** keep Anki's `{{tts}}` tag; no audio files for now (revisit with cloud voices).
     - **Done when** on a phone: the word button and sentence buttons speak in the book's language at the chosen speed and voice, the playing row is tinted, and a missing voice leads to the TTS settings. M4 is complete.
-26. **Library, stats and backup.** Browse Standard Ebooks and Project Gutenberg through their OPDS catalogues (parsed in Rust with `quick-xml`) and download books in the chosen language. Add a stats screen (F25), and back up and restore everything as one zip file (F27).
+26. *(Deferred past v1, backup included, 2026-11-25; see the roadmap.)* **Library, stats and backup.** Browse Standard Ebooks and Project Gutenberg through their OPDS catalogues (parsed in Rust with `quick-xml`) and download books in the chosen language. Add a stats screen (F25), and back up and restore everything as one zip file (F27).
     - **Done when** you can find, download and start a new French book without leaving the app.
 26a. **Make the repository presentable.** *Added 2026-11-25, after the repository went public.* Before v1.0, once the screens have settled:
     - **GitHub page:** a one-line description, topics (android, rust, language-learning, epub, anki, uniffi, kotlin, jetpack-compose), and the latest release linked.

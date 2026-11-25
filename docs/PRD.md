@@ -69,9 +69,9 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 | F22 | Anki | ~~Export terms as `.apkg` and CSV~~ Dropped 2026-11-25 | — | — |
 | F23 | Audio | Read a sentence aloud (its row tinted while it plays) or the tapped word, with the phone's voices; speed and voice per language in Settings; optional speak-on-tap. Whole-chapter playback and cloud voices later (2026-11-25) | P1 | M4 |
 | F24 | Settings | Languages (from presets), translator, AI provider and key, Anki deck, and reading preferences | P0 | M1 |
-| F25 | Stats | Known words per language, new terms per day, % known per chapter | P1 | M5 |
+| F25 | Stats | Known words per language, new terms per day, % known per chapter (after v1) | P2 | later |
 | F26 | Discover | Browse and download from Project Gutenberg and Standard Ebooks by language | P2 | M5 |
-| F27 | Data | Back up and restore the database and books as one file | P1 | M5 |
+| F27 | Data | Back up and restore the database and books as one file (after v1, 2026-11-25) | P2 | later |
 
 ## Non-functional requirements
 
