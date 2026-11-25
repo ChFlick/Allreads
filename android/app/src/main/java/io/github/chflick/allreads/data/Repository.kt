@@ -1,6 +1,8 @@
 package io.github.chflick.allreads.data
 
 import io.github.chflick.allreads.anki.NoteTypeStore
+import io.github.chflick.allreads.anki.SyncStore
+import uniffi.allreads_ffi.AnkiNote
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,7 +23,7 @@ import uniffi.allreads_ffi.readBookMeta
  * screens never block the main thread. The Rust library (database, migrations,
  * presets) is opened on the first call, which is also on [Dispatchers.IO].
  */
-class Repository(val dataDir: File) : NoteTypeStore {
+class Repository(val dataDir: File) : NoteTypeStore, SyncStore {
     private val app: App by lazy { App(dataDir.absolutePath) }
 
     /** Where imported book files are copied. */
@@ -76,6 +78,15 @@ class Repository(val dataDir: File) : NoteTypeStore {
 
     /** The AnkiDroid deck chosen in Settings, if any. */
     suspend fun ankiDeckId(): Long? = io { app.ankiDeckId() }
+
+    override suspend fun deckId(): Long? = ankiDeckId()
+
+    override suspend fun pendingNotes(): List<AnkiNote> = io { app.pendingAnkiNotes() }
+
+    override suspend fun recordPush(note: AnkiNote, noteId: Long, deckId: Long) =
+        io { app.recordAnkiPush(note.termId, note.queueId, noteId, deckId) }
+
+    override suspend fun recordFailure(note: AnkiNote) = io { app.recordAnkiFailure(note.termId) }
 
     suspend fun setAnkiDeckId(deckId: Long) = io { app.setAnkiDeckId(deckId) }
 

@@ -33,4 +33,13 @@ interface AnkiBridge {
 
     /** Creates a note type, with `deckId` as its default deck; `null` if AnkiDroid refused. */
     fun addNoteType(noteType: AnkiNoteType, deckId: Long): Long?
+
+    /** Adds a note and returns its id, or `null` if AnkiDroid refused. */
+    fun addNote(noteTypeId: Long, deckId: Long, fields: List<String>, tags: Set<String>): Long?
+
+    /** Replaces a note's fields and tags; `false` if the note no longer exists. */
+    fun updateNote(noteId: Long, fields: List<String>, tags: Set<String>): Boolean
+
+    /** A note of this type whose first field (Word) is `word`, if one exists. */
+    fun findNote(noteTypeId: Long, word: String): Long?
 }

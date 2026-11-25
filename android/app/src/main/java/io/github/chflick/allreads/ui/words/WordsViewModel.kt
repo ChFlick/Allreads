@@ -43,7 +43,11 @@ data class WordsState(
 }
 
 /** PRD F17: the word list, with search and a filter by status and language. */
-class WordsViewModel(private val repository: Repository) : ViewModel() {
+class WordsViewModel(
+    private val repository: Repository,
+    /** Pushes saved changes to AnkiDroid. */
+    private val syncAnki: () -> Unit = {},
+) : ViewModel() {
     private val _state = MutableStateFlow(WordsState())
     val state: StateFlow<WordsState> = _state.asStateFlow()
 
@@ -102,6 +106,7 @@ class WordsViewModel(private val repository: Repository) : ViewModel() {
             }
             _state.update { it.copy(editing = null, message = result.exceptionOrNull()?.let(::describe)) }
             refresh()
+            if (result.isSuccess) syncAnki()
         }
     }
 

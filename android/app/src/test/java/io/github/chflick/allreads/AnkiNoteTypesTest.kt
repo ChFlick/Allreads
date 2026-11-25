@@ -20,7 +20,24 @@ class FakeAnki : AnkiBridge {
     var refuse = false
     private val nextId = java.util.concurrent.atomic.AtomicLong(100)
 
-    override fun access() = AnkiAccess.Connected
+    /** Notes by id: note type, deck, fields, tags. */
+    data class Note(val noteTypeId: Long, val deckId: Long, val fields: List<String>, val tags: Set<String>)
+    val notes: MutableMap<Long, Note> = java.util.concurrent.ConcurrentHashMap()
+    var access = AnkiAccess.Connected
+    var failAdds = false
+
+    override fun access() = access
+    override fun addNote(noteTypeId: Long, deckId: Long, fields: List<String>, tags: Set<String>): Long? {
+        if (failAdds) return null
+        return nextId.getAndIncrement().also { notes[it] = Note(noteTypeId, deckId, fields, tags) }
+    }
+    override fun updateNote(noteId: Long, fields: List<String>, tags: Set<String>): Boolean {
+        val note = notes[noteId] ?: return false
+        notes[noteId] = note.copy(fields = fields, tags = tags)
+        return true
+    }
+    override fun findNote(noteTypeId: Long, word: String): Long? =
+        notes.entries.firstOrNull { it.value.noteTypeId == noteTypeId && it.value.fields.first() == word }?.key
     override fun decks() = listOf(AnkiDeck(1, "Default"))
     override fun addDeck(name: String): Long? = if (refuse) null else nextId.getAndIncrement()
     override fun noteTypes(): Map<Long, String> = noteTypes.mapValues { it.value.name }

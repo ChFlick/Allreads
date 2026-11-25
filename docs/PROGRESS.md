@@ -30,7 +30,7 @@ First run of the CI APK on Christoph's phone. Working: all screens, EPUB import.
 - [x] 17a. Anki cards in the core (2026-11-25: words keep their sentence, its translation and the book/chapter (migration V7); one note type per language with a spoken sentence card via `{{tts}}` and an optional word card; notes built with the word in bold and HTML escaped; levels 1–4 queue a card, a word with a card is re-queued on edit; deck and note type ids stored in a `setting` table; FFI calls for Kotlin. The reader passes the sentence and the translation already shown. Pending: the AnkiDroid side, steps 16–19)
 - [ ] 16. Connect to AnkiDroid (2026-11-25: `AnkiBridge` interface on AnkiDroid's API library (JitPack), the permission and `<queries>` entry, and a Settings section showing Install / Grant access / Connected with a deck picker and "Create Allreads deck". Pending: checking on a phone)
 - [ ] 17. Note type and deck (2026-11-25: `AnkiNoteTypes.ensure` creates "Allreads (Language)" from the Rust definition on first use, and again if deleted in Anki, and stores its id; Settings creates it for every library language once a deck is chosen, lists them, and has the optional word card switch; JVM tests with a fake AnkiDroid. Pending: seeing them in AnkiDroid on a phone)
-- [ ] 18. Push and update
+- [ ] 18. Push and update (2026-11-25: `AnkiSync.drain()` pushes queued words after each save, when the app resumes and when a deck is chosen; it updates a word's card, reuses a note with the same Word after a forget and re-save, re-adds a card deleted in Anki, and leaves failures queued; six JVM tests with a fake AnkiDroid. Pending: editing a translation on a phone and seeing the same card change)
 - [ ] 19. Outbox and retry
 - [ ] 20. `.apkg` and CSV export
 

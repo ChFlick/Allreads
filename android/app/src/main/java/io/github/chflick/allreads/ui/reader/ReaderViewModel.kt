@@ -241,6 +241,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             }
             _state.update { it.copy(selected = null, message = result.exceptionOrNull()?.let(::describe)) }
             reloadStatuses()
+            if (result.isSuccess) services.syncAnki()
         }
     }
 

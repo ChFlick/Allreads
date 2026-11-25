@@ -93,6 +93,8 @@ fun AnkiSection(services: Services) {
                 .onSuccess {
                     state = state.copy(deckId = id, error = null)
                     prepareNoteTypes(id)
+                    // Words saved before a deck was chosen go over now.
+                    services.syncAnki()
                 }
                 .onFailure { state = state.copy(error = describe(it)) }
         }

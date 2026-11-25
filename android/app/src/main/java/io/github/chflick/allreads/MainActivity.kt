@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -44,6 +46,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val services = (application as AllreadsApplication).services
+        // Words saved while AnkiDroid was missing or closed go over when the app comes back.
+        lifecycle.addObserver(
+            LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) services.syncAnki() },
+        )
         setContent {
             val settings by services.settings.settings.collectAsStateWithLifecycle()
             AllreadsTheme(settings.theme) {
@@ -109,7 +115,7 @@ private fun AllreadsNavigation(services: Services) {
                         openBookId = it.id
                     })
                 }
-                Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository) })
+                Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki) })
                 Tab.Settings -> SettingsScreen(services)
             }
         }

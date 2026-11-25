@@ -43,6 +43,19 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
         0,
     )
 
+    override fun addNote(noteTypeId: Long, deckId: Long, fields: List<String>, tags: Set<String>): Long? =
+        api.addNote(noteTypeId, deckId, fields.toTypedArray(), tags)
+
+    override fun updateNote(noteId: Long, fields: List<String>, tags: Set<String>): Boolean {
+        // AnkiDroid answers a note deleted in Anki with false, or on some versions an exception.
+        if (api.getNote(noteId) == null) return false
+        return runCatching { api.updateNoteFields(noteId, fields.toTypedArray()) }.getOrDefault(false) &&
+            runCatching { api.updateNoteTags(noteId, tags) }.getOrDefault(false)
+    }
+
+    override fun findNote(noteTypeId: Long, word: String): Long? =
+        api.findDuplicateNotes(noteTypeId, word)?.firstOrNull()?.id
+
     companion object {
         const val PERMISSION: String = AddContentApi.READ_WRITE_PERMISSION
         const val PACKAGE = "com.ichi2.anki"
