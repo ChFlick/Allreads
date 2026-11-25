@@ -119,7 +119,7 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
 
 ## Phase 3 (M2): AnkiDroid integration
 
-*Planned in detail 2026-11-25.* Order: **17a** (Rust) first, since it can be fully built and tested without a phone, then 16, 17b, 18 and 19 in Kotlin, then 20.
+*Planned in detail 2026-11-25.* Order: **17a** (Rust) first, since it can be fully built and tested without a phone, then 16, 17b, 18 and 19 in Kotlin. (Step 20, export, was dropped.)
 
 **How a saved word becomes a card.** Saving a word with status 1–4 stores the term with its context and queues it in `anki_outbox`. Kotlin's `AnkiSync` drains the queue: Rust builds each note's fields, Kotlin calls `addNote` (or `updateNoteFields` when an `AnkiLink` exists), and Rust records the note id and removes the term from the queue. If AnkiDroid is missing or a call fails, the term stays queued and is retried on the next drain (app start, resume, permission granted, after each save). Statuses 5, Known and Ignore never create cards; forgetting a word leaves its card in Anki; editing a word that has a card updates that card.
 
@@ -157,9 +157,8 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
 19. **Outbox and retry.** When AnkiDroid isn't available, the push goes into `anki_outbox` in Rust. Drain the queue on app start and after permission is granted.
     - **Done when** words saved with AnkiDroid uninstalled arrive after it's reinstalled.
     - *Planned 2026-11-25:* drain on app start, on resume and after the permission is granted; count attempts; Settings shows "N words waiting for AnkiDroid".
-20. **`.apkg` and CSV export.** Build the deck with `genanki-rs` using the same note type, and share it through the Android share sheet.
-    - **Done when** the file imports cleanly into desktop Anki. M2 is complete: save 20 words while reading, sync AnkiDroid, and review them on desktop.
-    - *Planned 2026-11-25:* CSV first (Anki imports it with a field mapping). Then `.apkg`: try `genanki-rs`, but it may bundle its own SQLite and clash with our `rusqlite` (only one copy can be linked); if so, write the `.apkg` ourselves (a zip of an Anki SQLite collection plus a media list). Both through the share sheet.
+20. ~~`.apkg` and CSV export~~ *Dropped 2026-11-25.* AnkiDroid syncs cards to desktop Anki through AnkiWeb, and the whole database is backed up at step 26. A CSV export can come back with backup if someone asks.
+    - M2 is complete when step 19 passes: save 20 words while reading, sync AnkiDroid, and review them on desktop.
 
 ## Phases 4–6 (M3–M5): translation and AI, audio, library and release
 

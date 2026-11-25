@@ -37,7 +37,7 @@ Reading real books is one of the best ways to learn a language, but looking up w
 | US10 | ask the AI why a word or form is used here | I understand grammar in context | P1 |
 | US11 | hear a sentence or word read aloud | I learn pronunciation | P1 |
 | US12 | browse and download free public-domain books in my language | I never run out of material | P2 |
-| US13 | export my vocabulary as `.apkg` or CSV | I'm not locked in | P2 |
+| US13 | ~~export my vocabulary as `.apkg` or CSV~~ (dropped 2026-11-25; AnkiDroid syncs to desktop, backup covers the rest) | I'm not locked in | — |
 
 ## Functional requirements
 
@@ -66,7 +66,7 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 | F19 | Anki | Create the app's note type on first use (one per language): Word, Lemma, Translation, Sentence (word bolded), Sentence translation, Source. One sentence card per word, read aloud with Anki's TTS; an optional word card | P0 | M2 |
 | F20 | Anki | Push a note when a term is saved with status 1–4; update the same note when the term is edited; no duplicates | P0 | M2 |
 | F21 | Anki | Queue pushes when AnkiDroid is unavailable and retry later | P1 | M2 |
-| F22 | Anki | Export terms as `.apkg` and CSV | P2 | M2 |
+| F22 | Anki | ~~Export terms as `.apkg` and CSV~~ Dropped 2026-11-25 | — | — |
 | F23 | Audio | Read the current sentence or chapter aloud, highlighting the sentence being read; speak a word from the sheet | P1 | M4 |
 | F24 | Settings | Languages (from presets), translator, AI provider and key, Anki deck, and reading preferences | P0 | M1 |
 | F25 | Stats | Known words per language, new terms per day, % known per chapter | P1 | M5 |

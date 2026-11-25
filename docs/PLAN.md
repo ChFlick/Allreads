@@ -41,7 +41,7 @@ The aim is [Smart Book](https://smart-book.net/)'s reading experience with LingQ
 | Sentence and parallel translation | Yes | No | Yes, toggled per book |
 | AI explanations (grammar, idioms, context) | Paid | No | Bring your own key |
 | Review | Basic, in-app | FSRS, in-app | AnkiDroid (cards pushed through its API) |
-| Anki | Export to file | No | Live push to AnkiDroid, plus `.apkg` export |
+| Anki | Export to file | No | Live push to AnkiDroid |
 | Read-aloud and pronunciation | Yes | Server only | Android system TTS, offline |
 | Offline translation | Yes | No | Later (Bergamot) |
 | Platforms | iOS, Android | Android | Android (iOS later from the same Rust core) |
@@ -63,7 +63,6 @@ All the logic lives in a Rust library, built for Android with `cargo-ndk`. UniFF
 | AI | `AiProvider` trait: OpenAI-compatible + Anthropic, bring your own key | Rust | No backend to run; answers cached per sentence |
 | Dictionaries | Wiktionary extracts (kaikki.org, CC BY-SA), downloaded per language | Rust | Offline, with lemmas and inflections |
 | Anki | AnkiDroid `AddContentApi` | Kotlin | Officially supported; AnkiDroid does scheduling and AnkiWeb sync |
-| `.apkg` export | `genanki-rs` | Rust | Fallback for people without AnkiDroid |
 | Text-to-speech | Android `TextToSpeech` | Kotlin | System voices, offline |
 | API keys | Android Keystore (encrypted storage) | Kotlin | Keys never stored in plain text |
 | Tests | `cargo test` + `insta` snapshots; Compose UI tests | Both | Most logic is tested in Rust, without an emulator |
@@ -112,7 +111,7 @@ M1 is the real MVP: reading a French EPUB and saving words. M2 makes it complete
 
 1. **M0: Toolchain spike.** A Rust function called from Compose through UniFFI on a real phone, then a Rust EPUB parse shown as paragraphs. This proves the whole pipeline.
 2. **M1: Reading MVP.** Import EPUB and TXT, tokenize, colour words by status, tap a word for a machine translation, save it with a status, and resume where you stopped.
-3. **M2: Anki.** Push saved terms to AnkiDroid with the sentence as context, update them on edit, and add `.apkg` export as a fallback.
+3. **M2: Anki.** Push saved terms to AnkiDroid with the sentence as context, and update them on edit. (`.apkg` export dropped 2026-11-25.)
 4. **M3: Translation and AI.** Sentence translation, parallel mode, "explain this" with your own key, offline dictionaries, all cached.
 5. **M4: Audio.** Read aloud with sentence highlighting, and word pronunciation.
 6. **M5: Library and ship.** A Gutenberg and Standard Ebooks browser, then a signed APK on GitHub releases.
@@ -127,7 +126,7 @@ M1 is the real MVP: reading a French EPUB and saving words. M2 makes it complete
 | Reading layout | Vertical scroll or horizontal pages | Scroll first (simpler in Compose), pages later |
 | Lemmas | "mange" and "mangeons" as separate terms, or linked | Link them, using Wiktionary forms plus AI suggestions |
 | Rust learning curve | Slow start on ownership and async | Keep the FFI surface small; core is synchronous where possible |
-| AnkiDroid dependency | The API needs AnkiDroid installed and a permission granted | Check on launch, fall back to `.apkg` export |
+| AnkiDroid dependency | The API needs AnkiDroid installed and a permission granted | Check on launch; words wait in the queue until AnkiDroid is ready |
 | Dictionary size | Full Wiktionary extracts are hundreds of MB | Pre-filter per language pair, download on demand |
 | AI cost and privacy | Text goes to the provider you pick | Off by default, bring your own key, show a cost estimate |
 | Translation APIs | Scraping Google Translate breaks its terms | Decided: DeepL free tier (2026-11-24) |

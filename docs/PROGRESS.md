@@ -32,7 +32,7 @@ First run of the CI APK on Christoph's phone. Working: all screens, EPUB import.
 - [x] 17. Note type and deck (2026-11-25: `AnkiNoteTypes.ensure` creates "Allreads (Language)" from the Rust definition on first use, and again if deleted in Anki, and stores its id; Settings creates it for every library language once a deck is chosen, lists them, and has the optional word card switch; JVM tests with a fake AnkiDroid. Checked on a phone 2026-11-25)
 - [x] 18. Push and update (2026-11-25: `AnkiSync.drain()` pushes queued words after each save, when the app resumes and when a deck is chosen; it updates a word's card, reuses a note with the same Word after a forget and re-save, re-adds a card deleted in Anki, and leaves failures queued; six JVM tests with a fake AnkiDroid. Checked on a phone 2026-11-25)
 - [ ] 19. Outbox and retry (2026-11-25: Settings shows "N words waiting for AnkiDroid" with "Send now"; the queue drains after saves, on resume (including after the permission prompt) and when a deck is chosen; failed attempts are counted. Pending: saving words with AnkiDroid uninstalled, reinstalling it, and seeing them arrive)
-- [ ] 20. `.apkg` and CSV export
+- [-] 20. ~~`.apkg` and CSV export~~ (dropped 2026-11-25)
 
 ## Phases 4–6 (M3–M5)
 - [ ] 21. Sentence translation and parallel mode
