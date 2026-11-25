@@ -40,6 +40,18 @@ class ReaderTextTest {
     }
 
     @Test
+    fun aSentenceStartingWithSpacedPunctuationLosesOnlyTheSpace() {
+        val dialogue = ChapterBlock(
+            headingLevel = null,
+            tokens = listOf(word("Il"), gap("."), gap(" « ", 1u), word("Oui", 1u), gap(" »", 1u)),
+        )
+        val rows = readerRows(listOf(dialogue))
+        assertEquals(listOf("Il.", "« Oui »"), rows.map { it.content.text })
+        // Taps still map to the right word after the trim.
+        assertEquals(1, rows[1].content.wordAt(3))
+    }
+
+    @Test
     fun aSavedBlockMapsToItsFirstRow() {
         val rows = readerRows(blocks)
         assertEquals(0, rows.firstRowOf(0))

@@ -23,31 +23,48 @@ class ApiKeyStore(context: Context) {
     private val _hasDeeplKey = MutableStateFlow(prefs.contains(DEEPL))
     val hasDeeplKey: StateFlow<Boolean> = _hasDeeplKey.asStateFlow()
 
-    /** The saved key, or null if there is none or it can no longer be decrypted (e.g. after a restore). */
+    /**
+     * The saved key's last four characters, to show which key is saved without
+     * showing it. Kept beside the ciphertext so the screen never decrypts.
+     */
+    private val _deeplKeyHint = MutableStateFlow(prefs.getString(DEEPL_HINT, null))
+    val deeplKeyHint: StateFlow<String?> = _deeplKeyHint.asStateFlow()
+
+    /**
+     * The saved key, or null if there is none. A key that can no longer be
+     * decrypted (e.g. restored onto a new phone without its Keystore key) is
+     * removed, so the app asks for it again. Call off the main thread.
+     */
     fun deeplKey(): String? {
         val stored = prefs.getString(DEEPL, null) ?: return null
-        return runCatching {
+        val key = runCatching {
             val bytes = Base64.decode(stored, Base64.NO_WRAP)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, bytes, 0, IV_SIZE))
             String(cipher.doFinal(bytes, IV_SIZE, bytes.size - IV_SIZE), Charsets.UTF_8)
         }.getOrNull()
+        if (key == null) clearDeeplKey()
+        return key
     }
 
-    /** The last four characters, to show which key is saved without showing it. */
-    fun deeplKeyHint(): String? = deeplKey()?.takeLast(4)
-
+    /** Encrypts and saves the key. Call off the main thread. */
     fun saveDeeplKey(key: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val stored = cipher.iv + cipher.doFinal(key.trim().toByteArray(Charsets.UTF_8))
-        prefs.edit().putString(DEEPL, Base64.encodeToString(stored, Base64.NO_WRAP)).apply()
+        val hint = key.trim().takeLast(4)
+        prefs.edit()
+            .putString(DEEPL, Base64.encodeToString(stored, Base64.NO_WRAP))
+            .putString(DEEPL_HINT, hint)
+            .apply()
         _hasDeeplKey.value = true
+        _deeplKeyHint.value = hint
     }
 
     fun clearDeeplKey() {
-        prefs.edit().remove(DEEPL).apply()
+        prefs.edit().remove(DEEPL).remove(DEEPL_HINT).apply()
         _hasDeeplKey.value = false
+        _deeplKeyHint.value = null
     }
 
     private fun secretKey(): SecretKey {
@@ -69,5 +86,6 @@ class ApiKeyStore(context: Context) {
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val IV_SIZE = 12
         const val DEEPL = "deepl"
+        const val DEEPL_HINT = "deepl_hint"
     }
 }

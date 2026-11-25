@@ -23,8 +23,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,6 +41,9 @@ import io.github.chflick.allreads.data.AppSettings
 import io.github.chflick.allreads.data.Services
 import io.github.chflick.allreads.data.ThemeMode
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Step 15: translation, reading and appearance settings. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -67,23 +72,28 @@ fun SettingsScreen(services: Services) {
 
             HorizontalDivider()
             Section("Reading")
-            Text("Text size: ${(settings.fontScale * 100).toInt()} %", style = MaterialTheme.typography.labelLarge)
+            // Sliders move a local value while dragging and save once on release.
+            var fontScale by remember(settings.fontScale) { mutableFloatStateOf(settings.fontScale) }
+            var lineSpacing by remember(settings.lineSpacing) { mutableFloatStateOf(settings.lineSpacing) }
+            Text("Text size: ${(fontScale * 100).toInt()} %", style = MaterialTheme.typography.labelLarge)
             Slider(
-                value = settings.fontScale,
-                onValueChange = { v -> services.settings.update { it.copy(fontScale = v) } },
+                value = fontScale,
+                onValueChange = { fontScale = it },
+                onValueChangeFinished = { services.settings.update { it.copy(fontScale = fontScale) } },
                 valueRange = AppSettings.fontScales,
             )
-            Text("Line spacing: ${"%.1f".format(settings.lineSpacing)}", style = MaterialTheme.typography.labelLarge)
+            Text("Line spacing: ${"%.1f".format(lineSpacing)}", style = MaterialTheme.typography.labelLarge)
             Slider(
-                value = settings.lineSpacing,
-                onValueChange = { v -> services.settings.update { it.copy(lineSpacing = v) } },
+                value = lineSpacing,
+                onValueChange = { lineSpacing = it },
+                onValueChangeFinished = { services.settings.update { it.copy(lineSpacing = lineSpacing) } },
                 valueRange = AppSettings.lineSpacings,
             )
             Text(
                 "Il était une fois un renard qui errait dans la forêt la nuit.",
                 fontFamily = FontFamily.Serif,
-                fontSize = 19.sp * settings.fontScale,
-                lineHeight = settings.lineSpacing.em,
+                fontSize = 19.sp * fontScale,
+                lineHeight = lineSpacing.em,
             )
 
             HorizontalDivider()
@@ -118,7 +128,8 @@ private fun Section(title: String) {
 @Composable
 private fun DeeplKeyField(services: Services, hasKey: Boolean) {
     var input by rememberSaveable { mutableStateOf("") }
-    val hint = remember(hasKey) { if (hasKey) services.apiKeys.deeplKeyHint() else null }
+    val hint by services.apiKeys.deeplKeyHint.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     Text(
         if (hint != null) "DeepL API key saved (…$hint)" else "No DeepL API key yet. Get a free one at deepl.com/pro-api.",
         style = MaterialTheme.typography.bodyMedium,
@@ -135,8 +146,10 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
         Button(
             enabled = input.isNotBlank(),
             onClick = {
-                services.apiKeys.saveDeeplKey(input)
+                val key = input
                 input = ""
+                // Encrypting goes through the Android Keystore, so keep it off the main thread.
+                scope.launch { withContext(Dispatchers.IO) { services.apiKeys.saveDeeplKey(key) } }
             },
         ) { Text("Save key") }
         if (hasKey) {

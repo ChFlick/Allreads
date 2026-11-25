@@ -67,7 +67,7 @@ fun readerRows(blocks: List<ChapterBlock>): List<ReaderRow> =
             .groupBy { it.sentence }
             .values
             .mapIndexedNotNull { i, sentence ->
-                val trimmed = sentence.dropWhile { it.termKey == null && it.text.isBlank() }
+                val trimmed = trimLeadingSpace(sentence)
                 if (trimmed.isEmpty()) {
                     null
                 } else {
@@ -80,6 +80,17 @@ fun readerRows(blocks: List<ChapterBlock>): List<ReaderRow> =
                 }
             }
     }
+
+/**
+ * Drops the whitespace a sentence starts with: blank tokens, and the leading
+ * spaces of the first punctuation token (e.g. " « " before dialogue).
+ */
+private fun trimLeadingSpace(tokens: List<Token>): List<Token> {
+    val rest = tokens.dropWhile { it.termKey == null && it.text.isBlank() }
+    val first = rest.firstOrNull() ?: return rest
+    if (first.termKey != null || !first.text.first().isWhitespace()) return rest
+    return listOf(first.copy(text = first.text.trimStart())) + rest.drop(1)
+}
 
 /** The index of the first row in `block` or later, for resuming at a saved block. */
 fun List<ReaderRow>.firstRowOf(block: Int): Int = indexOfFirst { it.blockIndex >= block }.coerceAtLeast(0)

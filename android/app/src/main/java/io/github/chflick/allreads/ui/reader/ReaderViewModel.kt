@@ -8,11 +8,14 @@ import io.github.chflick.allreads.reader.dictionaryLink
 import io.github.chflick.allreads.reader.readerRows
 import io.github.chflick.allreads.ui.NO_DEEPL_KEY
 import io.github.chflick.allreads.ui.describe
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import uniffi.allreads_ffi.BookSummary
 import uniffi.allreads_ffi.SavedTerm
 import uniffi.allreads_ffi.TermInput
@@ -51,16 +54,36 @@ data class ReaderState(
     val message: String? = null,
 )
 
-class ReaderViewModel(private val services: Services, private val bookId: Long) : ViewModel() {
+/**
+ * The reader's state. One instance serves every book: [open] starts a fresh
+ * session for each book opening, while a rotation keeps the current one.
+ */
+class ReaderViewModel(private val services: Services) : ViewModel() {
     private val repository = services.repository
     private val _state = MutableStateFlow(ReaderState())
     val state: StateFlow<ReaderState> = _state.asStateFlow()
 
+    private var bookId: Long = -1
+    private var openId: Int = -1
     private var titles: List<String?> = emptyList()
     private var dictionaryTemplate: String = ""
+    private var openJob: Job? = null
+    private var selectJob: Job? = null
 
-    init {
-        viewModelScope.launch {
+    /**
+     * Opens a book at its saved position. `openId` identifies one opening of
+     * the reader: calling again with the same id (after a rotation) does nothing.
+     */
+    fun open(bookId: Long, openId: Int) {
+        if (this.bookId == bookId && this.openId == openId) return
+        this.bookId = bookId
+        this.openId = openId
+        openJob?.cancel()
+        selectJob?.cancel()
+        titles = emptyList()
+        dictionaryTemplate = ""
+        _state.value = ReaderState()
+        openJob = viewModelScope.launch {
             val book = repository.book(bookId)
             if (book == null) {
                 _state.update { it.copy(message = "This book is no longer in the library") }
@@ -136,7 +159,9 @@ class ReaderViewModel(private val services: Services, private val bookId: Long) 
     fun select(row: ReaderRow, tokenIndex: Int) {
         val token = row.content.tokens.getOrNull(tokenIndex) ?: return
         val language = _state.value.book?.languageCode ?: return
-        viewModelScope.launch {
+        // A newer tap wins: an older lookup that finishes later must not replace it.
+        selectJob?.cancel()
+        selectJob = viewModelScope.launch {
             val saved = runCatching { repository.findTerm(language, token.text) }.getOrNull()
             val selected = SelectedWord(
                 text = token.text,
@@ -172,7 +197,9 @@ class ReaderViewModel(private val services: Services, private val bookId: Long) 
 
     private suspend fun translate(text: String, context: String?): Result<String> {
         val book = _state.value.book ?: return Result.failure(IllegalStateException("No book"))
-        val key = services.apiKeys.deeplKey() ?: return Result.failure(IllegalStateException(NO_DEEPL_KEY))
+        // Decrypting goes through the Android Keystore, so keep it off the main thread.
+        val key = withContext(Dispatchers.IO) { services.apiKeys.deeplKey() }
+            ?: return Result.failure(IllegalStateException(NO_DEEPL_KEY))
         val target = services.settings.settings.value.nativeLanguage
         return runCatching { repository.translate(text, context, book.languageCode, target, key).text }
             .recoverCatching { throw IllegalStateException(describe(it)) }

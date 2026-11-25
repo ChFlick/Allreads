@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
@@ -68,7 +69,9 @@ private fun AllreadsNavigation(services: Services) {
 
     val bookId = openBookId
     if (bookId != null) {
-        val reader = viewModel(key = "reader-$bookId-$opens") { ReaderViewModel(services, bookId) }
+        // One reader ViewModel for every book; open() starts a fresh session per opening.
+        val reader = viewModel(key = "reader") { ReaderViewModel(services) }
+        LaunchedEffect(bookId, opens) { reader.open(bookId, opens) }
         ReaderScreen(reader, settings, onBack = { openBookId = null })
         return
     }
@@ -87,7 +90,9 @@ private fun AllreadsNavigation(services: Services) {
             }
         },
     ) { padding ->
-        Box(Modifier.padding(bottom = padding.calculateBottomPadding())) {
+        // The bottom bar already handles the navigation-bar inset, so the tab
+        // screens' own Scaffolds must not add it again.
+        Box(Modifier.padding(bottom = padding.calculateBottomPadding()).consumeWindowInsets(padding)) {
             when (tab) {
                 Tab.Library -> {
                     val library = viewModel { LibraryViewModel(services.repository) }
