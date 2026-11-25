@@ -14,7 +14,7 @@ Read these before starting any task:
 
 - `docs/PLAN.md`: stack, architecture, data model, milestones, risks
 - `docs/PRD.md`: goals, user stories, requirements (F1–F27), non-functional targets
-- `docs/IMPLEMENTATION_PLAN.md`: 27 ordered steps, each with a **Done when** check
+- `docs/IMPLEMENTATION_PLAN.md`: the ordered steps (each with a **Done when** check) and the roadmap after v1
 - `docs/PROGRESS.md`: which steps are done; update it as you go
 
 If the code and the docs disagree, flag it and ask before changing direction. Record decisions that change the plan in `docs/DECISIONS.md` (date, decision, why).
@@ -44,14 +44,17 @@ Learning Rust is a goal of this project, so:
 - **Core code is synchronous;** Kotlin calls it on `Dispatchers.IO`. Use UniFFI async only if a step clearly needs it.
 - **Licences:** Lukaisu (https://github.com/HugoFara/lukaisu) is MIT/Unlicense and may be used as a reference for parser rules, language presets and test cases. Keep attribution when porting. Don't use AGPL code (for example Anki's own `rslib`).
 - minSdk 26; ABIs arm64-v8a, armeabi-v7a, x86_64.
+- **The repository is public:** never commit secrets, keys, personal data or copyrighted books (test fixtures included).
+- **`main` ships:** every green push to `main` publishes a pre-release APK on GitHub Releases, so keep it working. Offline dictionaries are published separately by the hand-run Dictionaries workflow.
 
-## Layout (target)
+## Layout
 
 ```
 Cargo.toml              # Rust workspace
 crates/
-  core/                 # domain: epub, text, db, terms, assist, export
+  core/                 # domain: epub, text, db, dictionary, translate, anki
   ffi/                  # UniFFI exports
+  dictgen/              # builds offline dictionaries from kaikki.org extracts
 android/
   app/                  # Compose UI, TTS, AnkiDroid bridge
 data/languages/         # language presets (TOML)
@@ -86,4 +89,5 @@ Android (needs the Android SDK; `assembleDebug` also needs the NDK, with `ANDROI
 ```bash
 cd android && ./gradlew testDebugUnitTest   # Kotlin tests on the JVM, calling the host Rust build
 cd android && ./gradlew assembleDebug       # APK: runs cargo-ndk and uniffi-bindgen first
+cd android && ./gradlew recordPaparazziDebug --tests '*Screenshots*'   # README screenshots; copy to docs/screenshots
 ```
