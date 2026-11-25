@@ -34,8 +34,8 @@ Android work to do in one batch once Android Studio is available: step 2's proje
 ## v1 scope and order (settled 2026-11-25, after a grilling session)
 
 1. **Phone smoke test** of the CI APK, and fixes. First run done 2026-11-25; its bugs are fixed (see `PROGRESS.md`).
-2. **AnkiDroid** (steps 17a, 16, 17b, 18, 19, 20), as planned in Phase 3.
-3. **Read-aloud** (step 25): a play button per sentence, a speak button in the word drawer, and "read chapter aloud".
+2. **AnkiDroid** (steps 17a, 16, 17b, 18, 19), as planned in Phase 3. Step 20 (export) was dropped.
+3. **Read-aloud** (step 25): a play button per sentence and a speak button in the word drawer. Done 2026-11-25.
 4. **Offline French→English dictionary** (step 23), in the personal build.
 5. **Phrases** (step 24).
 
