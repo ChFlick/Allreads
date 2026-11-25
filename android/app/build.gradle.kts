@@ -35,6 +35,18 @@ android {
         }
     }
 
+    // A fixed debug key, so each CI-built debug APK installs as an update over
+    // the last one instead of needing an uninstall (which would delete your data).
+    // Debug keys are not secret; release builds get their own key at step 27.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
