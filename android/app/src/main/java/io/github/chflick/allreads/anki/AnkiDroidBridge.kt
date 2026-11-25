@@ -29,7 +29,7 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
 
     override fun addDeck(name: String): Long? = api.addNewDeck(name)
 
-    override fun noteTypeIds(): Set<Long> = api.modelList.orEmpty().keys
+    override fun noteTypes(): Map<Long, String> = api.modelList.orEmpty()
 
     override fun addNoteType(noteType: AnkiNoteType, deckId: Long): Long? = api.addNewCustomModel(
         noteType.name,

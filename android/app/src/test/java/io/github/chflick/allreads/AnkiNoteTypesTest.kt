@@ -5,6 +5,9 @@ import io.github.chflick.allreads.anki.AnkiBridge
 import io.github.chflick.allreads.anki.AnkiDeck
 import io.github.chflick.allreads.anki.AnkiNoteTypes
 import io.github.chflick.allreads.anki.NoteTypeStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -13,22 +16,22 @@ import uniffi.allreads_ffi.AnkiNoteType
 
 /** A stand-in AnkiDroid that keeps its note types in memory. */
 class FakeAnki : AnkiBridge {
-    val noteTypes = mutableMapOf<Long, AnkiNoteType>()
+    val noteTypes: MutableMap<Long, AnkiNoteType> = java.util.concurrent.ConcurrentHashMap()
     var refuse = false
-    private var nextId = 100L
+    private val nextId = java.util.concurrent.atomic.AtomicLong(100)
 
     override fun access() = AnkiAccess.Connected
     override fun decks() = listOf(AnkiDeck(1, "Default"))
-    override fun addDeck(name: String): Long? = if (refuse) null else nextId++
-    override fun noteTypeIds(): Set<Long> = noteTypes.keys
+    override fun addDeck(name: String): Long? = if (refuse) null else nextId.getAndIncrement()
+    override fun noteTypes(): Map<Long, String> = noteTypes.mapValues { it.value.name }
     override fun addNoteType(noteType: AnkiNoteType, deckId: Long): Long? {
         if (refuse) return null
-        return nextId++.also { noteTypes[it] = noteType }
+        return nextId.getAndIncrement().also { noteTypes[it] = noteType }
     }
 }
 
 class FakeStore : NoteTypeStore {
-    val ids = mutableMapOf<String, Long>()
+    val ids: MutableMap<String, Long> = java.util.concurrent.ConcurrentHashMap()
     override suspend fun modelId(languageCode: String) = ids[languageCode]
     override suspend fun setModelId(languageCode: String, modelId: Long) {
         ids[languageCode] = modelId
@@ -70,6 +73,21 @@ class AnkiNoteTypesTest {
         noteTypes.ensure("fr", 1, false)
         noteTypes.ensure("de", 1, false)
         assertEquals(2, anki.noteTypes.size)
+    }
+
+    @Test
+    fun aNoteTypeLeftFromAnEarlierInstallIsReused() = runBlocking {
+        val old = noteTypes.ensure("fr", 1, false)
+        store.ids.clear()
+        assertEquals(old, noteTypes.ensure("fr", 1, false))
+        assertEquals(1, anki.noteTypes.size)
+    }
+
+    @Test
+    fun concurrentCallsCreateOneNoteType() = runBlocking {
+        val ids = (1..5).map { async(Dispatchers.Default) { noteTypes.ensure("fr", 1, false) } }.awaitAll()
+        assertEquals(1, ids.toSet().size)
+        assertEquals(1, anki.noteTypes.size)
     }
 
     @Test

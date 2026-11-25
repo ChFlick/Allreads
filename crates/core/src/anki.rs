@@ -98,6 +98,8 @@ text-align: center; color: #1b1b1b; background: #fdfcf9; }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnkiNote {
     pub term_id: i64,
+    /// Pass back to `record_anki_push`.
+    pub queue_id: i64,
     pub language_code: String,
     pub note_id: Option<i64>,
     /// In [`FIELDS`] order; text is HTML-escaped.
@@ -109,7 +111,12 @@ pub struct AnkiNote {
 /// matching term keys, so case and apostrophe style do not matter. A word
 /// saved without a sentence uses the word itself, so the card still exists.
 #[must_use]
-pub fn build_note(term: &Term, rules: &LanguageRules, note_id: Option<i64>) -> AnkiNote {
+pub fn build_note(
+    term: &Term,
+    rules: &LanguageRules,
+    queue_id: i64,
+    note_id: Option<i64>,
+) -> AnkiNote {
     let context = &term.context;
     let sentence = if context.sentence.trim().is_empty() {
         format!("<b>{}</b>", escape_html(&term.display_text))
@@ -127,6 +134,7 @@ pub fn build_note(term: &Term, rules: &LanguageRules, note_id: Option<i64>) -> A
     }
     AnkiNote {
         term_id: term.id,
+        queue_id,
         language_code: term.language_code.clone(),
         note_id,
         fields: vec![
@@ -186,14 +194,15 @@ fn escape_html(text: &str) -> String {
     escaped
 }
 
-/// The notes for every term waiting in the Anki queue, oldest first. A term
-/// that has since been deleted is dropped from the queue.
+/// The notes for every term waiting in the Anki queue, oldest first. Terms
+/// whose language cannot be loaded are left queued and skipped, so one bad
+/// language never blocks the rest.
 ///
 /// # Errors
-/// Returns a database error if a statement fails, and `InvalidValue` if a
-/// language's rules do not compile.
+/// Returns a database error if a statement fails.
 pub fn pending_notes(db: &Database) -> Result<Vec<AnkiNote>, DbError> {
-    let mut rules: HashMap<String, LanguageRules> = HashMap::new();
+    // `None` marks a language that could not be loaded.
+    let mut rules: HashMap<String, Option<LanguageRules>> = HashMap::new();
     let mut notes = Vec::new();
     for queued in db.anki_queue()? {
         let Some(term) = db.term(queued.term_id)? else {
@@ -201,16 +210,16 @@ pub fn pending_notes(db: &Database) -> Result<Vec<AnkiNote>, DbError> {
             continue;
         };
         if !rules.contains_key(&term.language_code) {
-            let language = db
+            let compiled = db
                 .language(&term.language_code)?
-                .ok_or_else(|| DbError::NotFound {
-                    what: format!("language {}", term.language_code),
-                })?;
-            let compiled = LanguageRules::new(&language).map_err(DbError::InvalidValue)?;
+                .and_then(|language| LanguageRules::new(&language).ok());
             rules.insert(term.language_code.clone(), compiled);
         }
+        let Some(term_rules) = &rules[&term.language_code] else {
+            continue;
+        };
         let note_id = db.anki_link(term.id)?.map(|link| link.note_id);
-        notes.push(build_note(&term, &rules[&term.language_code], note_id));
+        notes.push(build_note(&term, term_rules, queued.queue_id, note_id));
     }
     Ok(notes)
 }
@@ -322,7 +331,7 @@ mod tests {
                 ..TermContext::default()
             },
         };
-        let note = build_note(&term, &builtin("fr"), Some(9));
+        let note = build_note(&term, &builtin("fr"), 1, Some(9));
         assert_eq!(note.fields[1], "&lt;chat&gt;");
         assert_eq!(note.fields[2], "cat &amp; &quot;kitty&quot;");
         assert_eq!(note.fields[3], "Le <b>chat</b> &lt;i&gt;dort&lt;/i&gt;.");
@@ -343,7 +352,7 @@ mod tests {
             parent_id: None,
             context: TermContext::default(),
         };
-        let note = build_note(&term, &builtin("fr"), None);
+        let note = build_note(&term, &builtin("fr"), 1, None);
         assert_eq!(note.fields[3], "<b>Chat</b>");
         assert_eq!(note.fields[5], "");
         assert_eq!(note.tags, ["allreads", "fr"]);
@@ -353,7 +362,8 @@ mod tests {
     fn a_pushed_note_leaves_the_queue_and_is_updated_next_time() {
         let db = db();
         let id = save(&db, "homme", Status::Learning(2), "Un homme.");
-        db.record_anki_push(id, 1001, 7).unwrap();
+        let queue_id = pending_notes(&db).unwrap()[0].queue_id;
+        db.record_anki_push(id, queue_id, 1001, 7).unwrap();
         assert!(pending_notes(&db).unwrap().is_empty());
         // Editing it queues it again, now as an update of note 1001.
         save(&db, "homme", Status::Learning(3), "Un homme.");

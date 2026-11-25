@@ -554,17 +554,21 @@ impl App {
     }
 
     /// Records that a note reached `AnkiDroid`, so it leaves the queue and
-    /// later edits update the same note.
+    /// later edits update the same note. Pass the note's `queue_id`: a word
+    /// edited during the push stays queued.
     ///
     /// # Errors
     /// Returns `Missing` if the term no longer exists.
     pub fn record_anki_push(
         &self,
         term_id: i64,
+        queue_id: i64,
         note_id: i64,
         deck_id: i64,
     ) -> Result<(), AllreadsError> {
-        Ok(self.db()?.record_anki_push(term_id, note_id, deck_id)?)
+        Ok(self
+            .db()?
+            .record_anki_push(term_id, queue_id, note_id, deck_id)?)
     }
 
     /// Records a failed push; the note stays queued for the next try.
@@ -950,7 +954,8 @@ mod tests {
         assert_eq!(notes[0].fields[3], "L’<b>homme</b> s’arrêta.");
         assert_eq!(notes[0].fields[5], "Le Livre — Un");
 
-        app.record_anki_push(saved.id, 55, 1).unwrap();
+        app.record_anki_push(saved.id, notes[0].queue_id, 55, 1)
+            .unwrap();
         assert!(app.pending_anki_notes().unwrap().is_empty());
         // Re-saving from the Words screen keeps the sentence and updates note 55.
         app.save_term(input("homme", WordStatus::Learning { level: 2 }))

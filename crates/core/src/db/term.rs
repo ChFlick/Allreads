@@ -127,7 +127,9 @@ impl Database {
         // On conflict the display text is kept: it is the form as first seen.
         // The context (?9..?12) is NULL when not given, which keeps the stored one.
         let context = term.context.as_ref();
-        let id = self.conn().query_row(
+        // The term and its queue entry are saved together or not at all.
+        let transaction = self.conn().unchecked_transaction()?;
+        let id = transaction.query_row(
             "INSERT INTO term (language_code, text, lemma, status, translation, notes, parent_id,
                  display_text, context_sentence, context_translation, source_book, source_chapter)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
@@ -164,6 +166,7 @@ impl Database {
         if term.status.makes_anki_card() || self.anki_link(id)?.is_some() {
             self.queue_for_anki(id)?;
         }
+        transaction.commit()?;
         Ok(id)
     }
 

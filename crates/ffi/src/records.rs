@@ -80,8 +80,9 @@ pub struct TermInput {
     pub translation: String,
     pub notes: String,
     pub lemma: Option<String>,
-    /// The sentence the word was met in, for the Anki card. `None` keeps
-    /// what is stored; the Words screen passes `None`.
+    /// The sentence the word was met in, for the Anki card. The four context
+    /// fields are replaced together: give any of them and the ones left `None`
+    /// become empty. Give none (as the Words screen does) to keep what is stored.
     pub sentence: Option<String>,
     /// That sentence's translation, if the reader already showed one.
     pub sentence_translation: Option<String>,
@@ -252,6 +253,8 @@ impl From<allreads_core::anki::NoteType> for AnkiNoteType {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct AnkiNote {
     pub term_id: i64,
+    /// Pass back to `record_anki_push`.
+    pub queue_id: i64,
     pub language_code: String,
     pub note_id: Option<i64>,
     pub fields: Vec<String>,
@@ -262,6 +265,7 @@ impl From<allreads_core::anki::AnkiNote> for AnkiNote {
     fn from(note: allreads_core::anki::AnkiNote) -> Self {
         AnkiNote {
             term_id: note.term_id,
+            queue_id: note.queue_id,
             language_code: note.language_code,
             note_id: note.note_id,
             fields: note.fields,

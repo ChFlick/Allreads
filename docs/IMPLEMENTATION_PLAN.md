@@ -153,7 +153,7 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
 18. **Push and update.** Rust builds an `AnkiNote` record (HTML fields, sentence with `<b>word</b>`, book and chapter as the source). Kotlin's `AnkiBridge` calls `addNote`, or `updateNoteFields` if an AnkiLink exists, and records the note id through `app.record_anki_link`.
     - Push on save for statuses 1–4; never create duplicates.
     - **Done when** editing a term's translation updates the same card.
-    - *Planned 2026-11-25:* `AnkiSync.drain()` in Kotlin, written against `AnkiBridge`; a JVM test with a fake AnkiDroid covers add, update, a note deleted in Anki (re-added), and never creating duplicates.
+    - *Planned 2026-11-25:* `AnkiSync.drain()` in Kotlin, written against `AnkiBridge`; a JVM test with a fake AnkiDroid covers add, update, a note deleted in Anki (re-added), and never creating duplicates. Before adding a note without a link, look the word up with `findDuplicateNotes` on the Word field and relink, so forgetting and re-saving a word does not make a second card. Pass each note's `queue_id` back to `record_anki_push`, so a word edited during a push stays queued.
 19. **Outbox and retry.** When AnkiDroid isn't available, the push goes into `anki_outbox` in Rust. Drain the queue on app start and after permission is granted.
     - **Done when** words saved with AnkiDroid uninstalled arrive after it's reinstalled.
     - *Planned 2026-11-25:* drain on app start, on resume and after the permission is granted; count attempts; Settings shows "N words waiting for AnkiDroid".

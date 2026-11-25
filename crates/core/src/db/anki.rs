@@ -15,6 +15,9 @@ pub struct AnkiLink {
 /// A term waiting to be pushed to `AnkiDroid`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueuedTerm {
+    /// Changes each time the term is queued again, so a push of an older
+    /// version cannot take a newer edit off the queue.
+    pub queue_id: i64,
     pub term_id: i64,
     pub attempts: u32,
 }
@@ -50,12 +53,17 @@ impl Database {
             .optional()?)
     }
 
-    /// Queues a term for pushing. Queuing a term that is already waiting does nothing.
+    /// Queues a term for pushing. A term already waiting keeps one entry, but
+    /// gets a new queue id and moves to the back, so a push that read the
+    /// older version leaves it queued.
     /// # Errors
     /// Returns a database error if the statement fails.
     pub fn queue_for_anki(&self, term_id: i64) -> Result<(), DbError> {
         self.conn().execute(
-            "INSERT OR IGNORE INTO anki_outbox (term_id) VALUES (?1)",
+            "INSERT INTO anki_outbox (term_id) VALUES (?1)
+             ON CONFLICT (term_id) DO UPDATE SET
+                 id = (SELECT MAX(id) FROM anki_outbox) + 1,
+                 queued_at = datetime('now')",
             [term_id],
         )?;
         Ok(())
@@ -67,7 +75,7 @@ impl Database {
     pub fn anki_queue(&self) -> Result<Vec<QueuedTerm>, DbError> {
         let mut statement = self
             .conn()
-            .prepare("SELECT term_id, attempts FROM anki_outbox ORDER BY id")?;
+            .prepare("SELECT id, term_id, attempts FROM anki_outbox ORDER BY id")?;
         let rows = statement.query_map([], queued_from_row)?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
@@ -84,19 +92,25 @@ impl Database {
     }
 
     /// Records a successful push: links the term to its note and takes it off
-    /// the queue, in one transaction.
+    /// the queue, in one transaction. If the term was queued again since
+    /// `queue_id` was read (edited during the push), it stays queued, so the
+    /// edit is pushed next time as an update of the same note.
     ///
     /// # Errors
     /// Returns a database error if the term does not exist or a statement fails.
     pub fn record_anki_push(
         &self,
         term_id: i64,
+        queue_id: i64,
         note_id: i64,
         deck_id: i64,
     ) -> Result<(), DbError> {
         let transaction = self.conn().unchecked_transaction()?;
         self.link_anki_note(term_id, note_id, deck_id)?;
-        transaction.execute("DELETE FROM anki_outbox WHERE term_id = ?1", [term_id])?;
+        transaction.execute(
+            "DELETE FROM anki_outbox WHERE term_id = ?1 AND id = ?2",
+            [term_id, queue_id],
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -122,8 +136,9 @@ fn link_from_row(row: &Row) -> rusqlite::Result<AnkiLink> {
 
 fn queued_from_row(row: &Row) -> rusqlite::Result<QueuedTerm> {
     Ok(QueuedTerm {
-        term_id: row.get(0)?,
-        attempts: u32_column(row, 1)?,
+        queue_id: row.get(0)?,
+        term_id: row.get(1)?,
+        attempts: u32_column(row, 2)?,
     })
 }
 
@@ -178,6 +193,41 @@ mod tests {
         db.queue_for_anki(term).unwrap();
         db.queue_for_anki(term).unwrap();
         assert_eq!(db.anki_queue().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn an_edit_during_a_push_stays_queued() {
+        let (db, term) = db_with_term();
+        db.queue_for_anki(term).unwrap();
+        let read = db.anki_queue().unwrap()[0].queue_id;
+        // The user edits the word while the push is under way.
+        db.queue_for_anki(term).unwrap();
+        db.record_anki_push(term, read, 1001, 7).unwrap();
+        assert_eq!(db.anki_queue().unwrap().len(), 1);
+        assert_eq!(db.anki_link(term).unwrap().unwrap().note_id, 1001);
+        let current = db.anki_queue().unwrap()[0].queue_id;
+        db.record_anki_push(term, current, 1001, 7).unwrap();
+        assert!(db.anki_queue().unwrap().is_empty());
+    }
+
+    #[test]
+    fn requeuing_moves_a_term_to_the_back() {
+        let (db, first) = db_with_term();
+        let second = db
+            .save_term(&NewTerm {
+                language_code: "fr".into(),
+                text: "chien".into(),
+                lemma: None,
+                status: Status::Learning(1),
+                translation: String::new(),
+                notes: String::new(),
+                parent_id: None,
+                context: None,
+            })
+            .unwrap();
+        db.queue_for_anki(first).unwrap();
+        let order: Vec<i64> = db.anki_queue().unwrap().iter().map(|q| q.term_id).collect();
+        assert_eq!(order, [second, first]);
     }
 
     #[test]

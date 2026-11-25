@@ -28,8 +28,8 @@ interface AnkiBridge {
     /** Creates a deck and returns its id, or `null` if AnkiDroid refused. */
     fun addDeck(name: String): Long?
 
-    /** The ids of every note type in AnkiDroid. */
-    fun noteTypeIds(): Set<Long>
+    /** Every note type in AnkiDroid: id to name. */
+    fun noteTypes(): Map<Long, String>
 
     /** Creates a note type, with `deckId` as its default deck; `null` if AnkiDroid refused. */
     fun addNoteType(noteType: AnkiNoteType, deckId: Long): Long?
