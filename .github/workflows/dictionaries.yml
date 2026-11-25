@@ -77,4 +77,15 @@ jobs:
             gh release create dictionaries --title "Offline dictionaries" --latest=false \
               --notes "Offline dictionaries for Allreads, downloaded from the app's Settings. Built from Wiktionary data via kaikki.org, licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)."
           fi
-          gh release upload dictionaries out/*.sqlite.gz out/dictionaries.json --clobber
+          # GitHub's upload server fails now and then; retry each file. The
+          # manifest goes last, so it never points at a file that is missing.
+          upload() {
+            for attempt in 1 2 3 4 5; do
+              gh release upload dictionaries "$1" --clobber && return 0
+              echo "Upload of $1 failed (attempt $attempt); retrying" >&2
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+          for file in out/*.sqlite.gz; do upload "$file"; done
+          upload out/dictionaries.json
