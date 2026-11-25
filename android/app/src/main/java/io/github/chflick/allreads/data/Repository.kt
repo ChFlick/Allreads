@@ -1,0 +1,59 @@
+package io.github.chflick.allreads.data
+
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import uniffi.allreads_ffi.App
+import uniffi.allreads_ffi.BookMeta
+import uniffi.allreads_ffi.BookSummary
+import uniffi.allreads_ffi.Chapter
+import uniffi.allreads_ffi.SavedTerm
+import uniffi.allreads_ffi.TermInput
+import uniffi.allreads_ffi.readBookMeta
+
+/**
+ * The app's only way into Rust. Every call runs on [Dispatchers.IO], so
+ * screens never block the main thread.
+ */
+class Repository(private val app: App, val dataDir: File) {
+    /** Where imported book files are copied. */
+    val booksDir: File get() = File(dataDir, "books").apply { mkdirs() }
+
+    suspend fun library(): List<BookSummary> = io { app.library() }
+
+    suspend fun book(bookId: Long): BookSummary? = io { app.library().firstOrNull { it.id == bookId } }
+
+    suspend fun languageCodes(): List<String> = io { app.languageCodes() }
+
+    suspend fun readMeta(path: String): BookMeta = io { readBookMeta(path) }
+
+    suspend fun importBook(path: String, languageCode: String): BookSummary =
+        io { app.importBook(path, languageCode) }
+
+    suspend fun deleteBook(bookId: Long) = io { app.deleteBook(bookId) }
+
+    suspend fun chapterTitles(bookId: Long): List<String?> = io { app.chapterTitles(bookId) }
+
+    suspend fun openChapter(bookId: Long, index: UInt): Chapter = io { app.openChapter(bookId, index) }
+
+    suspend fun savePosition(bookId: Long, chapter: UInt, block: UInt) =
+        io { app.savePosition(bookId, chapter, block) }
+
+    suspend fun findTerm(languageCode: String, text: String): SavedTerm? =
+        io { app.findTerm(languageCode, text) }
+
+    suspend fun saveTerm(input: TermInput): SavedTerm = io { app.saveTerm(input) }
+
+    suspend fun forgetTerm(languageCode: String, text: String): Boolean =
+        io { app.forgetTerm(languageCode, text) }
+
+    suspend fun markRestKnown(bookId: Long, chapter: UInt, fromBlock: UInt): UInt =
+        io { app.markRestKnown(bookId, chapter, fromBlock) }
+
+    private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
+
+    companion object {
+        /** Opens (or creates) the library in the app's data folder. */
+        fun open(dataDir: File): Repository = Repository(App(dataDir.absolutePath), dataDir)
+    }
+}

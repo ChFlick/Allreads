@@ -3,47 +3,49 @@ package io.github.chflick.allreads
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import uniffi.allreads_ffi.coreVersion
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.chflick.allreads.ui.library.LibraryScreen
+import io.github.chflick.allreads.ui.library.LibraryViewModel
+import io.github.chflick.allreads.ui.reader.ReaderScreen
+import io.github.chflick.allreads.ui.reader.ReaderViewModel
 
-/** Step 5's screen: shows the version string that comes from Rust. */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val repository = (application as AllreadsApplication).repository
         setContent {
             MaterialTheme {
-                Scaffold { padding ->
-                    HelloFromRust(Modifier.padding(padding))
-                }
+                AllreadsNavigation(repository)
             }
         }
     }
 }
 
+/** Two screens: the library, and the reader for one book. */
 @Composable
-fun HelloFromRust(modifier: Modifier = Modifier) {
-    // Rust is called off the main thread, as every Rust call should be.
-    val version by produceState<String?>(initialValue = null) {
-        value = withContext(Dispatchers.IO) { coreVersion() }
-    }
-    Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text("Allreads", style = MaterialTheme.typography.headlineMedium)
-        Text(version?.let { "Rust core $it" } ?: "Loading the Rust core…")
+private fun AllreadsNavigation(repository: io.github.chflick.allreads.data.Repository) {
+    // The open book's id, or null for the library. Survives rotation.
+    var openBookId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Counts book opens, so each open gets a fresh reader at the saved position.
+    var opens by rememberSaveable { mutableStateOf(0) }
+    val bookId = openBookId
+    if (bookId == null) {
+        val library = viewModel { LibraryViewModel(repository) }
+        // Reading changes progress, so refresh whenever the library is shown.
+        LaunchedEffect(Unit) { library.refresh() }
+        LibraryScreen(library, onOpen = {
+            opens += 1
+            openBookId = it.id
+        })
+    } else {
+        val reader = viewModel(key = "reader-$bookId-$opens") { ReaderViewModel(repository, bookId) }
+        ReaderScreen(reader, onBack = { openBookId = null })
     }
 }
