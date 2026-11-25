@@ -3,6 +3,7 @@ package io.github.chflick.allreads.data
 import io.github.chflick.allreads.anki.AnkiBridge
 import io.github.chflick.allreads.anki.AnkiNoteTypes
 import io.github.chflick.allreads.anki.AnkiSync
+import io.github.chflick.allreads.speech.Speech
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,6 +15,7 @@ class Services(
     val settings: SettingsStore,
     val apiKeys: ApiKeyStore,
     val anki: AnkiBridge,
+    val speech: Speech,
 ) {
     val ankiNoteTypes = AnkiNoteTypes(anki, repository)
     val ankiSync = AnkiSync(anki, ankiNoteTypes, repository) { settings.settings.value.ankiWordCard }

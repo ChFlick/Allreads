@@ -17,12 +17,19 @@ data class AppSettings(
     val theme: ThemeMode = ThemeMode.System,
     /** Adds a word → meaning card next to the sentence card in new note types. */
     val ankiWordCard: Boolean = false,
+    /** Read-aloud speed, 1.0 is normal. */
+    val speechRate: Float = 1.0f,
+    /** Say a word as soon as it is tapped. */
+    val speakOnTap: Boolean = false,
+    /** The voice chosen per language code; a missing language uses the best installed voice. */
+    val voices: Map<String, String> = emptyMap(),
 ) {
     companion object {
         /** DeepL target languages offered in Settings. */
         val nativeLanguages = listOf("en", "de", "fr", "es", "it", "nl", "pl", "pt", "ru", "ja", "zh")
         val fontScales = 0.8f..1.6f
         val lineSpacings = 1.0f..2.0f
+        val speechRates = 0.5f..1.5f
     }
 }
 
@@ -40,6 +47,10 @@ class SettingsStore(context: Context) {
             .putFloat("line_spacing", next.lineSpacing)
             .putString("theme", next.theme.name)
             .putBoolean("anki_word_card", next.ankiWordCard)
+            .putFloat("speech_rate", next.speechRate)
+            .putBoolean("speak_on_tap", next.speakOnTap)
+            // Voice names hold letters, digits, '-' and '_', so "fr=name;de=name" is safe.
+            .putString("voices", next.voices.entries.joinToString(";") { "${it.key}=${it.value}" })
             .apply()
         _settings.value = next
     }
@@ -54,6 +65,11 @@ class SettingsStore(context: Context) {
                 ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
                 ?: defaults.theme,
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),
+            speechRate = prefs.getFloat("speech_rate", defaults.speechRate),
+            speakOnTap = prefs.getBoolean("speak_on_tap", defaults.speakOnTap),
+            voices = prefs.getString("voices", null).orEmpty().split(';')
+                .mapNotNull { entry -> entry.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
+                .toMap(),
         )
     }
 }

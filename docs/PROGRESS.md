@@ -39,6 +39,6 @@ First run of the CI APK on Christoph's phone. Working: all screens, EPUB import.
 - [ ] 22. AI "Explain"
 - [ ] 23. Offline dictionaries
 - [ ] 24. Phrase selection
-- [ ] 25. Audio
+- [ ] 25. Read-aloud (2026-11-25: a `Speech` interface with Android TTS behind it; a play button per sentence row (its row tinted while it speaks, no auto-scroll) and in the word drawer; Settings has a speed slider, "Speak words when tapped" and a voice picker per library language with a test button; a missing voice offers the TTS settings; JVM tests for choosing a voice. Pending: checking on a phone)
 - [ ] 26. Library, stats and backup
 - [ ] 27. Release

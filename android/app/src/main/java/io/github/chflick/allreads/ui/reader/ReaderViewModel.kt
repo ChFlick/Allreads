@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.speech.SpeakResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.chflick.allreads.data.Services
@@ -54,12 +55,17 @@ data class ReaderState(
     val translations: Map<String, SentenceTranslation> = emptyMap(),
     val selected: SelectedWord? = null,
     val message: String? = null,
+    /** Set when read-aloud found no voice for the book's language; the screen offers the TTS settings. */
+    val noVoice: Boolean = false,
 )
 
 /**
  * The reader's state. One instance serves every book: [open] starts a fresh
  * session for each book opening, while a rotation keeps the current one.
  */
+/** The utterance id for the word in the drawer. */
+const val WORD_UTTERANCE = "word"
+
 class ReaderViewModel(private val services: Services) : ViewModel() {
     private val repository = services.repository
     private val _state = MutableStateFlow(ReaderState())
@@ -69,6 +75,11 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     private var openId: Int = -1
     private var titles: List<String?> = emptyList()
     private var dictionaryTemplate: String = ""
+    /** The book language's text-to-speech locale, e.g. `fr-FR`. */
+    private var ttsLocale: String = ""
+
+    /** What is being read aloud: a row key, [WORD_UTTERANCE], or `null`. */
+    val speaking: StateFlow<String?> = services.speech.speaking
     private var openJob: Job? = null
     private var selectJob: Job? = null
 
@@ -84,6 +95,8 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         selectJob?.cancel()
         titles = emptyList()
         dictionaryTemplate = ""
+        ttsLocale = ""
+        services.speech.stop()
         _state.value = ReaderState()
         openJob = viewModelScope.launch {
             val book = repository.book(bookId)
@@ -92,8 +105,9 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
                 return@launch
             }
             titles = runCatching { repository.chapterTitles(bookId) }.getOrDefault(emptyList())
-            dictionaryTemplate = runCatching { repository.languageInfo(book.languageCode) }
-                .getOrNull()?.dictionaryUrl.orEmpty()
+            val language = runCatching { repository.languageInfo(book.languageCode) }.getOrNull()
+            dictionaryTemplate = language?.dictionaryUrl.orEmpty()
+            ttsLocale = language?.ttsLocale?.ifBlank { null } ?: book.languageCode
             _state.update { it.copy(book = book) }
             load(book.chapterIndex, startBlock = book.paragraphIndex.toInt())
         }
@@ -174,6 +188,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
                 dictionaryUrl = dictionaryLink(dictionaryTemplate, token.text),
             )
             _state.update { it.copy(selected = selected) }
+            if (services.settings.settings.value.speakOnTap) speakWord()
             // Unsaved (or untranslated) words get DeepL's translation in context.
             if (saved?.translation.isNullOrBlank()) translateSelected()
         }
@@ -255,6 +270,46 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     }
 
     fun messageShown() = _state.update { it.copy(message = null) }
+
+    fun noVoiceShown() = _state.update { it.copy(noVoice = false) }
+
+    /** Reads a sentence aloud, or stops it if it is the one playing. */
+    fun toggleSpeaking(row: ReaderRow) {
+        if (speaking.value == row.key) {
+            services.speech.stop()
+        } else {
+            speak(row.sentence, row.key)
+        }
+    }
+
+    /** Says the word in the drawer. */
+    fun speakWord() {
+        val word = _state.value.selected ?: return
+        speak(word.saved?.displayText ?: word.text, WORD_UTTERANCE)
+    }
+
+    fun stopSpeaking() = services.speech.stop()
+
+    private fun speak(text: String, id: String) {
+        val book = _state.value.book ?: return
+        val settings = services.settings.settings.value
+        viewModelScope.launch {
+            val result = services.speech.speak(
+                text = text,
+                localeTag = ttsLocale,
+                voiceName = settings.voices[book.languageCode],
+                rate = settings.speechRate,
+                id = id,
+            )
+            when (result) {
+                SpeakResult.Started -> Unit
+                SpeakResult.NoVoice -> _state.update { it.copy(noVoice = true) }
+                SpeakResult.Unavailable -> _state.update { it.copy(message = "Text-to-speech is not available on this phone") }
+            }
+        }
+    }
+
+    override fun onCleared() = services.speech.stop()
 
     /** Reopens the chapter: the parse is cached, so only the statuses change. */
     private suspend fun reloadStatuses() {

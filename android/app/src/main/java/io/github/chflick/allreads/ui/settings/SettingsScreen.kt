@@ -49,7 +49,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Translation, AnkiDroid, reading and appearance settings. */
+/** Translation, AnkiDroid, reading, read-aloud and appearance settings. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(services: Services) {
@@ -103,6 +103,10 @@ fun SettingsScreen(services: Services) {
                 fontSize = 19.sp * fontScale,
                 lineHeight = lineSpacing.em,
             )
+
+            HorizontalDivider()
+            Section("Read aloud")
+            SpeechSection(services)
 
             HorizontalDivider()
             Section("Appearance")

@@ -1,5 +1,10 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.Icons
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -49,6 +54,8 @@ import uniffi.allreads_ffi.WordStatus
 fun WordSheet(
     word: SelectedWord,
     onTranslate: () -> Unit,
+    speakingWord: Boolean,
+    onSpeak: () -> Unit,
     onSave: (WordStatus, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -79,8 +86,16 @@ fun WordSheet(
                 Text(
                     word.saved?.displayText ?: word.text,
                     style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                IconButton(onClick = onSpeak) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = "Say the word",
+                        tint = if (speakingWord) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.weight(1f))
                 Button(onClick = { onSave(status, translation, notes) }) {
                     Text(if (status == WordStatus.New) "Forget" else "Save")
                 }

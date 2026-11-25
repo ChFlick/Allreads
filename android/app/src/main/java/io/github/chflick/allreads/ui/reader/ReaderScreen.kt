@@ -1,5 +1,15 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.background
+import android.provider.Settings
+import android.content.Intent
+import android.content.Context
+import android.content.ActivityNotFoundException
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -74,6 +84,10 @@ import uniffi.allreads_ffi.WordStatus
 @Composable
 fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val speaking by viewModel.speaking.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    // Speech stops when the reader closes.
+    DisposableEffect(Unit) { onDispose { viewModel.stopSpeaking() } }
     val snackbar = remember { SnackbarHostState() }
     // A fresh list state per chapter, starting at the saved block.
     val listState = remember(state.chapterIndex, state.rows.isEmpty()) {
@@ -87,6 +101,16 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             snackbar.showSnackbar(it)
             viewModel.messageShown()
         }
+    }
+    LaunchedEffect(state.noVoice) {
+        if (!state.noVoice) return@LaunchedEffect
+        viewModel.noVoiceShown()
+        val result = snackbar.showSnackbar(
+            "No voice for this language on the phone",
+            actionLabel = "Get a voice",
+            withDismissAction = true,
+        )
+        if (result == SnackbarResult.ActionPerformed) openTtsSettings(context)
     }
     LaunchedEffect(listState, state.chapterIndex) {
         // Before the chapter has loaded the list is empty; saving then would
@@ -145,8 +169,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
                     row = row,
                     style = textStyle,
                     translation = state.translations[row.key],
+                    playing = speaking == row.key,
                     onWord = { tokenIndex -> viewModel.select(row, tokenIndex) },
                     onTranslate = { viewModel.toggleTranslation(row) },
+                    onSpeak = { viewModel.toggleSpeaking(row) },
                 )
             }
             item {
@@ -164,6 +190,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
         WordSheet(
             word = word,
             onTranslate = viewModel::translateSelected,
+            speakingWord = speaking == WORD_UTTERANCE,
+            onSpeak = viewModel::speakWord,
             onSave = viewModel::saveWord,
             onDismiss = viewModel::dismissWord,
         )
@@ -186,8 +214,10 @@ private fun SentenceRow(
     row: ReaderRow,
     style: TextStyle,
     translation: SentenceTranslation?,
+    playing: Boolean,
     onWord: (Int) -> Unit,
     onTranslate: () -> Unit,
+    onSpeak: () -> Unit,
 ) {
     val dark = LocalDarkTheme.current
     val text = remember(row, dark) { styledText(row, dark) }
@@ -200,8 +230,13 @@ private fun SentenceRow(
         2 -> style.copy(fontSize = style.fontSize * 1.3f, fontWeight = FontWeight.SemiBold)
         else -> style.copy(fontSize = style.fontSize * 1.15f, fontWeight = FontWeight.SemiBold)
     }
+    // The sentence being read aloud is tinted; the list does not scroll.
+    val tint = if (playing) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent
     Row(
-        Modifier.fillMaxWidth().padding(top = if (row.startsBlock) 14.dp else 2.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(top = if (row.startsBlock) 14.dp else 2.dp)
+            .background(tint, MaterialTheme.shapes.small),
         verticalAlignment = Alignment.Top,
     ) {
         Column(Modifier.weight(1f)) {
@@ -233,6 +268,13 @@ private fun SentenceRow(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+        }
+        IconButton(onClick = onSpeak, modifier = Modifier.size(40.dp)) {
+            Icon(
+                if (playing) Icons.Default.Close else Icons.Default.PlayArrow,
+                contentDescription = if (playing) "Stop reading" else "Read the sentence aloud",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         TranslateButton(shown = translation != null, onClick = onTranslate)
     }
@@ -301,3 +343,14 @@ private fun ChapterButtons(canGoBack: Boolean, canGoOn: Boolean, onPrevious: () 
         OutlinedButton(onClick = onNext, enabled = canGoOn) { Text("Next chapter") }
     }
 }
+
+/** Opens Android's text-to-speech settings, where voices are downloaded. */
+fun openTtsSettings(context: Context) {
+    val intent = Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
