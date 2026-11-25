@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An open book; a few "words" on the pages are marked like learning words in the reader. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:pivotX="54" android:pivotY="56" android:scaleX="1.25" android:scaleY="1.25">
+    <path android:fillColor="#FFFFFF" android:pathData="M30,40 C38,36 47,36 52,40 L52,74 C47,70.5 38,70.5 30,73 Z M56,40 C61,36 70,36 78,40 L78,73 C70,70.5 61,70.5 56,74 Z" />
+    <path android:fillColor="#B8C4DA" android:pathData="M34,47h14v2.5h-14z M34,54h9v2.5h-9z M60,47h14v2.5h-14z M66,61h8v2.5h-8z" />
+    <path android:fillColor="#F2C14E" android:pathData="M44,53h5v4.5h-5z M59,53h11v4.5h-11z" />
+    <path android:fillColor="#8FD18B" android:pathData="M34,60h12v4.5h-12z" />
+    </group>
+</vector>

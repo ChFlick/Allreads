@@ -142,8 +142,10 @@ fun WordSheetContent(
                 )
             }
             Spacer(Modifier.weight(1f))
-            Button(onClick = { onSave(status, translation, notes, lemma) }) {
-                Text(if (status == WordStatus.New) "Forget" else "Save")
+            // "New" on a word that was never saved has nothing to forget.
+            val forget = status == WordStatus.New
+            Button(enabled = !forget || word.saved != null, onClick = { onSave(status, translation, notes, lemma) }) {
+                Text(if (forget && word.saved != null) "Forget" else "Save")
             }
         }
         // Dictionary phrases around the word come first, so they show in the half-open drawer.

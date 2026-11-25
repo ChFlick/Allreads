@@ -21,6 +21,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import io.github.chflick.allreads.ui.languageName
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
@@ -103,14 +110,26 @@ private fun BookRow(book: BookSummary, onOpen: () -> Unit, onLongPress: () -> Un
     Card(Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress)) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Cover(book.coverPath)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(book.title, style = MaterialTheme.typography.titleMedium)
                 book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 val chapter = book.chapterIndex.toInt() + 1
                 Text(
-                    "${book.languageCode.uppercase()} · chapter $chapter of ${book.chapterCount}",
+                    "${languageName(book.languageCode)} · chapter $chapter of ${book.chapterCount}",
                     style = MaterialTheme.typography.labelMedium,
                 )
+            }
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More for “${book.title}”")
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Delete") }, onClick = {
+                        menu = false
+                        onLongPress()
+                    })
+                }
             }
         }
     }
@@ -143,7 +162,7 @@ private fun LanguageDialog(pending: PendingImport, onConfirm: (String) -> Unit, 
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(selected = chosen == code, onClick = { chosen = code })
-                        Text(code.uppercase())
+                        Text(languageName(code))
                     }
                 }
             }
@@ -181,7 +200,8 @@ fun LibraryContent(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
+                // The bottom leaves room for the import button.
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(state.books, key = { it.id }) { book ->

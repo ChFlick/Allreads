@@ -72,6 +72,10 @@ Paper cuts and polish ideas from a run through every screen (2026-11-25), done b
 | 39 | Predictive back and animations between Library and the reader. | `AnimatedContent`, or Navigation Compose later. | M |
 | 40 | Accessibility: words in the reader can't be reached with TalkBack. | Long-term: per-sentence semantics with custom actions. At least label every icon button (mostly done). | L |
 
+## Done
+
+2026-11-25, quick-fix batch: 1 (app icon), 2, 3, 4, 5, 8, 11, 14, 15, 31, 35, 36. Item 32 needed no change, because the enum names already read "System / Light / Dark". Item 24 is postponed: hiding the button needs a `<queries>` entry for browsers, and the Toast does the job.
+
 ## Suggested order
 
 1. **Quick fixes (one sitting):** 1, 2, 3, 4, 5, 8, 11, 14, 15, 24, 31, 32, 35, 36.

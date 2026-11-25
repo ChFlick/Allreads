@@ -2,10 +2,11 @@ package io.github.chflick.allreads.ui.reader
 
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.background
 import android.provider.Settings
 import android.content.Intent
@@ -71,6 +72,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chflick.allreads.data.AppSettings
+import io.github.chflick.allreads.ui.StopIcon
 import io.github.chflick.allreads.reader.ReaderRow
 import io.github.chflick.allreads.reader.firstRowOf
 import io.github.chflick.allreads.ui.theme.LocalDarkTheme
@@ -90,6 +92,12 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
     val context = LocalContext.current
     // Speech stops when the reader closes.
     DisposableEffect(Unit) { onDispose { viewModel.stopSpeaking() } }
+    // The screen stays on while a book is open.
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
     val snackbar = remember { SnackbarHostState() }
     // A fresh list state per chapter, starting at the saved block.
     val listState = remember(state.chapterIndex, state.rows.isEmpty()) {
@@ -135,6 +143,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             onWord = viewModel::select,
             onSelectRange = viewModel::selectRange,
             onTranslate = viewModel::toggleTranslation,
+            onRetryTranslation = viewModel::retryTranslation,
             onSpeak = viewModel::toggleSpeaking,
             onPreviousChapter = viewModel::previousChapter,
             onNextChapter = viewModel::nextChapter,
@@ -177,6 +186,7 @@ private fun SentenceRow(
     onWord: (Int) -> Unit,
     onSelectRange: (IntRange) -> Unit,
     onTranslate: () -> Unit,
+    onRetryTranslation: () -> Unit,
     onSpeak: () -> Unit,
 ) {
     val dark = LocalDarkTheme.current
@@ -262,16 +272,20 @@ private fun SentenceRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
                 )
-                is SentenceTranslation.Failed -> Text(
-                    translation.message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
+                is SentenceTranslation.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        translation.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onRetryTranslation) { Text("Retry") }
+                }
             }
         }
         IconButton(onClick = onSpeak, modifier = Modifier.size(40.dp)) {
             Icon(
-                if (playing) Icons.Default.Close else Icons.Default.PlayArrow,
+                if (playing) StopIcon else Icons.Default.PlayArrow,
                 contentDescription = if (playing) "Stop reading" else "Read the sentence aloud",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -363,6 +377,7 @@ data class ReaderActions(
     val onWord: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
     val onSelectRange: (ReaderRow, IntRange) -> Unit = { _, _ -> },
     val onTranslate: (ReaderRow) -> Unit = {},
+    val onRetryTranslation: (ReaderRow) -> Unit = {},
     val onSpeak: (ReaderRow) -> Unit = {},
     val onPreviousChapter: () -> Unit = {},
     val onNextChapter: () -> Unit = {},
@@ -431,6 +446,7 @@ fun ReaderContent(
                     onWord = { tokenIndex -> actions.onWord(row, tokenIndex) },
                     onSelectRange = { range -> actions.onSelectRange(row, range) },
                     onTranslate = { actions.onTranslate(row) },
+                    onRetryTranslation = { actions.onRetryTranslation(row) },
                     onSpeak = { actions.onSpeak(row) },
                 )
             }

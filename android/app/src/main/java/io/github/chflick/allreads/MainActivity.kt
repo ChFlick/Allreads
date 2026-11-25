@@ -11,8 +11,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.activity.compose.BackHandler
+import io.github.chflick.allreads.ui.BookIcon
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -60,8 +61,8 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
-    Library("Library", Icons.Default.Home),
-    Words("Words", Icons.Default.List),
+    Library("Library", BookIcon),
+    Words("Words", Icons.AutoMirrored.Filled.List),
     Settings("Settings", Icons.Default.Settings),
 }
 
@@ -85,6 +86,9 @@ private fun AllreadsNavigation(services: Services) {
         ReaderScreen(reader, settings, onBack = { openBookId = null })
         return
     }
+
+    // Back from Words or Settings goes to the Library first; back there leaves the app.
+    BackHandler(enabled = tab != Tab.Library) { tab = Tab.Library }
 
     Scaffold(
         bottomBar = {

@@ -1,5 +1,9 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalUriHandler
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -186,10 +190,30 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
         }
     }
 
+    val uri = LocalUriHandler.current
+    var confirmRemove by remember { mutableStateOf(false) }
     Text(
-        if (hint != null) "DeepL API key saved (…$hint)" else "No DeepL API key yet. Get a free one at deepl.com/pro-api.",
+        if (hint != null) "DeepL API key saved (…$hint)" else "No DeepL API key yet. DeepL's free plan translates 500,000 characters a month.",
         style = MaterialTheme.typography.bodyMedium,
     )
+    if (hint == null) {
+        TextButton(onClick = { uri.openUri("https://www.deepl.com/pro-api") }) { Text("Get a free key at deepl.com") }
+    }
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Remove the DeepL key?") },
+            text = { Text("Translations stop working until you add a key again.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = false
+                    services.apiKeys.clearDeeplKey()
+                    check = null
+                }) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+        )
+    }
     when (val result = check) {
         null -> Unit
         KeyCheck.Checking -> Text("Checking the key with DeepL…", style = MaterialTheme.typography.bodySmall)
@@ -228,10 +252,7 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
         ) { Text("Save key") }
         if (hasKey) {
             OutlinedButton(onClick = { runCheck(null) }) { Text("Check key") }
-            OutlinedButton(onClick = {
-                services.apiKeys.clearDeeplKey()
-                check = null
-            }) { Text("Remove") }
+            OutlinedButton(onClick = { confirmRemove = true }) { Text("Remove") }
         }
     }
 }

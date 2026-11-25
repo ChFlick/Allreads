@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import io.github.chflick.allreads.ui.languageName
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -163,7 +165,7 @@ fun WordsContent(
                     FilterChip(
                         selected = code == state.language,
                         onClick = { onLanguage(code) },
-                        label = { Text(code.uppercase()) },
+                        label = { Text(languageName(code)) },
                     )
                 }
             }
