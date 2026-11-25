@@ -63,7 +63,7 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 | F16 | Vocabulary | Link inflected forms to a lemma (parent term) | P1 | M3 |
 | F17 | Vocabulary | Word list with search, filter by status and language | P1 | M2 |
 | F18 | Anki | Detect AnkiDroid, request its permission, and pick or create a deck | P0 | M2 |
-| F19 | Anki | Create the app's note type on first use: Word, Lemma, Translation, Sentence (word bolded), Sentence translation, Source | P0 | M2 |
+| F19 | Anki | Create the app's note type on first use (one per language): Word, Lemma, Translation, Sentence (word bolded), Sentence translation, Source. One sentence card per word, read aloud with Anki's TTS; an optional word card | P0 | M2 |
 | F20 | Anki | Push a note when a term is saved with status 1–4; update the same note when the term is edited; no duplicates | P0 | M2 |
 | F21 | Anki | Queue pushes when AnkiDroid is unavailable and retry later | P1 | M2 |
 | F22 | Anki | Export terms as `.apkg` and CSV | P2 | M2 |
@@ -100,7 +100,7 @@ P0 is needed for the MVP (M1–M2), P1 for v1.0, P2 is nice to have.
 
 **Open questions:**
 
-- [x] Note type: both, as two card templates (word → meaning, and sentence → meaning), as in implementation step 17.
+- [x] Note type: one sentence card per word (sentence mining), with an optional word card (changed 2026-11-25).
 - [ ] Which dictionary source per language pair (French → English, French → German), and how big is it after filtering?
 - [ ] Should statuses sync back from Anki (for example, mark a word known once its card is mature)?
 - [x] Name and licence: Allreads, MIT (decided 2026-11-24).

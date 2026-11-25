@@ -129,11 +129,15 @@ Deferred past v1: AI "Explain" (step 22), the book browser and stats (the browse
 - The deck is chosen in Settings: an existing AnkiDroid deck, or a new one (suggested name "Allreads").
 - The card's sentence translation reuses the translation already shown while reading. A Settings option, off by default, fetches one from DeepL when saving a word without one.
 - Tags: `allreads`, the language code, and a short book tag.
+- Cards are **sentence mining** (Christoph, 2026-11-25): one card per saved word by default. Front: the sentence with the word in bold. Back: the word, translation, dictionary form, sentence translation and source. Recognition only (target language → English). A Settings option adds a second, word → meaning card.
+- **Audio:** from the start, the card template speaks the front with Anki's built-in `{{tts …}}` tag, using the device's voice (no files). Audio files saved into the cards come with read-aloud (step 25), via `addMediaFromUri`.
+- **One note type per language** (e.g. "Allreads (French)"), because the `{{tts}}` tag needs a fixed locale, taken from the preset's `tts_locale`. The note type's fields, templates and CSS are defined in Rust, so Kotlin only hands them to AnkiDroid.
 
 17a. **Rust side (core first).**
     - Migration V7: three term columns (the sentence the word was saved in, that sentence's translation, and its source such as "Book title, chapter 3"), and a `setting` table (key, value) for the Anki note type and deck ids. API keys never go in it.
     - `save_term` takes the optional sentence, sentence translation and source, and queues the term when its status is 1–4 or it already has a card.
-    - A note builder turns a term into the six fields (Word, Lemma, Translation, Sentence with the word in bold, Sentence translation, Source) and its tags. Text is HTML-escaped; bolding the word ignores case and apostrophe style. Unit and snapshot tests.
+    - A note builder turns a term into the six fields (Word, Lemma, Translation, Sentence with the word in bold, Sentence translation, Source) and its tags. Text is HTML-escaped; the word is found by tokenizing the sentence and matching term keys, so case and apostrophe style don't matter. Unit and snapshot tests.
+    - The note type per language: name, fields, the sentence card (and the optional word card), templates with the `{{tts}}` tag, and CSS.
     - FFI: `pending_anki_notes()`, `record_anki_push(term_id, note_id)`, `record_anki_failure(term_id)`, and getters and setters for the Anki ids and the deck.
     - **Done when** the Rust tests cover queuing rules, field building and escaping, and `cargo test` passes.
 
