@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -94,8 +95,10 @@ private fun AllreadsNavigation(services: Services) {
         },
     ) { padding ->
         // The bottom bar already handles the navigation-bar inset, so the tab
-        // screens' own Scaffolds must not add it again.
-        Box(Modifier.padding(bottom = padding.calculateBottomPadding()).consumeWindowInsets(padding)) {
+        // screens' own Scaffolds must not add it again. Only the bottom is
+        // consumed: the screens' top bars still need the status-bar inset.
+        val bottom = PaddingValues(bottom = padding.calculateBottomPadding())
+        Box(Modifier.padding(bottom).consumeWindowInsets(bottom)) {
             when (tab) {
                 Tab.Library -> {
                     val library = viewModel { LibraryViewModel(services.repository) }
