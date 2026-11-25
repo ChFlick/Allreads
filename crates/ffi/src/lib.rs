@@ -12,8 +12,8 @@ mod records;
 pub use app::{check_deepl_key, read_book_meta, App};
 pub use error::AllreadsError;
 pub use records::{
-    BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, LanguageInfo, SavedTerm,
-    TermInput, Token, Translation, WordStatus,
+    AnkiCardTemplate, AnkiNote, AnkiNoteType, BookMeta, BookSummary, Chapter, ChapterBlock,
+    DeepLKeyStatus, LanguageInfo, SavedTerm, TermInput, Token, Translation, WordStatus,
 };
 
 uniffi::setup_scaffolding!();

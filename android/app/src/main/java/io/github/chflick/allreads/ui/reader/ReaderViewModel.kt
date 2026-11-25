@@ -32,6 +32,8 @@ sealed interface SentenceTranslation {
 data class SelectedWord(
     val text: String,
     val sentence: String,
+    /** The [ReaderRow.key] of the sentence, to find its shown translation. */
+    val rowKey: String,
     val status: WordStatus,
     val saved: SavedTerm?,
     /** DeepL's in-context translation, when it has arrived. */
@@ -166,6 +168,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             val selected = SelectedWord(
                 text = token.text,
                 sentence = row.sentence,
+                rowKey = row.key,
                 status = token.status ?: WordStatus.New,
                 saved = saved,
                 dictionaryUrl = dictionaryLink(dictionaryTemplate, token.text),
@@ -210,7 +213,11 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     /** Saves the selected word (or forgets it for New), then recolours the chapter. */
     fun saveWord(status: WordStatus, translation: String, notes: String) {
         val selected = _state.value.selected ?: return
-        val language = _state.value.book?.languageCode ?: return
+        val state = _state.value
+        val book = state.book ?: return
+        val language = book.languageCode
+        // The card reuses the sentence translation already on screen, so saving costs no quota.
+        val sentenceTranslation = (state.translations[selected.rowKey] as? SentenceTranslation.Shown)?.text
         viewModelScope.launch {
             val result = runCatching {
                 if (status == WordStatus.New) {
@@ -224,6 +231,10 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
                             translation = translation.trim(),
                             notes = notes.trim(),
                             lemma = selected.saved?.lemma,
+                            sentence = selected.sentence,
+                            sentenceTranslation = sentenceTranslation,
+                            sourceBook = book.title,
+                            sourceChapter = state.chapterTitle,
                         ),
                     )
                 }

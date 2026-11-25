@@ -33,6 +33,13 @@ impl Status {
         }
     }
 
+    /// True for the statuses that become Anki cards: learning levels 1 to 4.
+    /// Level 5, known and ignored words do not.
+    #[must_use]
+    pub fn makes_anki_card(self) -> bool {
+        matches!(self, Self::Learning(1..=4))
+    }
+
     /// The status for a stored number, or `None` if the number is not a status.
     #[must_use]
     pub fn from_code(code: u8) -> Option<Self> {
@@ -58,6 +65,19 @@ pub struct NewTerm {
     /// The lemma this form links to. `None` keeps an existing link, so
     /// re-saving a word from the reader never unlinks it.
     pub parent_id: Option<i64>,
+    /// Where the word was met, for its Anki card. `None` keeps the stored
+    /// context, so re-saving from the Words tab never erases the sentence.
+    pub context: Option<TermContext>,
+}
+
+/// Where a word was met: its sentence and source, for the Anki card.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TermContext {
+    pub sentence: String,
+    /// The sentence's translation, if one was shown while reading.
+    pub sentence_translation: String,
+    pub source_book: String,
+    pub source_chapter: String,
 }
 
 /// A saved term.
@@ -74,10 +94,12 @@ pub struct Term {
     pub translation: String,
     pub notes: String,
     pub parent_id: Option<i64>,
+    /// Where the word was saved; empty fields when it was saved without context.
+    pub context: TermContext,
 }
 
-const COLUMNS: &str =
-    "id, language_code, text, lemma, status, translation, notes, parent_id, display_text";
+const COLUMNS: &str = "id, language_code, text, lemma, status, translation, notes, parent_id, \
+     display_text, context_sentence, context_translation, source_book, source_chapter";
 
 impl Database {
     /// Saves a term and returns its id. An existing term with the same language
@@ -103,16 +125,23 @@ impl Database {
         }
         self.check_parent_link(&term.language_code, display_text, term.parent_id)?;
         // On conflict the display text is kept: it is the form as first seen.
+        // The context (?9..?12) is NULL when not given, which keeps the stored one.
+        let context = term.context.as_ref();
         let id = self.conn().query_row(
             "INSERT INTO term (language_code, text, lemma, status, translation, notes, parent_id,
-                 display_text)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 display_text, context_sentence, context_translation, source_book, source_chapter)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                 COALESCE(?9, ''), COALESCE(?10, ''), COALESCE(?11, ''), COALESCE(?12, ''))
              ON CONFLICT (language_code, text) DO UPDATE SET
                  lemma = excluded.lemma,
                  status = excluded.status,
                  translation = excluded.translation,
                  notes = excluded.notes,
-                 parent_id = COALESCE(excluded.parent_id, term.parent_id)
+                 parent_id = COALESCE(excluded.parent_id, term.parent_id),
+                 context_sentence = COALESCE(?9, term.context_sentence),
+                 context_translation = COALESCE(?10, term.context_translation),
+                 source_book = COALESCE(?11, term.source_book),
+                 source_chapter = COALESCE(?12, term.source_chapter)
              RETURNING id",
             params![
                 term.language_code,
@@ -123,9 +152,18 @@ impl Database {
                 term.notes,
                 term.parent_id,
                 display_text,
+                context.map(|c| c.sentence.trim()),
+                context.map(|c| c.sentence_translation.trim()),
+                context.map(|c| c.source_book.trim()),
+                context.map(|c| c.source_chapter.trim()),
             ],
             |row| row.get(0),
         )?;
+        // Words being learned (levels 1 to 4) go to Anki, and so do edits of a
+        // word that already has a card.
+        if term.status.makes_anki_card() || self.anki_link(id)?.is_some() {
+            self.queue_for_anki(id)?;
+        }
         Ok(id)
     }
 
@@ -271,6 +309,12 @@ fn term_from_row(row: &Row) -> rusqlite::Result<Term> {
         notes: row.get(6)?,
         parent_id: row.get(7)?,
         display_text: row.get(8)?,
+        context: TermContext {
+            sentence: row.get(9)?,
+            sentence_translation: row.get(10)?,
+            source_book: row.get(11)?,
+            source_chapter: row.get(12)?,
+        },
     })
 }
 
@@ -288,7 +332,77 @@ mod tests {
             translation: String::new(),
             notes: String::new(),
             parent_id: None,
+            context: None,
         }
+    }
+
+    fn context(sentence: &str) -> TermContext {
+        TermContext {
+            sentence: sentence.into(),
+            sentence_translation: "The man reads.".into(),
+            source_book: "Le Livre".into(),
+            source_chapter: "Chapitre un".into(),
+        }
+    }
+
+    #[test]
+    fn context_is_stored_and_kept_when_re_saving_without_one() {
+        let db = french_db();
+        let mut term = new_term("homme", Status::Learning(1));
+        term.context = Some(context("L'homme lit."));
+        let id = db.save_term(&term).unwrap();
+        db.save_term(&new_term("homme", Status::Learning(2)))
+            .unwrap();
+        let saved = db.term(id).unwrap().unwrap();
+        assert_eq!(saved.context, context("L'homme lit."));
+        assert_eq!(saved.status, Status::Learning(2));
+        // A new context replaces the old one.
+        let mut again = new_term("homme", Status::Learning(2));
+        again.context = Some(context("Un homme dort."));
+        db.save_term(&again).unwrap();
+        assert_eq!(
+            db.term(id).unwrap().unwrap().context.sentence,
+            "Un homme dort."
+        );
+    }
+
+    #[test]
+    fn only_levels_one_to_four_are_queued_for_anki() {
+        let db = french_db();
+        let mut queued = Vec::new();
+        for (text, status) in [
+            ("un", Status::Learning(1)),
+            ("deux", Status::Learning(4)),
+            ("cinq", Status::Learning(5)),
+            ("connu", Status::WellKnown),
+            ("ignore", Status::Ignored),
+        ] {
+            let id = db.save_term(&new_term(text, status)).unwrap();
+            if status.makes_anki_card() {
+                queued.push(id);
+            }
+        }
+        let ids: Vec<i64> = db
+            .anki_queue()
+            .unwrap()
+            .into_iter()
+            .map(|q| q.term_id)
+            .collect();
+        assert_eq!(ids, queued);
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn a_word_with_a_card_is_queued_again_when_edited_even_at_level_five() {
+        let db = french_db();
+        let id = db
+            .save_term(&new_term("chat", Status::Learning(2)))
+            .unwrap();
+        db.link_anki_note(id, 1001, 1).unwrap();
+        db.complete_anki_push(id).unwrap();
+        db.save_term(&new_term("chat", Status::Learning(5)))
+            .unwrap();
+        assert_eq!(db.anki_queue().unwrap()[0].term_id, id);
     }
 
     #[test]

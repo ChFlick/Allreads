@@ -83,6 +83,24 @@ impl Database {
         require_one_changed(changed, || format!("queued term {term_id}"))
     }
 
+    /// Records a successful push: links the term to its note and takes it off
+    /// the queue, in one transaction.
+    ///
+    /// # Errors
+    /// Returns a database error if the term does not exist or a statement fails.
+    pub fn record_anki_push(
+        &self,
+        term_id: i64,
+        note_id: i64,
+        deck_id: i64,
+    ) -> Result<(), DbError> {
+        let transaction = self.conn().unchecked_transaction()?;
+        self.link_anki_note(term_id, note_id, deck_id)?;
+        transaction.execute("DELETE FROM anki_outbox WHERE term_id = ?1", [term_id])?;
+        transaction.commit()?;
+        Ok(())
+    }
+
     /// Removes a term from the queue after it has been pushed.
     /// # Errors
     /// Returns `NotFound` if no row matches, and a database error if the statement fails.
@@ -126,6 +144,7 @@ mod tests {
                 translation: "cat".into(),
                 notes: String::new(),
                 parent_id: None,
+                context: None,
             })
             .unwrap();
         (db, term_id)
@@ -186,6 +205,7 @@ mod tests {
                     translation: String::new(),
                     notes: String::new(),
                     parent_id: None,
+                    context: None,
                 })
                 .unwrap();
             db.queue_for_anki(id).unwrap();

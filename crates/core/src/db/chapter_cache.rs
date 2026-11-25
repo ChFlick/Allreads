@@ -150,6 +150,7 @@ mod tests {
                 translation: String::new(),
                 notes: String::new(),
                 parent_id: None,
+                context: None,
             })
             .unwrap();
         }

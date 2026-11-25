@@ -1,6 +1,6 @@
 //! The plain records and enums that cross into Kotlin.
 
-use allreads_core::db::term::{Status, Term};
+use allreads_core::db::term::{Status, Term, TermContext};
 
 use crate::error::AllreadsError;
 
@@ -80,6 +80,33 @@ pub struct TermInput {
     pub translation: String,
     pub notes: String,
     pub lemma: Option<String>,
+    /// The sentence the word was met in, for the Anki card. `None` keeps
+    /// what is stored; the Words screen passes `None`.
+    pub sentence: Option<String>,
+    /// That sentence's translation, if the reader already showed one.
+    pub sentence_translation: Option<String>,
+    pub source_book: Option<String>,
+    pub source_chapter: Option<String>,
+}
+
+impl TermInput {
+    /// The card context, or `None` if no part of it was given.
+    pub(crate) fn context(&self) -> Option<TermContext> {
+        if self.sentence.is_none()
+            && self.sentence_translation.is_none()
+            && self.source_book.is_none()
+            && self.source_chapter.is_none()
+        {
+            return None;
+        }
+        let text = |value: &Option<String>| value.clone().unwrap_or_default();
+        Some(TermContext {
+            sentence: text(&self.sentence),
+            sentence_translation: text(&self.sentence_translation),
+            source_book: text(&self.source_book),
+            source_chapter: text(&self.source_chapter),
+        })
+    }
 }
 
 /// A saved word, as the word sheet shows it.
@@ -182,4 +209,63 @@ pub struct Translation {
 /// Converts a count to `u32`, clamping instead of wrapping.
 pub(crate) fn saturate_u32(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
+}
+
+/// One card of an Anki note type.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AnkiCardTemplate {
+    pub name: String,
+    pub front: String,
+    pub back: String,
+}
+
+/// The Anki note type for one language, to create in `AnkiDroid` once.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AnkiNoteType {
+    pub name: String,
+    pub fields: Vec<String>,
+    pub cards: Vec<AnkiCardTemplate>,
+    pub css: String,
+}
+
+impl From<allreads_core::anki::NoteType> for AnkiNoteType {
+    fn from(note_type: allreads_core::anki::NoteType) -> Self {
+        AnkiNoteType {
+            name: note_type.name,
+            fields: note_type.fields,
+            cards: note_type
+                .cards
+                .into_iter()
+                .map(|card| AnkiCardTemplate {
+                    name: card.name,
+                    front: card.front,
+                    back: card.back,
+                })
+                .collect(),
+            css: note_type.css,
+        }
+    }
+}
+
+/// A note waiting to go to `AnkiDroid`: add it when `note_id` is `None`,
+/// otherwise update that note. Fields follow `AnkiNoteType::fields`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AnkiNote {
+    pub term_id: i64,
+    pub language_code: String,
+    pub note_id: Option<i64>,
+    pub fields: Vec<String>,
+    pub tags: Vec<String>,
+}
+
+impl From<allreads_core::anki::AnkiNote> for AnkiNote {
+    fn from(note: allreads_core::anki::AnkiNote) -> Self {
+        AnkiNote {
+            term_id: note.term_id,
+            language_code: note.language_code,
+            note_id: note.note_id,
+            fields: note.fields,
+            tags: note.tags,
+        }
+    }
 }

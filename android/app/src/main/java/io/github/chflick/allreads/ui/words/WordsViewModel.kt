@@ -92,6 +92,10 @@ class WordsViewModel(private val repository: Repository) : ViewModel() {
                             translation = translation.trim(),
                             notes = notes.trim(),
                             lemma = term.lemma,
+                            sentence = null,
+                            sentenceTranslation = null,
+                            sourceBook = null,
+                            sourceChapter = null,
                         ),
                     )
                 }

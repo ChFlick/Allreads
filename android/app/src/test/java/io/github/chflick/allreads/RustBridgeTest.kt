@@ -58,8 +58,15 @@ class RustBridgeTest {
                     translation = "man",
                     notes = "",
                     lemma = null,
+                    sentence = null,
+                    sentenceTranslation = null,
+                    sourceBook = null,
+                    sourceChapter = null,
                 ),
             )
+            val pending = app.pendingAnkiNotes()
+            assertEquals(1, pending.size)
+            assertEquals("Allreads (French)", app.ankiNoteType("fr", false).name)
             val chapter = app.openChapter(summary.id, 0u)
             val statuses = chapter.blocks
                 .flatMap { it.tokens }

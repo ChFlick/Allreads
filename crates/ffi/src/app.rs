@@ -17,8 +17,8 @@ use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
 
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
-    saturate_u32, BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, LanguageInfo,
-    SavedTerm, TermInput, Token, Translation, WordStatus,
+    saturate_u32, AnkiNote, AnkiNoteType, BookMeta, BookSummary, Chapter, ChapterBlock,
+    DeepLKeyStatus, LanguageInfo, SavedTerm, TermInput, Token, Translation, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -38,6 +38,14 @@ pub struct App {
 }
 
 impl App {
+    /// A stored id setting; an unreadable value counts as unset.
+    fn setting_id(&self, key: &str) -> Result<Option<i64>, AllreadsError> {
+        Ok(self
+            .db()?
+            .setting(key)?
+            .and_then(|value| value.parse().ok()))
+    }
+
     fn db(&self) -> Result<MutexGuard<'_, Database>, AllreadsError> {
         self.db.lock().map_err(|_| poisoned())
     }
@@ -396,7 +404,9 @@ impl App {
                 reason: "a saved word cannot be New; use forget_term".into(),
             })?;
         let db = self.db()?;
+        let context = input.context();
         let id = db.save_term(&NewTerm {
+            context,
             language_code: input.language_code,
             text: input.text,
             lemma: input.lemma,
@@ -513,6 +523,96 @@ impl App {
             .save_position(book_id, chapter_index, paragraph_index)?)
     }
 
+    /// The Anki note type for a language. Kotlin creates it in `AnkiDroid`
+    /// once and stores its id with `set_anki_model_id`.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown language.
+    pub fn anki_note_type(
+        &self,
+        language_code: String,
+        include_word_card: bool,
+    ) -> Result<AnkiNoteType, AllreadsError> {
+        let language =
+            self.db()?
+                .language(&language_code)?
+                .ok_or_else(|| AllreadsError::Missing {
+                    what: format!("language {language_code}"),
+                })?;
+        Ok(allreads_core::anki::note_type(&language, include_word_card).into())
+    }
+
+    /// Every note waiting to go to `AnkiDroid`, oldest first.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn pending_anki_notes(&self) -> Result<Vec<AnkiNote>, AllreadsError> {
+        Ok(allreads_core::anki::pending_notes(&*self.db()?)?
+            .into_iter()
+            .map(AnkiNote::from)
+            .collect())
+    }
+
+    /// Records that a note reached `AnkiDroid`, so it leaves the queue and
+    /// later edits update the same note.
+    ///
+    /// # Errors
+    /// Returns `Missing` if the term no longer exists.
+    pub fn record_anki_push(
+        &self,
+        term_id: i64,
+        note_id: i64,
+        deck_id: i64,
+    ) -> Result<(), AllreadsError> {
+        Ok(self.db()?.record_anki_push(term_id, note_id, deck_id)?)
+    }
+
+    /// Records a failed push; the note stays queued for the next try.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be written.
+    pub fn record_anki_failure(&self, term_id: i64) -> Result<(), AllreadsError> {
+        Ok(self.db()?.record_anki_attempt(term_id)?)
+    }
+
+    /// The `AnkiDroid` deck chosen in Settings, if any.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn anki_deck_id(&self) -> Result<Option<i64>, AllreadsError> {
+        self.setting_id(ANKI_DECK)
+    }
+
+    /// Stores the `AnkiDroid` deck chosen in Settings.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be written.
+    pub fn set_anki_deck_id(&self, deck_id: i64) -> Result<(), AllreadsError> {
+        Ok(self.db()?.set_setting(ANKI_DECK, &deck_id.to_string())?)
+    }
+
+    /// The `AnkiDroid` note type id made for a language, if any.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn anki_model_id(&self, language_code: String) -> Result<Option<i64>, AllreadsError> {
+        self.setting_id(&model_key(&language_code))
+    }
+
+    /// Stores the `AnkiDroid` note type id made for a language.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be written.
+    pub fn set_anki_model_id(
+        &self,
+        language_code: String,
+        model_id: i64,
+    ) -> Result<(), AllreadsError> {
+        Ok(self
+            .db()?
+            .set_setting(&model_key(&language_code), &model_id.to_string())?)
+    }
+
     /// Deletes a book, its cover, and its file if the file is in app storage.
     ///
     /// # Errors
@@ -530,6 +630,12 @@ impl App {
         self.remove_owned_file(Path::new(&row.file_path));
         Ok(())
     }
+}
+
+const ANKI_DECK: &str = "anki.deck";
+
+fn model_key(language_code: &str) -> String {
+    format!("anki.model.{}", language_code.to_lowercase())
 }
 
 /// Checks a DeepL key right after the user enters it. It first reads the
@@ -696,6 +802,7 @@ mod tests {
                 translation: String::new(),
                 notes: String::new(),
                 parent_id: None,
+                context: None,
             })
             .unwrap();
     }
@@ -816,7 +923,63 @@ mod tests {
             translation: "man".into(),
             notes: String::new(),
             lemma: None,
+            sentence: None,
+            sentence_translation: None,
+            source_book: None,
+            source_chapter: None,
         }
+    }
+
+    #[test]
+    fn saved_words_wait_for_anki_with_their_sentence() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let saved = app
+            .save_term(TermInput {
+                sentence: Some("L’homme s’arrêta.".into()),
+                sentence_translation: Some("The man stopped.".into()),
+                source_book: Some("Le Livre".into()),
+                source_chapter: Some("Un".into()),
+                ..input("homme", WordStatus::Learning { level: 1 })
+            })
+            .unwrap();
+        app.save_term(input("le", WordStatus::WellKnown)).unwrap();
+        let notes = app.pending_anki_notes().unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].term_id, saved.id);
+        assert_eq!(notes[0].fields[3], "L’<b>homme</b> s’arrêta.");
+        assert_eq!(notes[0].fields[5], "Le Livre — Un");
+
+        app.record_anki_push(saved.id, 55, 1).unwrap();
+        assert!(app.pending_anki_notes().unwrap().is_empty());
+        // Re-saving from the Words screen keeps the sentence and updates note 55.
+        app.save_term(input("homme", WordStatus::Learning { level: 2 }))
+            .unwrap();
+        let notes = app.pending_anki_notes().unwrap();
+        assert_eq!(notes[0].note_id, Some(55));
+        assert_eq!(notes[0].fields[4], "The man stopped.");
+        app.record_anki_failure(saved.id).unwrap();
+    }
+
+    #[test]
+    fn anki_note_types_and_ids_are_per_language() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let note_type = app.anki_note_type("fr".into(), true).unwrap();
+        assert_eq!(note_type.name, "Allreads (French)");
+        assert_eq!(note_type.cards.len(), 2);
+        assert!(matches!(
+            app.anki_note_type("xx".into(), false),
+            Err(AllreadsError::Missing { .. })
+        ));
+
+        assert_eq!(app.anki_deck_id().unwrap(), None);
+        app.set_anki_deck_id(12).unwrap();
+        app.set_anki_model_id("fr".into(), 34).unwrap();
+        let app = new_app(&dir);
+        assert_eq!(app.anki_deck_id().unwrap(), Some(12));
+        assert_eq!(app.anki_model_id("FR".into()).unwrap(), Some(34));
+        assert_eq!(app.anki_model_id("de".into()).unwrap(), None);
     }
 
     fn statuses_of(chapter: &Chapter, key: &str) -> Vec<WordStatus> {

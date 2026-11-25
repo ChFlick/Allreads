@@ -1,0 +1,19 @@
+---
+source: crates/core/src/anki.rs
+expression: "(note.fields, note.tags)"
+---
+(
+    [
+        "lit",
+        "",
+        "man",
+        "Il <b>lit</b> un livre.",
+        "The man stopped.",
+        "Le Comte de Monte-Cristo — Chapitre I",
+    ],
+    [
+        "allreads",
+        "fr",
+        "le_comte_de_monte_cristo",
+    ],
+)
