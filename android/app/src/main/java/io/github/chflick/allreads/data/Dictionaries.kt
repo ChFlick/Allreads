@@ -1,0 +1,185 @@
+package io.github.chflick.allreads.data
+
+import java.io.File
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import uniffi.allreads_ffi.AvailableDictionary
+import uniffi.allreads_ffi.InstalledDictionary
+
+/** Where the app finds the list of dictionaries. */
+const val DICTIONARY_MANIFEST_URL =
+    "https://github.com/ChFlick/Allreads/releases/download/dictionaries/dictionaries.json"
+
+/** Fetching over HTTPS; an interface so the JVM tests can use files instead. */
+interface Fetcher {
+    fun text(url: String): String
+
+    /** Writes `url` to `target`, calling `progress` with the bytes written so far. */
+    fun download(url: String, target: File, progress: (Long) -> Unit)
+}
+
+/** The Rust side: installing, listing and removing. */
+interface DictionaryFiles {
+    suspend fun installed(): List<InstalledDictionary>
+    suspend fun install(download: File, sha256: String, pair: String): InstalledDictionary
+    suspend fun remove(pair: String)
+    fun parseManifest(json: String): List<AvailableDictionary>
+}
+
+/** A dictionary's download, as Settings and the word drawer show it. */
+sealed interface DownloadState {
+    data class Running(val bytes: Long, val total: Long) : DownloadState
+    data class Failed(val message: String) : DownloadState
+}
+
+/** What Settings lists: what can be downloaded, and what is installed. */
+data class DictionaryList(
+    /** `null` while loading or when the list could not be fetched. */
+    val available: List<AvailableDictionary>? = null,
+    val installed: List<InstalledDictionary> = emptyList(),
+    val listError: String? = null,
+)
+
+/**
+ * Step 23c: downloads dictionaries on demand. A download runs in the app's
+ * scope, so it continues if the screen changes; if it is interrupted, the
+ * partial file is deleted and the next attempt starts over.
+ */
+class Dictionaries(
+    private val files: DictionaryFiles,
+    private val fetcher: Fetcher,
+    private val cacheDir: File,
+    private val scope: CoroutineScope,
+    private val describe: (Throwable) -> String,
+) {
+    private val _list = MutableStateFlow(DictionaryList())
+    val list: StateFlow<DictionaryList> = _list.asStateFlow()
+
+    private val _downloads = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
+
+    /** Running or failed downloads by pair; a finished one is removed. */
+    val downloads: StateFlow<Map<String, DownloadState>> = _downloads.asStateFlow()
+
+    private val jobs = mutableMapOf<String, Job>()
+
+    /** Re-reads the installed files and the published list. */
+    suspend fun refresh() {
+        val installed = runCatching { files.installed() }.getOrDefault(emptyList())
+        _list.update { it.copy(installed = installed) }
+        val available = runCatching {
+            withContext(Dispatchers.IO) { files.parseManifest(fetcher.text(DICTIONARY_MANIFEST_URL)) }
+        }
+        _list.update {
+            it.copy(
+                available = available.getOrNull() ?: it.available,
+                listError = available.exceptionOrNull()?.let { "Could not load the list of dictionaries." },
+            )
+        }
+    }
+
+    /** The published dictionary for a book language, if there is one. */
+    fun availableFor(languageCode: String): AvailableDictionary? =
+        _list.value.available?.firstOrNull { it.languageCode == languageCode }
+
+    /** Starts downloading; does nothing if this dictionary is already downloading. */
+    fun download(dictionary: AvailableDictionary) {
+        val pair = dictionary.pair
+        synchronized(jobs) {
+            if (jobs[pair]?.isActive == true) return
+            jobs[pair] = scope.launch { run(dictionary) }
+        }
+    }
+
+    private suspend fun run(dictionary: AvailableDictionary) {
+        val pair = dictionary.pair
+        val total = dictionary.downloadBytes.toLong()
+        setState(pair, DownloadState.Running(0, total))
+        val target = File(cacheDir, "$pair.sqlite.gz.download")
+        try {
+            withContext(Dispatchers.IO) {
+                fetcher.download(dictionary.url, target) { bytes ->
+                    ensureActive()
+                    setState(pair, DownloadState.Running(bytes, total))
+                }
+            }
+            files.install(target, dictionary.sha256, pair)
+            target.delete()
+            setState(pair, null)
+            refresh()
+        } catch (e: Exception) {
+            // Delete before reporting, so nothing half-downloaded is left once the state says so.
+            target.delete()
+            if (e is kotlinx.coroutines.CancellationException) {
+                setState(pair, null)
+                throw e
+            }
+            setState(pair, DownloadState.Failed(describe(e)))
+        }
+    }
+
+    fun cancel(pair: String) {
+        synchronized(jobs) { jobs.remove(pair)?.cancel() }
+        setState(pair, null)
+    }
+
+    suspend fun remove(pair: String) {
+        files.remove(pair)
+        refresh()
+    }
+
+    private fun setState(pair: String, state: DownloadState?) =
+        _downloads.update { if (state == null) it - pair else it + (pair to state) }
+}
+
+/** [Fetcher] with `HttpURLConnection`. */
+class HttpFetcher : Fetcher {
+    override fun text(url: String): String = open(url).inputStream.use { it.readBytes().decodeToString() }
+
+    override fun download(url: String, target: File, progress: (Long) -> Unit) {
+        val connection = open(url)
+        connection.inputStream.use { input ->
+            target.outputStream().use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var written = 0L
+                var lastReport = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    written += read
+                    // Report every 256 KB, not every buffer, to keep the UI calm.
+                    if (written - lastReport >= 256 * 1024) {
+                        progress(written)
+                        lastReport = written
+                    }
+                }
+                progress(written)
+            }
+        }
+    }
+
+    private fun open(url: String): HttpURLConnection {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 30_000
+        // GitHub answers release downloads with a redirect to its file host.
+        connection.instanceFollowRedirects = true
+        val code = connection.responseCode
+        if (code !in 200..299) {
+            connection.disconnect()
+            throw IOException("The server answered $code")
+        }
+        return connection
+    }
+}

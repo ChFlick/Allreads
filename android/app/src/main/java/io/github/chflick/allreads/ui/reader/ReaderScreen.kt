@@ -192,6 +192,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             onTranslate = viewModel::translateSelected,
             speakingWord = speaking == WORD_UTTERANCE,
             onSpeak = viewModel::speakWord,
+            onShowLemma = viewModel::showLemma,
+            onDownloadDictionary = viewModel::downloadDictionary,
             onSave = viewModel::saveWord,
             onDismiss = viewModel::dismissWord,
         )

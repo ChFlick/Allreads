@@ -3,6 +3,9 @@ package io.github.chflick.allreads.data
 import io.github.chflick.allreads.anki.NoteTypeStore
 import io.github.chflick.allreads.anki.SyncStore
 import uniffi.allreads_ffi.AnkiNote
+import uniffi.allreads_ffi.AvailableDictionary
+import uniffi.allreads_ffi.DictionaryLookup
+import uniffi.allreads_ffi.InstalledDictionary
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,7 +26,7 @@ import uniffi.allreads_ffi.readBookMeta
  * screens never block the main thread. The Rust library (database, migrations,
  * presets) is opened on the first call, which is also on [Dispatchers.IO].
  */
-class Repository(val dataDir: File) : NoteTypeStore, SyncStore {
+class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles {
     private val app: App by lazy { App(dataDir.absolutePath) }
 
     /** Where imported book files are copied. */
@@ -99,6 +102,22 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore {
 
     override suspend fun noteType(languageCode: String, includeWordCard: Boolean): AnkiNoteType =
         io { app.ankiNoteType(languageCode, includeWordCard) }
+
+    override suspend fun installed(): List<InstalledDictionary> = io { app.installedDictionaries() }
+
+    override suspend fun install(download: File, sha256: String, pair: String): InstalledDictionary =
+        io { app.installDictionary(download.absolutePath, sha256, pair) }
+
+    override suspend fun remove(pair: String) {
+        io { app.removeDictionary(pair) }
+    }
+
+    override fun parseManifest(json: String): List<AvailableDictionary> =
+        uniffi.allreads_ffi.parseDictionaryManifest(json)
+
+    /** The offline dictionary's entry for a word; `null` if no dictionary is installed for its language. */
+    suspend fun lookupWord(languageCode: String, text: String): DictionaryLookup? =
+        io { app.lookupWord(languageCode, text) }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 

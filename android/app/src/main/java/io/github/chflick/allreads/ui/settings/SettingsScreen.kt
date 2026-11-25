@@ -105,6 +105,10 @@ fun SettingsScreen(services: Services) {
             )
 
             HorizontalDivider()
+            Section("Dictionaries")
+            DictionarySection(services.dictionaries)
+
+            HorizontalDivider()
             Section("Read aloud")
             SpeechSection(services)
 
@@ -123,7 +127,7 @@ fun SettingsScreen(services: Services) {
             HorizontalDivider()
             Section("About")
             Text(
-                "Allreads ${BuildConfig.VERSION_NAME} · MIT licence. Language rules adapted from Lukaisu. " +
+                "Allreads ${BuildConfig.VERSION_NAME} · MIT licence. Language rules adapted from Lukaisu. Dictionaries from Wiktionary via kaikki.org (CC BY-SA 4.0). " +
                     "Translations by DeepL with your own key; cards go to AnkiDroid on this phone. Nothing else leaves it.",
                 style = MaterialTheme.typography.bodySmall,
             )

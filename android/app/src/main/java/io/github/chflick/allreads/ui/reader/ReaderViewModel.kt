@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.ui.reader
 
+import kotlinx.coroutines.flow.first
+import uniffi.allreads_ffi.DictionaryLookup
+import uniffi.allreads_ffi.AvailableDictionary
 import io.github.chflick.allreads.speech.SpeakResult
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -42,6 +45,12 @@ data class SelectedWord(
     val translating: Boolean = false,
     val translationError: String? = null,
     val dictionaryUrl: String? = null,
+    /** The offline dictionary's entry; `null` when no dictionary is installed for the language. */
+    val dictionary: DictionaryLookup? = null,
+    /** A dictionary that could be downloaded, when none is installed. */
+    val dictionaryOffer: AvailableDictionary? = null,
+    /** The entry of a dictionary form tapped in the drawer, e.g. "lire" for "lisait". */
+    val lemmaEntry: Pair<String, DictionaryLookup>? = null,
 )
 
 data class ReaderState(
@@ -189,8 +198,50 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             )
             _state.update { it.copy(selected = selected) }
             if (services.settings.settings.value.speakOnTap) speakWord()
+            lookUpSelected(language, token.text)
             // Unsaved (or untranslated) words get DeepL's translation in context.
             if (saved?.translation.isNullOrBlank()) translateSelected()
+        }
+    }
+
+    /** Adds the offline dictionary's entry, or a download offer, to the drawer. */
+    private suspend fun lookUpSelected(language: String, text: String) {
+        val lookup = runCatching { repository.lookupWord(language, text) }.getOrNull()
+        val offer = if (lookup == null) {
+            val dictionaries = services.dictionaries
+            if (dictionaries.list.value.available == null) runCatching { dictionaries.refresh() }
+            dictionaries.availableFor(language)
+        } else {
+            null
+        }
+        _state.update { state ->
+            val current = state.selected?.takeIf { it.text == text } ?: return@update state
+            state.copy(selected = current.copy(dictionary = lookup, dictionaryOffer = offer))
+        }
+    }
+
+    /** Shows a dictionary form's entry in the drawer (tapping "lire" under "lisait"). */
+    fun showLemma(lemma: String) {
+        val word = _state.value.selected ?: return
+        val language = _state.value.book?.languageCode ?: return
+        viewModelScope.launch {
+            val lookup = runCatching { repository.lookupWord(language, lemma) }.getOrNull() ?: return@launch
+            _state.update { state ->
+                val current = state.selected?.takeIf { it.text == word.text } ?: return@update state
+                state.copy(selected = current.copy(lemmaEntry = lemma to lookup))
+            }
+        }
+    }
+
+    /** Downloads the offered dictionary in the background; the drawer updates when it is installed. */
+    fun downloadDictionary() {
+        val offer = _state.value.selected?.dictionaryOffer ?: return
+        services.dictionaries.download(offer)
+        viewModelScope.launch {
+            services.dictionaries.list.first { list -> list.installed.any { it.pair == offer.pair } }
+            val word = _state.value.selected ?: return@launch
+            val language = _state.value.book?.languageCode ?: return@launch
+            lookUpSelected(language, word.text)
         }
     }
 
@@ -226,7 +277,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     fun dismissWord() = _state.update { it.copy(selected = null) }
 
     /** Saves the selected word (or forgets it for New), then recolours the chapter. */
-    fun saveWord(status: WordStatus, translation: String, notes: String) {
+    fun saveWord(status: WordStatus, translation: String, notes: String, lemma: String) {
         val selected = _state.value.selected ?: return
         val state = _state.value
         val book = state.book ?: return
@@ -245,7 +296,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
                             status = status,
                             translation = translation.trim(),
                             notes = notes.trim(),
-                            lemma = selected.saved?.lemma,
+                            lemma = lemma.trim().ifEmpty { null },
                             sentence = selected.sentence,
                             sentenceTranslation = sentenceTranslation,
                             sourceBook = book.title,

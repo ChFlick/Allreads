@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- DeepL translations. Nothing else goes online. -->
+    <!-- DeepL translations and dictionary downloads. Nothing else goes online. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- To ask before a dictionary download on mobile data. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Adding and updating cards in AnkiDroid. -->
     <uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE" />
 

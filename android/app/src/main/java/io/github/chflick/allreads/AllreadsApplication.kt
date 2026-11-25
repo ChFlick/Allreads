@@ -13,6 +13,7 @@ class AllreadsApplication : Application() {
     val services: Services by lazy {
         Services(
             repository = Repository(filesDir),
+            cacheDir = cacheDir,
             settings = SettingsStore(this),
             apiKeys = ApiKeyStore(this),
             anki = AnkiDroidBridge(this),

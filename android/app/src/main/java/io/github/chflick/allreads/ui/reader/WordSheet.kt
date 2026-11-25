@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.foundation.layout.PaddingValues
+import uniffi.allreads_ffi.DictionaryEntry
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -56,7 +58,9 @@ fun WordSheet(
     onTranslate: () -> Unit,
     speakingWord: Boolean,
     onSpeak: () -> Unit,
-    onSave: (WordStatus, String, String) -> Unit,
+    onShowLemma: (String) -> Unit,
+    onDownloadDictionary: () -> Unit,
+    onSave: (WordStatus, String, String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     // A first tap on a new word suggests level 1, the usual choice. A WordStatus
@@ -66,6 +70,12 @@ fun WordSheet(
     }
     var translation by rememberSaveable(word.text) { mutableStateOf(word.saved?.translation ?: "") }
     var notes by rememberSaveable(word.text) { mutableStateOf(word.saved?.notes ?: "") }
+    // Prefilled from the dictionary's suggestion, once it arrives, unless the word already has one.
+    var lemma by rememberSaveable(word.text) { mutableStateOf(word.saved?.lemma ?: "") }
+    LaunchedEffect(word.dictionary?.suggestedLemma) {
+        val suggested = word.dictionary?.suggestedLemma
+        if (suggested != null && lemma.isBlank() && word.saved?.lemma == null) lemma = suggested
+    }
     // Fill an empty translation field with DeepL's answer when it arrives.
     LaunchedEffect(word.machineTranslation) {
         val machine = word.machineTranslation
@@ -96,7 +106,7 @@ fun WordSheet(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                Button(onClick = { onSave(status, translation, notes) }) {
+                Button(onClick = { onSave(status, translation, notes, lemma) }) {
                     Text(if (status == WordStatus.New) "Forget" else "Save")
                 }
             }
@@ -123,6 +133,7 @@ fun WordSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            OfflineDictionary(word, onShowLemma, onDownloadDictionary)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 wordStatusChoices.forEach { choice ->
                     FilterChip(
@@ -144,7 +155,13 @@ fun WordSheet(
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth(),
             )
-            word.saved?.lemma?.let { Text("Dictionary form: $it", style = MaterialTheme.typography.bodyMedium) }
+            OutlinedTextField(
+                value = lemma,
+                onValueChange = { lemma = it },
+                label = { Text("Dictionary form (lemma)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             word.dictionaryUrl?.let { url ->
                 OutlinedButton(
                     onClick = {
@@ -160,3 +177,58 @@ fun WordSheet(
         }
     }
 }
+
+/** The offline dictionary's part of the drawer: forms, meanings, or a download offer. */
+@Composable
+private fun OfflineDictionary(word: SelectedWord, onShowLemma: (String) -> Unit, onDownload: () -> Unit) {
+    val lookup = word.dictionary
+    if (lookup == null) {
+        word.dictionaryOffer?.let { offer ->
+            TextButton(onClick = onDownload) {
+                Text("Get the offline dictionary (${"%.0f".format(offer.downloadBytes.toDouble() / 1_000_000)} MB)")
+            }
+        }
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lookup.forms.forEach { form ->
+            // "→ lire (verb): imperfect indicative singular third-person", tap for lire's entry.
+            TextButton(onClick = { onShowLemma(form.lemma) }, contentPadding = PaddingValues(0.dp)) {
+                Text(
+                    "→ ${form.lemma} (${form.partOfSpeech})" + if (form.tags.isBlank()) "" else ": ${form.tags}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+        lookup.entries.forEach { DictionaryEntryText(it) }
+        word.lemmaEntry?.let { (lemma, entry) ->
+            HorizontalDivider()
+            Text(lemma, style = MaterialTheme.typography.titleMedium)
+            entry.entries.forEach { DictionaryEntryText(it) }
+        }
+        if (lookup.entries.isEmpty() && lookup.forms.isEmpty()) {
+            Text("Not in the offline dictionary.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** "noun · /li/" and up to three numbered meanings; tap "more" for the rest. */
+@Composable
+private fun DictionaryEntryText(entry: DictionaryEntry) {
+    var all by remember(entry) { mutableStateOf(false) }
+    Text(
+        listOf(entry.partOfSpeech, entry.ipa).filter { it.isNotBlank() }.joinToString(" · "),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val shown = if (all) entry.senses else entry.senses.take(3)
+    shown.forEachIndexed { index, sense ->
+        Text("${index + 1}. $sense", style = MaterialTheme.typography.bodyMedium)
+    }
+    if (!all && entry.senses.size > 3) {
+        TextButton(onClick = { all = true }, contentPadding = PaddingValues(0.dp)) {
+            Text("${entry.senses.size - 3} more")
+        }
+    }
+}
+
