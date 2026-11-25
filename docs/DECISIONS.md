@@ -54,3 +54,5 @@
 | 2026-11-25 | German and Spanish use the full Latin word-character range (`À-ÖØ-öø-ȳ` plus `ẞ`), like French and English | Their old classes split loanwords such as "Café", "naïv" and "garçon" |
 | 2026-11-25 | Re-saving a term without a parent keeps its existing lemma link | The word drawer re-saves terms; it must never unlink a word from its lemma |
 | 2026-11-25 | The app's version comes from the Rust workspace's `Cargo.toml` (Gradle reads it into `versionName` and `BuildConfig`) | One version number; the Kotlin test checks that Rust and the app agree |
+| 2026-11-25 | AnkiDroid: the deck is chosen in Settings; a card's sentence translation reuses the one shown while reading, with an opt-in Settings option to fetch it from DeepL when saving; tags are `allreads`, the language code and a book tag | Chosen by Christoph. Reusing avoids spending DeepL quota on every saved word |
+| 2026-11-25 | Use AnkiDroid's API library (LGPL v3, from JitPack), falling back to its ContentProvider if the library can't be fetched | LGPL is fine for a separate library in an MIT app; the ContentProvider is what the library wraps |

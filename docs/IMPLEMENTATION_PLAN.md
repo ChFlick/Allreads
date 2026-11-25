@@ -106,20 +106,43 @@ Android work to do in one batch once Android Studio is available: step 2's proje
 
 ## Phase 3 (M2): AnkiDroid integration
 
+*Planned in detail 2026-11-25.* Order: **17a** (Rust) first, since it can be fully built and tested without a phone, then 16, 17b, 18 and 19 in Kotlin, then 20.
+
+**How a saved word becomes a card.** Saving a word with status 1–4 stores the term with its context and queues it in `anki_outbox`. Kotlin's `AnkiSync` drains the queue: Rust builds each note's fields, Kotlin calls `addNote` (or `updateNoteFields` when an `AnkiLink` exists), and Rust records the note id and removes the term from the queue. If AnkiDroid is missing or a call fails, the term stays queued and is retried on the next drain (app start, resume, permission granted, after each save). Statuses 5, Known and Ignore never create cards; forgetting a word leaves its card in Anki; editing a word that has a card updates that card.
+
+**The AnkiDroid API (checked in AnkiDroid's source, 2026-11-25).** Library `com.ichi2.anki:api`, LGPL v3 (fine as a separate library in an MIT app). Calls used: `addNewCustomModel`, `addNewDeck`, `getModelList`, `getDeckList`, `addNote` (returns the note id), `updateNoteFields` (returns false if the note was deleted in Anki). Needs the runtime permission `com.ichi2.anki.permission.READ_WRITE_DATABASE` and a `<queries>` entry for `com.ichi2.anki`. Risk: version 2.0.0 is not on Maven Central; older versions come from JitPack (`com.github.ankidroid:Anki-Android:api-v1.1.0`), which CI can reach but the cloud session cannot. Fallback: call AnkiDroid's ContentProvider directly (the library is a thin wrapper). Decide at step 16, trying JitPack first.
+
+**Choices (Christoph, 2026-11-25).**
+- The deck is chosen in Settings: an existing AnkiDroid deck, or a new one (suggested name "Allreads").
+- The card's sentence translation reuses the translation already shown while reading. A Settings option, off by default, fetches one from DeepL when saving a word without one.
+- Tags: `allreads`, the language code, and a short book tag.
+
+17a. **Rust side (core first).**
+    - Migration V7: three term columns (the sentence the word was saved in, that sentence's translation, and its source such as "Book title, chapter 3"), and a `setting` table (key, value) for the Anki note type and deck ids. API keys never go in it.
+    - `save_term` takes the optional sentence, sentence translation and source, and queues the term when its status is 1–4 or it already has a card.
+    - A note builder turns a term into the six fields (Word, Lemma, Translation, Sentence with the word in bold, Sentence translation, Source) and its tags. Text is HTML-escaped; bolding the word ignores case and apostrophe style. Unit and snapshot tests.
+    - FFI: `pending_anki_notes()`, `record_anki_push(term_id, note_id)`, `record_anki_failure(term_id)`, and getters and setters for the Anki ids and the deck.
+    - **Done when** the Rust tests cover queuing rules, field building and escaping, and `cargo test` passes.
+
 16. **Connect to AnkiDroid.** Add AnkiDroid's API library (`com.ichi2.anki.api`), the `com.ichi2.anki.permission.READ_WRITE_DATABASE` permission, and a `<queries>` entry for `com.ichi2.anki` (needed on Android 11+). Detect whether AnkiDroid is installed and request the runtime permission.
     - **Done when** the settings screen shows "Connected to AnkiDroid" or a clear install prompt.
+    - *Planned 2026-11-25:* an `AnkiBridge` interface plus its AnkiDroid implementation (installed? permission granted? and the calls above), so sync logic can be tested on the JVM with a fake. Settings gets an AnkiDroid section: "Connected", "Grant access" or "Install AnkiDroid", and the deck picker.
 17. **Note type and deck.** On first use, create the app's note type with `AddContentApi.addNewCustomModel`:
     - fields: Word, Lemma, Translation, Sentence (with the word in bold), Sentence translation, Source;
     - two card templates: word → meaning, and sentence → meaning.
     - Pick or create a deck, and store both ids in settings.
     - **Done when** the note type and deck appear in AnkiDroid.
+    - *Planned 2026-11-25:* on first sync, create the "Allreads" note type with six fields and two card templates (word → meaning; sentence → meaning with the word in bold) and clean CSS. The deck comes from Settings. If the note type or deck was deleted in Anki, it is recreated.
 18. **Push and update.** Rust builds an `AnkiNote` record (HTML fields, sentence with `<b>word</b>`, book and chapter as the source). Kotlin's `AnkiBridge` calls `addNote`, or `updateNoteFields` if an AnkiLink exists, and records the note id through `app.record_anki_link`.
     - Push on save for statuses 1–4; never create duplicates.
     - **Done when** editing a term's translation updates the same card.
+    - *Planned 2026-11-25:* `AnkiSync.drain()` in Kotlin, written against `AnkiBridge`; a JVM test with a fake AnkiDroid covers add, update, a note deleted in Anki (re-added), and never creating duplicates.
 19. **Outbox and retry.** When AnkiDroid isn't available, the push goes into `anki_outbox` in Rust. Drain the queue on app start and after permission is granted.
     - **Done when** words saved with AnkiDroid uninstalled arrive after it's reinstalled.
+    - *Planned 2026-11-25:* drain on app start, on resume and after the permission is granted; count attempts; Settings shows "N words waiting for AnkiDroid".
 20. **`.apkg` and CSV export.** Build the deck with `genanki-rs` using the same note type, and share it through the Android share sheet.
     - **Done when** the file imports cleanly into desktop Anki. M2 is complete: save 20 words while reading, sync AnkiDroid, and review them on desktop.
+    - *Planned 2026-11-25:* CSV first (Anki imports it with a field mapping). Then `.apkg`: try `genanki-rs`, but it may bundle its own SQLite and clash with our `rusqlite` (only one copy can be linked); if so, write the `.apkg` ourselves (a zip of an Anki SQLite collection plus a media list). Both through the share sheet.
 
 ## Phases 4–6 (M3–M5): translation and AI, audio, library and release
 
