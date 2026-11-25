@@ -1,7 +1,6 @@
 //! Thin `UniFFI` wrappers over `allreads-core`. Kept deliberately small:
 //! a few coarse calls that return plain records, never per-word calls.
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -291,6 +290,9 @@ impl From<TranslateError> for AllreadsError {
     }
 }
 
+/// How many opened books `App` keeps in memory.
+const OPEN_BOOKS: usize = 3;
+
 fn poisoned() -> AllreadsError {
     AllreadsError::Database {
         reason: "a lock is poisoned after an earlier crash".into(),
@@ -305,8 +307,9 @@ fn poisoned() -> AllreadsError {
 pub struct App {
     db: Mutex<Database>,
     data_dir: PathBuf,
-    /// Books opened since the app started, so reading a chapter does not re-parse the file.
-    open_books: Mutex<HashMap<i64, Arc<OpenedBook>>>,
+    /// Recently opened books, most recent last, so reading a chapter does not
+    /// re-parse the file. Capped at [`OPEN_BOOKS`] to bound memory and file handles.
+    open_books: Mutex<Vec<(i64, Arc<OpenedBook>)>>,
 }
 
 impl App {
@@ -320,22 +323,32 @@ impl App {
 
     /// The opened book for `book_id`, opening its file on first use.
     fn opened_book(&self, book_id: i64) -> Result<Arc<OpenedBook>, AllreadsError> {
-        if let Some(book) = self
-            .open_books
-            .lock()
-            .map_err(|_| poisoned())?
-            .get(&book_id)
         {
-            return Ok(Arc::clone(book));
+            let mut books = self.open_books.lock().map_err(|_| poisoned())?;
+            if let Some(position) = books.iter().position(|(id, _)| *id == book_id) {
+                // Move it to the end: it is now the most recently used.
+                let entry = books.remove(position);
+                let book = Arc::clone(&entry.1);
+                books.push(entry);
+                return Ok(book);
+            }
         }
         let row = self.book_row(book_id)?;
         // Parse without holding any lock; another thread may race us, which is harmless.
         let book = Arc::new(OpenedBook::open(Path::new(&row.file_path))?);
-        self.open_books
-            .lock()
-            .map_err(|_| poisoned())?
-            .insert(book_id, Arc::clone(&book));
+        self.remember_open_book(book_id, Arc::clone(&book))?;
         Ok(book)
+    }
+
+    /// Adds a book to the recently opened list, dropping the oldest past [`OPEN_BOOKS`].
+    fn remember_open_book(&self, book_id: i64, book: Arc<OpenedBook>) -> Result<(), AllreadsError> {
+        let mut books = self.open_books.lock().map_err(|_| poisoned())?;
+        books.retain(|(id, _)| *id != book_id);
+        books.push((book_id, book));
+        if books.len() > OPEN_BOOKS {
+            books.remove(0);
+        }
+        Ok(())
     }
 
     /// The tokenizing rules of a stored language.
@@ -461,7 +474,7 @@ impl App {
         Ok(Arc::new(Self {
             db: Mutex::new(db),
             data_dir: folder,
-            open_books: Mutex::new(HashMap::new()),
+            open_books: Mutex::new(Vec::new()),
         }))
     }
 
@@ -539,10 +552,7 @@ impl App {
         })?;
         let summary = Self::summary(&db, row)?;
         drop(db);
-        self.open_books
-            .lock()
-            .map_err(|_| poisoned())?
-            .insert(id, Arc::new(prepared.book));
+        self.remember_open_book(id, Arc::new(prepared.book))?;
         Ok(summary)
     }
 
@@ -769,7 +779,7 @@ impl App {
         self.open_books
             .lock()
             .map_err(|_| poisoned())?
-            .remove(&book_id);
+            .retain(|(id, _)| *id != book_id);
         if let Some(cover) = &row.cover_path {
             self.remove_owned_file(Path::new(cover));
         }
@@ -1273,6 +1283,40 @@ mod tests {
             .collect();
         assert_eq!(keys, ["chat", "homme"]);
         assert!(app.list_terms("de".into()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn only_the_most_recently_used_books_stay_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let ids: Vec<i64> = (0..4)
+            .map(|i| {
+                let name = format!("tiny-{i}.epub");
+                let path = dir.path().join(&name);
+                fs::copy(fixture("tiny.epub"), &path).unwrap();
+                app.import_book(path.display().to_string(), "fr".into())
+                    .unwrap()
+                    .id
+            })
+            .collect();
+        let open: Vec<i64> = app
+            .open_books
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        assert_eq!(open, ids[1..]);
+        // Reading the oldest book reopens it and makes it the most recent.
+        app.open_chapter(ids[0], 0).unwrap();
+        let open: Vec<i64> = app
+            .open_books
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        assert_eq!(open, [ids[2], ids[3], ids[0]]);
     }
 
     #[test]

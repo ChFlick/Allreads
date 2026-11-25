@@ -15,9 +15,12 @@ import uniffi.allreads_ffi.readBookMeta
 
 /**
  * The app's only way into Rust. Every call runs on [Dispatchers.IO], so
- * screens never block the main thread.
+ * screens never block the main thread. The Rust library (database, migrations,
+ * presets) is opened on the first call, which is also on [Dispatchers.IO].
  */
-class Repository(private val app: App, val dataDir: File) {
+class Repository(val dataDir: File) {
+    private val app: App by lazy { App(dataDir.absolutePath) }
+
     /** Where imported book files are copied. */
     val booksDir: File get() = File(dataDir, "books").apply { mkdirs() }
 
@@ -67,8 +70,4 @@ class Repository(private val app: App, val dataDir: File) {
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 
-    companion object {
-        /** Opens (or creates) the library in the app's data folder. */
-        fun open(dataDir: File): Repository = Repository(App(dataDir.absolutePath), dataDir)
-    }
 }

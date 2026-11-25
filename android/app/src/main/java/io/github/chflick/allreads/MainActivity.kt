@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -71,7 +72,9 @@ private fun AllreadsNavigation(services: Services) {
     if (bookId != null) {
         // One reader ViewModel for every book; open() starts a fresh session per opening.
         val reader = viewModel(key = "reader") { ReaderViewModel(services) }
-        LaunchedEffect(bookId, opens) { reader.open(bookId, opens) }
+        // Reset before the first frame, so the previous book never flashes.
+        // open() ignores repeat calls for the same opening (e.g. on rotation).
+        remember(bookId, opens) { reader.open(bookId, opens) }
         ReaderScreen(reader, settings, onBack = { openBookId = null })
         return
     }

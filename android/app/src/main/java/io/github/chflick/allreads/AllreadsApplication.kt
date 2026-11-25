@@ -10,7 +10,7 @@ import io.github.chflick.allreads.data.SettingsStore
 class AllreadsApplication : Application() {
     val services: Services by lazy {
         Services(
-            repository = Repository.open(filesDir),
+            repository = Repository(filesDir),
             settings = SettingsStore(this),
             apiKeys = ApiKeyStore(this),
         )
