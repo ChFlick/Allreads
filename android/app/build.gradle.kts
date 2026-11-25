@@ -28,8 +28,10 @@ android {
         applicationId = "io.github.chflick.allreads"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = workspaceVersion
+        // CI passes its run number, so every release installs over the last one.
+        val build = System.getenv("ALLREADS_BUILD_NUMBER")?.toIntOrNull()
+        versionCode = build ?: 1
+        versionName = if (build != null) "$workspaceVersion-build.$build" else workspaceVersion
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
