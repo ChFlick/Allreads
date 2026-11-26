@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,7 +46,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -60,7 +58,6 @@ import io.github.chflick.allreads.data.ThemeMode
 import io.github.chflick.allreads.ui.NO_DEEPL_KEY
 import io.github.chflick.allreads.ui.describe
 import uniffi.allreads_ffi.AllreadsException
-import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -112,40 +109,27 @@ fun SettingsScreen(services: Services) {
                 colors = calmSliderColors(),
             )
             Text("Font", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReadingFont.entries.forEach { font ->
-                    FilterChip(
-                        selected = settings.readingFont == font,
-                        onClick = { services.settings.update { it.copy(readingFont = font) } },
-                        label = { Text(font.label, fontFamily = font.family()) },
-                    )
-                }
-            }
+            ChoiceChips(
+                choices = ReadingFont.entries,
+                selected = settings.readingFont,
+                label = { it.label },
+                onSelect = { font -> services.settings.update { it.copy(readingFont = font) } },
+                font = { it.family() },
+            )
             Text("Page", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReaderPage.entries.forEach { page ->
-                    FilterChip(
-                        selected = settings.readerPage == page,
-                        onClick = { services.settings.update { it.copy(readerPage = page) } },
-                        label = { Text(page.label) },
-                    )
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Double-tap to raise a level", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "A double tap on a word you are learning moves it up one level (5 becomes known) " +
-                            "without opening the drawer. Single taps then wait a moment for a possible second tap.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = settings.doubleTapRaises,
-                    onCheckedChange = { on -> services.settings.update { it.copy(doubleTapRaises = on) } },
-                )
-            }
+            ChoiceChips(
+                choices = ReaderPage.entries,
+                selected = settings.readerPage,
+                label = { it.label },
+                onSelect = { page -> services.settings.update { it.copy(readerPage = page) } },
+            )
+            SwitchSetting(
+                title = "Double-tap to raise a level",
+                description = "A double tap on a word you are learning moves it up one level (5 becomes known) " +
+                    "without opening the drawer. Single taps then wait a moment for a possible second tap.",
+                checked = settings.doubleTapRaises,
+                onCheckedChange = { on -> services.settings.update { it.copy(doubleTapRaises = on) } },
+            )
             // The preview shows the page as the reader will: its font, size, spacing and colours.
             ReaderPageTheme(settings.readerPage) {
                 Surface(
@@ -168,21 +152,13 @@ fun SettingsScreen(services: Services) {
             HorizontalDivider()
             Section("Dictionaries")
             DictionarySection(services.dictionaries)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Meanings in the book's language", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "The word drawer shows synonyms and dictionary forms first. Translations stay hidden " +
-                            "until you tap Reveal; they still load in the background, so revealing is instant.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = settings.hideTranslations,
-                    onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
-                )
-            }
+            SwitchSetting(
+                title = "Meanings in the book's language",
+                description = "The word drawer shows synonyms and dictionary forms first. Translations stay hidden " +
+                    "until you tap Reveal; they still load in the background, so revealing is instant.",
+                checked = settings.hideTranslations,
+                onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
+            )
 
             HorizontalDivider()
             Section("Read aloud")
@@ -190,23 +166,18 @@ fun SettingsScreen(services: Services) {
 
             HorizontalDivider()
             Section("Appearance")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ThemeMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = settings.theme == mode,
-                        onClick = { services.settings.update { it.copy(theme = mode) } },
-                        label = { Text(mode.name) },
-                    )
-                }
-            }
+            ChoiceChips(
+                choices = ThemeMode.entries,
+                selected = settings.theme,
+                label = { it.name },
+                onSelect = { mode -> services.settings.update { it.copy(theme = mode) } },
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Use the wallpaper's colours", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = settings.wallpaperColors,
-                        onCheckedChange = { on -> services.settings.update { it.copy(wallpaperColors = on) } },
-                    )
-                }
+                SwitchSetting(
+                    title = "Use the wallpaper's colours",
+                    checked = settings.wallpaperColors,
+                    onCheckedChange = { on -> services.settings.update { it.copy(wallpaperColors = on) } },
+                )
             }
 
             HorizontalDivider()

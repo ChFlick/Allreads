@@ -23,8 +23,8 @@ use allreads_core::word_tally::{Tally, TALLY_VERSION};
 
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
-    saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookDifficulty, BookMeta,
-    BookSummary, Chapter, ChapterBlock, DayCount, DeepLKeyStatus, DictionaryLookup,
+    saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookDifficulty, BookDifficultyOf,
+    BookMeta, BookSummary, Chapter, ChapterBlock, DayCount, DeepLKeyStatus, DictionaryLookup,
     InstalledDictionary, LanguageInfo, MarkedKnown, PhraseMark, PhraseSuggestion, SavedTerm,
     TermInput, Token, Translation, WebArticle, WordStatus,
 };
@@ -428,13 +428,56 @@ impl App {
         Ok(self.db()?.book_difficulty(book_id)?.into())
     }
 
-    /// The languages that have saved words, e.g. for the Words tab, so words
-    /// stay reachable after their book is deleted.
+    /// The languages for the Words tab: those of the books and of the saved
+    /// words, the most recently read first.
     ///
     /// # Errors
     /// Returns `Database` if the database cannot be read.
-    pub fn term_language_codes(&self) -> Result<Vec<String>, AllreadsError> {
-        Ok(self.db()?.term_languages()?)
+    pub fn word_language_codes(&self) -> Result<Vec<String>, AllreadsError> {
+        Ok(self.db()?.word_languages()?)
+    }
+
+    /// The difficulty of every book counted with today's rules, in one query,
+    /// so the library can show them at once; books missing from it still need
+    /// [`App::book_difficulty`].
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn counted_difficulties(&self) -> Result<Vec<BookDifficultyOf>, AllreadsError> {
+        let version = PARSER_VERSION * 100 + TALLY_VERSION;
+        Ok(self
+            .db()?
+            .counted_difficulties(version)?
+            .into_iter()
+            .map(|(book_id, difficulty)| BookDifficultyOf {
+                book_id,
+                difficulty: difficulty.into(),
+            })
+            .collect())
+    }
+
+    /// Changes only a saved word's status, e.g. a double tap raising its level;
+    /// its translation, notes and card stay. Returns the old status for undo,
+    /// or `None` if the word is not saved.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown language, and `InvalidInput` for a
+    /// learning level outside 1 to 5.
+    pub fn set_term_status(
+        &self,
+        language_code: String,
+        text: String,
+        status: WordStatus,
+    ) -> Result<Option<WordStatus>, AllreadsError> {
+        let status = status
+            .to_status()?
+            .ok_or_else(|| AllreadsError::InvalidInput {
+                reason: "use forget_term to un-save a word".into(),
+            })?;
+        Ok(self
+            .db()?
+            .set_term_status(&language_code, &text, status)?
+            .map(WordStatus::from))
     }
 
     /// The saved-word counts of a language per day, oldest first. Days without
@@ -447,11 +490,7 @@ impl App {
             .db()?
             .word_count_history(&language_code)?
             .into_iter()
-            .map(|d| DayCount {
-                day: d.day,
-                known: d.known,
-                learning: d.learning,
-            })
+            .map(DayCount::from)
             .collect())
     }
 
@@ -505,8 +544,10 @@ impl App {
         let parsed = self.parsed_chapter(&row, index)?;
         let statuses = self.db()?.term_statuses(&row.language_code)?;
         // From the book's counted words (empty until its difficulty was asked for).
-        let names = self.db()?.book_names(book_id)?;
-        let lemmas = self.db()?.book_lemmas(book_id)?;
+        let (names, lemmas) = {
+            let db = self.db()?;
+            (db.book_names(book_id)?, db.book_lemmas(book_id)?)
+        };
         let status_of = |key: &str| {
             statuses
                 .get(key)
@@ -694,10 +735,7 @@ impl App {
             .filter_map(|token| Some((token.key.clone()?, token.text.clone())))
             .collect();
         let term_ids = self.db()?.mark_known(&row.language_code, &words)?;
-        Ok(MarkedKnown {
-            count: saturate_u32(term_ids.len()),
-            term_ids,
-        })
+        Ok(MarkedKnown { term_ids })
     }
 
     /// Undoes [`App::mark_rest_known`], keeping any word whose status was
@@ -1624,8 +1662,7 @@ mod tests {
             .unwrap();
         // Block 0 is the heading "Chapitre un"; start at block 1.
         let marked = app.mark_rest_known(id, 0, 1).unwrap();
-        assert!(marked.count > 0);
-        assert_eq!(marked.count as usize, marked.term_ids.len());
+        assert!(!marked.term_ids.is_empty());
         let chapter = app.open_chapter(id, 0).unwrap();
         assert_eq!(statuses_of(&chapter, "chapitre"), [WordStatus::New]);
         assert_eq!(statuses_of(&chapter, "lisait"), [WordStatus::WellKnown]);
@@ -1636,9 +1673,10 @@ mod tests {
                 WordStatus::Learning { level: 3 }
             ]
         );
-        assert_eq!(app.mark_rest_known(id, 0, 1).unwrap().count, 0);
+        assert!(app.mark_rest_known(id, 0, 1).unwrap().term_ids.is_empty());
         // Undo puts the words back to new.
-        assert_eq!(app.undo_mark_known(marked.term_ids).unwrap(), marked.count);
+        let count = marked.term_ids.len() as u32;
+        assert_eq!(app.undo_mark_known(marked.term_ids).unwrap(), count);
         let chapter = app.open_chapter(id, 0).unwrap();
         assert_eq!(statuses_of(&chapter, "lisait"), [WordStatus::New]);
     }

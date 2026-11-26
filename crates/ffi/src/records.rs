@@ -30,6 +30,13 @@ impl From<allreads_core::db::progress::Difficulty> for BookDifficulty {
     }
 }
 
+/// A book's difficulty, with the book it belongs to.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct BookDifficultyOf {
+    pub book_id: i64,
+    pub difficulty: BookDifficulty,
+}
+
 /// Saved words in a language at the end of a day, for the progress chart.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct DayCount {
@@ -37,6 +44,16 @@ pub struct DayCount {
     pub day: String,
     pub known: u32,
     pub learning: u32,
+}
+
+impl From<allreads_core::db::progress::DayCount> for DayCount {
+    fn from(d: allreads_core::db::progress::DayCount) -> Self {
+        DayCount {
+            day: d.day,
+            known: d.known,
+            learning: d.learning,
+        }
+    }
 }
 
 /// The readable part of a web page, to import as a book.
@@ -84,11 +101,10 @@ pub struct BookSummary {
     pub last_read_at: Option<i64>,
 }
 
-/// The result of "mark the rest of this chapter as known": how many words
-/// were added, and their ids so the marking can be undone.
+/// The result of "mark the rest of this chapter as known": the ids of the
+/// words it added (their number is the count), so the marking can be undone.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct MarkedKnown {
-    pub count: u32,
     pub term_ids: Vec<i64>,
 }
 

@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use rusqlite::params;
 
 use super::{Database, DbError};
+use crate::db::term::Status;
 use crate::word_tally::BookWord;
 
 /// A book's words compared with the saved ones, names left out. Counts are
@@ -114,12 +115,29 @@ impl Database {
     /// # Errors
     /// Returns a database error if the statement fails.
     pub fn book_difficulty(&self, book_id: i64) -> Result<Difficulty, DbError> {
-        let row = self.conn().query_row(
-            // A word's status is its own, else its dictionary form's. Names
-            // are left out unless saved on purpose.
-            "SELECT COALESCE(SUM(w.count), 0),
+        let found = self.difficulties("w.book_id = ?1", book_id)?;
+        Ok(found.get(&book_id).copied().unwrap_or_default())
+    }
+
+    /// The difficulty of every book counted with `version`, by book id, in one
+    /// query. Books counted with another version (or not at all) are missing.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn counted_difficulties(&self, version: i64) -> Result<HashMap<i64, Difficulty>, DbError> {
+        self.difficulties("b.words_counted_with = ?1", version)
+    }
+
+    /// Difficulties per book for the books matching `filter` (an SQL condition
+    /// with one parameter).
+    fn difficulties(&self, filter: &str, value: i64) -> Result<HashMap<i64, Difficulty>, DbError> {
+        // A word's status is its own, else its dictionary form's. Names are
+        // left out unless saved on purpose.
+        let sql = format!(
+            "SELECT w.book_id,
+                    SUM(w.count),
                     COALESCE(SUM(CASE WHEN COALESCE(t.status, l.status) IS NULL THEN w.count END), 0),
-                    COALESCE(SUM(CASE WHEN COALESCE(t.status, l.status) BETWEEN 1 AND 5 THEN w.count END), 0),
+                    COALESCE(SUM(CASE WHEN COALESCE(t.status, l.status) BETWEEN ?2 AND ?3 THEN w.count END), 0),
                     COUNT(DISTINCT COALESCE(w.lemma_key, w.key)),
                     COUNT(DISTINCT CASE WHEN COALESCE(t.status, l.status) IS NULL
                                         THEN COALESCE(w.lemma_key, w.key) END)
@@ -127,37 +145,48 @@ impl Database {
              JOIN book b ON b.id = w.book_id
              LEFT JOIN term t ON t.language_code = b.language_code AND t.text = w.key
              LEFT JOIN term l ON l.language_code = b.language_code AND l.text = w.lemma_key
-             WHERE w.book_id = ?1 AND (w.is_name = 0 OR t.status IS NOT NULL)",
-            [book_id],
+             WHERE {filter} AND (w.is_name = 0 OR t.status IS NOT NULL)
+             GROUP BY w.book_id"
+        );
+        let mut statement = self.conn().prepare_cached(&sql)?;
+        let rows = statement.query_map(
+            params![
+                value,
+                Status::Learning(1).code(),
+                Status::Learning(5).code()
+            ],
             |row| {
-                Ok([
+                let number = |i| row.get::<_, i64>(i).map(|n| u64::try_from(n).unwrap_or(0));
+                Ok((
                     row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?,
-                ])
+                    Difficulty {
+                        words: number(1)?,
+                        new_words: number(2)?,
+                        learning_words: number(3)?,
+                        unique_words: number(4)?,
+                        unique_new_words: number(5)?,
+                    },
+                ))
             },
         )?;
-        let [words, new_words, learning_words, unique_words, unique_new_words] =
-            row.map(|n| u64::try_from(n).unwrap_or(0));
-        Ok(Difficulty {
-            words,
-            new_words,
-            learning_words,
-            unique_words,
-            unique_new_words,
-        })
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// The languages that have saved words, in code order.
+    /// The languages of the books and of the saved words: the language of the
+    /// book read most recently first, then by code. For the Words tab, so
+    /// words stay reachable after their book is deleted.
     ///
     /// # Errors
     /// Returns a database error if the statement fails.
-    pub fn term_languages(&self) -> Result<Vec<String>, DbError> {
-        let mut statement = self
-            .conn()
-            .prepare("SELECT DISTINCT language_code FROM term ORDER BY language_code")?;
+    pub fn word_languages(&self) -> Result<Vec<String>, DbError> {
+        let mut statement = self.conn().prepare(
+            "SELECT language_code FROM (
+                 SELECT language_code, COALESCE(MAX(last_read_at), 0) AS read FROM book GROUP BY language_code
+                 UNION ALL
+                 SELECT DISTINCT language_code, -1 FROM term)
+             GROUP BY language_code
+             ORDER BY MAX(read) DESC, language_code",
+        )?;
         let rows = statement.query_map([], |row| row.get(0))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
@@ -207,22 +236,30 @@ impl Database {
         Ok(())
     }
 
-    /// Rewrites today's saved-word counts for every language that has words
-    /// or a history. Called after anything that saves, forgets or marks words.
+    /// Rewrites today's saved-word counts for one language, or for every
+    /// language with words or a history when `language_code` is `None` (after
+    /// a change that may touch several). Runs inside the caller's transaction
+    /// when there is one.
     ///
     /// # Errors
     /// Returns a database error if the statement fails.
-    pub fn record_word_counts(&self) -> Result<(), DbError> {
+    pub fn record_word_counts(&self, language_code: Option<&str>) -> Result<(), DbError> {
         self.conn().execute(
             "INSERT INTO word_count_day (language_code, day, known, learning)
              SELECT l.code, date('now', 'localtime'),
-                    (SELECT COUNT(*) FROM term t WHERE t.language_code = l.code AND t.status = 99),
-                    (SELECT COUNT(*) FROM term t WHERE t.language_code = l.code AND t.status BETWEEN 1 AND 5)
+                    (SELECT COUNT(*) FROM term t WHERE t.language_code = l.code AND t.status = ?2),
+                    (SELECT COUNT(*) FROM term t WHERE t.language_code = l.code AND t.status BETWEEN ?3 AND ?4)
              FROM language l
-             WHERE l.code IN (SELECT language_code FROM term UNION SELECT language_code FROM word_count_day)
+             WHERE (?1 IS NULL OR l.code = ?1)
+               AND l.code IN (SELECT language_code FROM term UNION SELECT language_code FROM word_count_day)
              ON CONFLICT (language_code, day) DO UPDATE SET
                  known = excluded.known, learning = excluded.learning",
-            [],
+            params![
+                language_code,
+                Status::WellKnown.code(),
+                Status::Learning(1).code(),
+                Status::Learning(5).code()
+            ],
         )?;
         Ok(())
     }
@@ -326,6 +363,11 @@ mod tests {
             HashSet::from(["gregor".to_string()])
         );
         assert_eq!(db.book_lemmas(id).unwrap()["dormait"], "dormir");
+        assert_eq!(
+            db.counted_difficulties(1).unwrap()[&id],
+            db.book_difficulty(id).unwrap()
+        );
+        assert!(db.counted_difficulties(2).unwrap().is_empty());
         // A name saved on purpose counts again.
         db.save_term(&term("gregor", Status::Learning(1))).unwrap();
         assert_eq!(db.book_difficulty(id).unwrap().words, 15);
@@ -351,7 +393,7 @@ mod tests {
         let history = db.word_count_history("fr").unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!((history[0].known, history[0].learning), (1, 1));
-        assert_eq!(db.term_languages().unwrap(), ["fr"]);
+        assert_eq!(db.word_languages().unwrap(), ["fr"]);
         let chat = db.find_term("fr", "chat").unwrap().unwrap();
         db.delete_term(chat.id).unwrap();
         let history = db.word_count_history("fr").unwrap();

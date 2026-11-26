@@ -58,16 +58,12 @@ fun SpeechSection(services: Services) {
         steps = 9,
         colors = calmSliderColors(),
     )
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("Speak words when tapped", style = MaterialTheme.typography.bodyMedium)
-            Text("Otherwise use the play button in the word drawer.", style = MaterialTheme.typography.bodySmall)
-        }
-        Switch(
-            checked = settings.speakOnTap,
-            onCheckedChange = { on -> services.settings.update { it.copy(speakOnTap = on) } },
-        )
-    }
+    SwitchSetting(
+        title = "Speak words when tapped",
+        description = "Otherwise use the play button in the word drawer.",
+        checked = settings.speakOnTap,
+        onCheckedChange = { on -> services.settings.update { it.copy(speakOnTap = on) } },
+    )
     languages?.forEach { VoiceChoice(services, it, settings) }
 }
 

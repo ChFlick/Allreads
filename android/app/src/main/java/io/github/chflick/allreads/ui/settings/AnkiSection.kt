@@ -165,19 +165,12 @@ fun AnkiSection(services: Services) {
                 )
             }
             val settings by services.settings.settings.collectAsStateWithLifecycle()
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Also add a word card", style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "Word → meaning, next to the sentence card. Applies to card types created from now on.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                Switch(
-                    checked = settings.ankiWordCard,
-                    onCheckedChange = { on -> services.settings.update { it.copy(ankiWordCard = on) } },
-                )
-            }
+            SwitchSetting(
+                title = "Also add a word card",
+                description = "Word → meaning, next to the sentence card. Applies to card types created from now on.",
+                checked = settings.ankiWordCard,
+                onCheckedChange = { on -> services.settings.update { it.copy(ankiWordCard = on) } },
+            )
         }
     }
     WaitingWords(services, state.access)

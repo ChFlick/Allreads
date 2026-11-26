@@ -1,15 +1,8 @@
 package io.github.chflick.allreads.ui.library
 
+import io.github.chflick.allreads.data.BookSort
 import java.text.Collator
 import uniffi.allreads_ffi.BookSummary
-
-/** How the library is ordered. */
-enum class BookSort(val label: String) {
-    Recent("Recently read"),
-    Added("Recently added"),
-    Title("Title"),
-    Author("Author"),
-}
 
 /** Which books the library shows, besides the search. */
 enum class BookProgress(val label: String) {

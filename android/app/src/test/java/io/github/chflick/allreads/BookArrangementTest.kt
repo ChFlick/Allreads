@@ -1,7 +1,7 @@
 package io.github.chflick.allreads
 
 import io.github.chflick.allreads.ui.library.BookProgress
-import io.github.chflick.allreads.ui.library.BookSort
+import io.github.chflick.allreads.data.BookSort
 import io.github.chflick.allreads.ui.library.LibraryView
 import io.github.chflick.allreads.ui.library.arrange
 import org.junit.Assert.assertEquals

@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -55,6 +54,7 @@ import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.chflick.allreads.ui.theme.StatusChip
+import io.github.chflick.allreads.ui.theme.longLabel
 import io.github.chflick.allreads.ui.theme.wordStatusChoices
 import uniffi.allreads_ffi.WordStatus
 
@@ -208,12 +208,7 @@ fun WordSheetContent(
         }
         justSaved?.let { saved ->
             Text(
-                when (saved) {
-                    WordStatus.New -> "Forgotten"
-                    WordStatus.WellKnown -> "✓ Saved as known"
-                    WordStatus.Ignored -> "✓ Saved as ignored"
-                    is WordStatus.Learning -> "✓ Saved at level ${saved.level}"
-                },
+                if (saved == WordStatus.New) "Forgotten" else "✓ Saved as ${saved.longLabel().lowercase()}",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )

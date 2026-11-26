@@ -37,10 +37,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -71,7 +69,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -125,22 +122,16 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
     LaunchedEffect(state.markedKnown) {
         val marked = state.markedKnown ?: return@LaunchedEffect
         viewModel.markedKnownShown()
-        val result = snackbar.showSnackbar(
-            "Marked ${marked.count} words as known",
-            actionLabel = "Undo",
-            duration = SnackbarDuration.Long,
-        )
-        if (result == SnackbarResult.ActionPerformed) viewModel.undoMarkKnown(marked)
+        snackbar.offerUndo("Marked ${marked.termIds.size} words as known", SnackbarDuration.Long) {
+            viewModel.undoMarkKnown(marked)
+        }
     }
     LaunchedEffect(state.levelChange) {
         val change = state.levelChange ?: return@LaunchedEffect
         viewModel.levelChangeShown()
-        val result = snackbar.showSnackbar(
-            "${change.text}: ${change.to.longLabel().lowercase()}",
-            actionLabel = "Undo",
-            duration = SnackbarDuration.Short,
-        )
-        if (result == SnackbarResult.ActionPerformed) viewModel.undoLevelChange(change)
+        snackbar.offerUndo("${change.text}: ${change.to.longLabel().lowercase()}", SnackbarDuration.Short) {
+            viewModel.undoLevelChange(change)
+        }
     }
     LaunchedEffect(state.noVoice) {
         if (!state.noVoice) return@LaunchedEffect
@@ -269,15 +260,11 @@ private fun SentenceRow(
                     .pointerInput(row, doubleTapRaises) {
                         fun wordAt(position: Offset): Int? =
                             layout?.getOffsetForPosition(position)?.let { row.content.wordAt(it) }
-                        if (doubleTapRaises) {
-                            // Waiting to see whether a second tap follows delays a single tap a little.
-                            detectTapGestures(
-                                onDoubleTap = { position -> wordAt(position)?.let(onRaise) },
-                                onTap = { position -> wordAt(position)?.let(onWord) },
-                            )
-                        } else {
-                            detectTapGestures { position -> wordAt(position)?.let(onWord) }
-                        }
+                        // With double tap on, a single tap waits a moment for a possible second one.
+                        detectTapGestures(
+                            onDoubleTap = if (doubleTapRaises) { position -> wordAt(position)?.let(onRaise) } else null,
+                            onTap = { position -> wordAt(position)?.let(onWord) },
+                        )
                     }
                     // Step 24: long-press a word and drag to select a phrase.
                     .pointerInput(row) {
@@ -424,6 +411,11 @@ private fun ChapterButtons(canGoBack: Boolean, canGoOn: Boolean, onPrevious: () 
         OutlinedButton(onClick = onPrevious, enabled = canGoBack) { Text("Previous chapter") }
         OutlinedButton(onClick = onNext, enabled = canGoOn) { Text("Next chapter") }
     }
+}
+
+/** Shows `message` with an Undo button, and runs `onUndo` if it is tapped. */
+private suspend fun SnackbarHostState.offerUndo(message: String, duration: SnackbarDuration, onUndo: () -> Unit) {
+    if (showSnackbar(message, actionLabel = "Undo", duration = duration) == SnackbarResult.ActionPerformed) onUndo()
 }
 
 /** Opens Android's text-to-speech settings, where voices are downloaded. */

@@ -95,8 +95,7 @@ impl Tally {
             .into_iter()
             .map(|(key, evidence)| {
                 let kinds = lookup(&key).unwrap_or_default();
-                let names_only = !kinds.parts_of_speech.is_empty()
-                    && kinds.parts_of_speech.iter().all(|pos| pos == "name");
+                // A common word: a form of something, or an entry that is not a name.
                 let common = !kinds.lemmas.is_empty()
                     || kinds.parts_of_speech.iter().any(|pos| pos != "name");
                 // "I" in English, or one-letter abbreviations, are not names.
@@ -104,8 +103,8 @@ impl Tally {
                     && key.chars().count() > 1
                     && evidence.lower == 0
                     && evidence.capital_inside > 0;
-                let is_name =
-                    (names_only && kinds.lemmas.is_empty()) || (!common && always_capital);
+                // Not common, and either the dictionary has it (only as a name) or the book always capitalises it.
+                let is_name = !common && (!kinds.parts_of_speech.is_empty() || always_capital);
                 // Only a form of exactly one word: "suis" (être, suivre) stays itself.
                 let lemma_key = match kinds.lemmas.as_slice() {
                     [lemma] if kinds.parts_of_speech.is_empty() => Some(rules.term_key(lemma)),

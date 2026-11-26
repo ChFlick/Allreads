@@ -1,6 +1,8 @@
 package io.github.chflick.allreads.ui.library
 
 import android.graphics.BitmapFactory
+import android.util.LruCache
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +47,29 @@ private val coverColours = listOf(
     Color(0xFF5A5A66), // slate
 )
 
+/**
+ * Covers decoded at about the size they are shown (an EPUB cover can be
+ * 1400 × 2100 pixels, 12 MB in memory) and kept in a small cache, so scrolling
+ * the library does not decode them again.
+ */
+private object CoverCache {
+    private val cache = LruCache<String, ImageBitmap>(48)
+
+    fun get(path: String?, heightPx: Int): ImageBitmap? = path?.let { cache.get("$it@$heightPx") }
+
+    fun load(path: String, heightPx: Int): ImageBitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        // The largest power of two that keeps the image at least as tall as shown.
+        var sample = 1
+        while (bounds.outHeight / (sample * 2) >= heightPx) sample *= 2
+        val bitmap = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?.asImageBitmap() ?: return null
+        cache.put("$path@$heightPx", bitmap)
+        return bitmap
+    }
+}
+
 /** The same colour for the same title, every time. */
 internal fun coverColour(title: String): Color =
     coverColours[Math.floorMod(title.hashCode(), coverColours.size)]
@@ -53,10 +78,10 @@ internal fun coverColour(title: String): Color =
 @Composable
 fun BookCover(book: BookSummary, width: Dp) {
     val modifier = Modifier.size(width = width, height = width * 1.5f).clip(MaterialTheme.shapes.extraSmall)
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, book.coverPath) {
-        value = book.coverPath?.let {
-            withContext(Dispatchers.IO) { BitmapFactory.decodeFile(it)?.asImageBitmap() }
-        }
+    val heightPx = with(LocalDensity.current) { (width * 1.5f).roundToPx() }
+    val bitmap by produceState(CoverCache.get(book.coverPath, heightPx), book.coverPath, heightPx) {
+        val path = book.coverPath ?: return@produceState
+        if (value == null) value = withContext(Dispatchers.IO) { CoverCache.load(path, heightPx) }
     }
     val image = bitmap
     if (image != null) {

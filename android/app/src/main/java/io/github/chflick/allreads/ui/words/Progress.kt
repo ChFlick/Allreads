@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import io.github.chflick.allreads.ui.DotLabel
 import java.time.LocalDate
 import uniffi.allreads_ffi.DayCount
 
@@ -92,8 +93,8 @@ fun ProgressCard(series: ProgressSeries, modifier: Modifier = Modifier) {
             if (series.days.size > 1) {
                 ProgressChart(series, knownColour, learningColour)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Legend(knownColour, "Known")
-                    Legend(learningColour, "Learning (%,d)".format(series.learningNow))
+                    DotLabel(knownColour, "Known")
+                    DotLabel(learningColour, "Learning (%,d)".format(series.learningNow))
                 }
             } else {
                 Text(
@@ -103,14 +104,6 @@ fun ProgressCard(series: ProgressSeries, modifier: Modifier = Modifier) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun Legend(colour: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(Modifier.size(8.dp).background(colour, CircleShape))
-        Text(label, style = MaterialTheme.typography.labelMedium)
     }
 }
 

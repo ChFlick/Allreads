@@ -24,7 +24,7 @@ fun StatusChip(status: WordStatus, selected: Boolean, onClick: () -> Unit) {
         onClick = onClick,
         label = { Text(status.label()) },
         leadingIcon = if (selected) {
-            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.padding(0.dp)) }
+            { Icon(Icons.Default.Check, contentDescription = null) }
         } else {
             null
         },

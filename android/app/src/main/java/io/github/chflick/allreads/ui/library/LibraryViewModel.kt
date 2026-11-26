@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.library
 
+import io.github.chflick.allreads.data.BookSort
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -15,7 +16,6 @@ import io.github.chflick.allreads.ui.describe
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -47,9 +47,10 @@ data class LibraryState(
     /** True while a web article is being fetched. */
     val fetching: Boolean = false,
 ) {
-    val shown: List<BookSummary> get() = arrange(books, view)
+    // Worked out once per state, not on every recomposition.
+    val shown: List<BookSummary> by lazy { arrange(books, view) }
     /** The languages of the books, for the filter chips. */
-    val languages: List<String> get() = books.map { it.languageCode }.distinct().sorted()
+    val languages: List<String> by lazy { books.map { it.languageCode }.distinct().sorted() }
 }
 
 class LibraryViewModel(
@@ -57,8 +58,7 @@ class LibraryViewModel(
     private val settings: SettingsStore? = null,
     private val fetcher: Fetcher = HttpFetcher(),
 ) : ViewModel() {
-    private val savedSort = settings?.settings?.value?.librarySort
-        ?.let { name -> BookSort.entries.firstOrNull { it.name == name } } ?: BookSort.Recent
+    private val savedSort = settings?.settings?.value?.librarySort ?: BookSort.Recent
     private val _state = MutableStateFlow(LibraryState(view = LibraryView(sort = savedSort)))
     val state: StateFlow<LibraryState> = _state.asStateFlow()
 
@@ -68,34 +68,44 @@ class LibraryViewModel(
 
     /** Changes the search or filters. A new sort is remembered for next time. */
     fun changeView(view: LibraryView) {
-        if (view.sort != _state.value.view.sort) settings?.update { it.copy(librarySort = view.sort.name) }
+        if (view.sort != _state.value.view.sort) settings?.update { it.copy(librarySort = view.sort) }
         _state.update { it.copy(view = view) }
     }
 
-    /** The running refresh; a new one replaces it, so books are not counted twice at once. */
-    private var refreshing: Job? = null
+    /** Counts books not counted yet, one at a time; one job for the whole view model. */
+    private var counting: Job? = null
 
+    /** Books whose count failed in this session, so they are not retried in a loop. */
+    private val uncountable = mutableSetOf<Long>()
+
+    /**
+     * Reloads the list, with the difficulty of every book already counted in
+     * one call, then counts the rest in the background.
+     */
     fun refresh() {
-        refreshing?.cancel()
-        refreshing = viewModelScope.launch {
+        viewModelScope.launch {
             val books = runCatching { repository.library() }
+            val counted = runCatching { repository.countedDifficulties() }.getOrDefault(emptyList())
             _state.update {
                 it.copy(
                     books = books.getOrDefault(it.books),
-                    // Deleted books leave the map too.
-                    difficulty = books.getOrNull()?.let { list -> it.difficulty.filterKeys { id -> list.any { b -> b.id == id } } }
-                        ?: it.difficulty,
+                    difficulty = counted.associate { c -> c.bookId to c.difficulty },
                     loading = false,
                     message = books.exceptionOrNull()?.let(::describe) ?: it.message,
                 )
             }
-            // One book at a time: the first count of a long book reads every chapter.
-            books.getOrNull()?.forEach { book ->
-                ensureActive()
-                runCatching { repository.bookDifficulty(book.id) }.onSuccess { difficulty ->
-                    _state.update { it.copy(difficulty = it.difficulty + (book.id to difficulty)) }
-                }
-            }
+            if (counting?.isActive != true) counting = viewModelScope.launch { countMissing() }
+        }
+    }
+
+    /** Counts the listed books without a difficulty, reading the list again after each, so new imports join in. */
+    private suspend fun countMissing() {
+        while (true) {
+            val state = _state.value
+            val book = state.books.firstOrNull { it.id !in state.difficulty && it.id !in uncountable } ?: return
+            runCatching { repository.bookDifficulty(book.id) }
+                .onSuccess { difficulty -> _state.update { it.copy(difficulty = it.difficulty + (book.id to difficulty)) } }
+                .onFailure { uncountable += book.id }
         }
     }
 

@@ -422,7 +422,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             _state.update { state ->
                 result.fold(
                     // Nothing to undo when no word was new.
-                    { marked -> if (marked.count == 0u) state.copy(message = "No new words left in this chapter") else state.copy(markedKnown = marked) },
+                    { marked -> if (marked.termIds.isEmpty()) state.copy(message = "No new words left in this chapter") else state.copy(markedKnown = marked) },
                     { state.copy(message = describe(it)) },
                 )
             }
@@ -461,22 +461,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         val language = _state.value.book?.languageCode ?: return
         viewModelScope.launch {
             val result = runCatching {
-                val saved = repository.findTerm(language, change.text) ?: error("“${change.text}” is not saved")
-                repository.saveTerm(
-                    TermInput(
-                        languageCode = language,
-                        text = saved.displayText,
-                        status = change.to,
-                        translation = saved.translation,
-                        notes = saved.notes,
-                        lemma = saved.lemma,
-                        // No context: the card keeps the sentence it was saved with.
-                        sentence = null,
-                        sentenceTranslation = null,
-                        sourceBook = null,
-                        sourceChapter = null,
-                    ),
-                )
+                repository.setTermStatus(language, change.text, change.to) ?: error("“${change.text}” is not saved")
             }
             _state.update { state ->
                 result.fold(

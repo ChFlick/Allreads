@@ -29,17 +29,23 @@ data class WordsState(
     /** Known and learning words per day in this language, for the chart. */
     val progress: ProgressSeries = ProgressSeries(emptyList(), emptyList(), emptyList()),
 ) {
-    val learningCount: Int get() = terms.count { it.status is WordStatus.Learning }
-    val knownCount: Int get() = terms.count { it.status == WordStatus.WellKnown }
-    val ignoredCount: Int get() = terms.count { it.status == WordStatus.Ignored }
+    /** Words per filter chip, counted once per state, not on every recomposition. */
+    private val counts: Map<WordFilter, Int> by lazy {
+        terms.groupingBy { term ->
+            when (term.status) {
+                is WordStatus.Learning -> WordFilter.Learning
+                WordStatus.WellKnown -> WordFilter.Known
+                WordStatus.Ignored -> WordFilter.Ignored
+                WordStatus.New -> WordFilter.All
+            }
+        }.eachCount() + (WordFilter.All to terms.size)
+    }
+
+    val learningCount: Int get() = count(WordFilter.Learning)
+    val knownCount: Int get() = count(WordFilter.Known)
 
     /** How many words a filter chip would show, for its label. */
-    fun count(filter: WordFilter): Int = when (filter) {
-        WordFilter.All -> terms.size
-        WordFilter.Learning -> learningCount
-        WordFilter.Known -> knownCount
-        WordFilter.Ignored -> ignoredCount
-    }
+    fun count(filter: WordFilter): Int = counts[filter] ?: 0
 
     /** The terms matching the filter and search, by key or translation. */
     val visible: List<SavedTerm>
@@ -66,14 +72,11 @@ class WordsViewModel(
 
     init {
         viewModelScope.launch {
-            // The languages of the books (not every preset the app knows), the
-            // most recently read first; all languages before any book is imported.
-            val books = runCatching { repository.library() }.getOrDefault(emptyList())
-            // Plus languages with saved words, which stay reachable after their book is deleted.
-            val withWords = runCatching { repository.termLanguageCodes() }.getOrDefault(emptyList())
-            val languages = (books.map { it.languageCode } + withWords).distinct().sorted()
-                .ifEmpty { runCatching { repository.languageCodes() }.getOrDefault(emptyList()) }
-            val recent = books.firstOrNull()?.languageCode
+            // The languages of the books and of saved words (not every preset the
+            // app knows), the most recently read first; all before anything is imported.
+            val used = runCatching { repository.wordLanguageCodes() }.getOrDefault(emptyList())
+            val languages = used.sorted().ifEmpty { runCatching { repository.languageCodes() }.getOrDefault(emptyList()) }
+            val recent = used.firstOrNull()
             _state.update { it.copy(languages = languages, language = recent ?: languages.firstOrNull()) }
             refresh()
         }

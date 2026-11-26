@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.library
 
+import io.github.chflick.allreads.data.BookSort
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -8,8 +9,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
@@ -18,16 +17,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import io.github.chflick.allreads.ui.SortIcon
 import io.github.chflick.allreads.ui.SearchPill
-import android.graphics.BitmapFactory
+import io.github.chflick.allreads.ui.DotLabel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,25 +61,18 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import uniffi.allreads_ffi.BookSummary
 import uniffi.allreads_ffi.BookDifficulty
 import kotlin.math.roundToInt
@@ -140,6 +130,17 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit) {
 private fun BookSummary.progress(): Float =
     if (chapterCount == 0u) 0f else (chapterIndex.toFloat() / chapterCount.toFloat()).coerceIn(0f, 1f)
 
+/** How far into the book the reader is, as a thin bar with a quiet track. */
+@Composable
+private fun BookProgressBar(book: BookSummary, modifier: Modifier = Modifier) {
+    LinearProgressIndicator(
+        progress = { book.progress() },
+        modifier = modifier.fillMaxWidth(),
+        drawStopIndicator = {},
+        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+    )
+}
+
 private fun BookSummary.chapterLine(): String =
     "${languageName(languageCode)} · chapter ${chapterIndex.toInt() + 1} of $chapterCount"
 
@@ -157,13 +158,7 @@ internal fun DifficultyLine(difficulty: BookDifficulty) {
         percent <= 12.0 -> Color(0xFFD39A2C)
         else -> Color(0xFFC0533F)
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(Modifier.size(8.dp).background(colour, CircleShape))
-        Text(
-            "${newPercentText(percent)} new words",
-            style = MaterialTheme.typography.labelMedium,
-        )
-    }
+    DotLabel(colour, "${newPercentText(percent)} new words")
 }
 
 /** "4 %", or "<1 %" for a few new words in a long book. */
@@ -269,12 +264,7 @@ private fun BookRow(book: BookSummary, difficulty: BookDifficulty?, onOpen: () -
                 Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
                 difficulty?.let { DifficultyLine(it) }
                 if (book.lastReadAt != null) {
-                    LinearProgressIndicator(
-                        progress = { book.progress() },
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        drawStopIndicator = {},
-                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                    )
+                    BookProgressBar(book, Modifier.padding(top = 4.dp))
                 }
             }
             BookMenu(book, onDelete = onLongPress)
@@ -302,12 +292,7 @@ private fun ContinueCard(book: BookSummary, difficulty: BookDifficulty?, onOpen:
                 book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
                 difficulty?.let { DifficultyLine(it) }
-                LinearProgressIndicator(
-                    progress = { book.progress() },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    drawStopIndicator = {},
-                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                )
+                BookProgressBar(book, Modifier.padding(vertical = 4.dp))
                 Button(onClick = onOpen) { Text("Continue") }
             }
         }

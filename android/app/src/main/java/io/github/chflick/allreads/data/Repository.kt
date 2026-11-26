@@ -4,8 +4,10 @@ import io.github.chflick.allreads.anki.NoteTypeStore
 import io.github.chflick.allreads.anki.SyncStore
 import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.BookDifficulty
+import uniffi.allreads_ffi.BookDifficultyOf
 import uniffi.allreads_ffi.DayCount
 import uniffi.allreads_ffi.WebArticle
+import uniffi.allreads_ffi.WordStatus
 import uniffi.allreads_ffi.AnkiNote
 import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.DictionaryLookup
@@ -51,7 +53,13 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun bookDifficulty(bookId: Long): BookDifficulty = io { app.bookDifficulty(bookId) }
 
-    suspend fun termLanguageCodes(): List<String> = io { app.termLanguageCodes() }
+    suspend fun wordLanguageCodes(): List<String> = io { app.wordLanguageCodes() }
+
+    suspend fun countedDifficulties(): List<BookDifficultyOf> = io { app.countedDifficulties() }
+
+    /** Changes only a saved word's status; returns the old one, or null if the word is not saved. */
+    suspend fun setTermStatus(languageCode: String, text: String, status: WordStatus): WordStatus? =
+        io { app.setTermStatus(languageCode, text, status) }
 
     suspend fun wordProgress(languageCode: String): List<DayCount> = io { app.wordProgress(languageCode) }
 

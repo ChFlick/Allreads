@@ -166,8 +166,9 @@ impl Database {
         if term.status.makes_anki_card() || self.anki_link(id)?.is_some() {
             self.queue_for_anki(id)?;
         }
+        // In the same transaction, so a save is one commit.
+        self.record_word_counts(Some(&term.language_code))?;
         transaction.commit()?;
-        self.record_word_counts()?;
         Ok(id)
     }
 
@@ -296,9 +297,44 @@ impl Database {
                 }
             }
         }
+        self.record_word_counts(Some(language_code))?;
         transaction.commit()?;
-        self.record_word_counts()?;
         Ok(added)
+    }
+
+    /// Changes only a saved word's status (e.g. a double tap raising its level),
+    /// keeping its translation, notes and card. Returns the status it had, or
+    /// `None` if the word is not saved.
+    ///
+    /// # Errors
+    /// Returns `NotFound` if the language is not stored, and a database error if
+    /// a statement fails.
+    pub fn set_term_status(
+        &self,
+        language_code: &str,
+        text: &str,
+        status: Status,
+    ) -> Result<Option<Status>, DbError> {
+        let Some(term) = self.find_term(language_code, text)? else {
+            return Ok(None);
+        };
+        if let Status::Learning(level) = status {
+            if !(1..=5).contains(&level) {
+                return Err(DbError::InvalidValue(format!("learning level {level}")));
+            }
+        }
+        let transaction = self.conn().unchecked_transaction()?;
+        transaction.execute(
+            "UPDATE term SET status = ?2 WHERE id = ?1",
+            params![term.id, status.code()],
+        )?;
+        // As in save_term: a card for levels 1-4, and an update for one that exists.
+        if status.makes_anki_card() || self.anki_link(term.id)?.is_some() {
+            self.queue_for_anki(term.id)?;
+        }
+        self.record_word_counts(Some(language_code))?;
+        transaction.commit()?;
+        Ok(Some(term.status))
     }
 
     /// Undoes [`Database::mark_known`]: deletes the terms it added, except any
@@ -320,8 +356,8 @@ impl Database {
                 deleted += delete.execute(params![id, Status::WellKnown.code()])?;
             }
         }
+        self.record_word_counts(None)?;
         transaction.commit()?;
-        self.record_word_counts()?;
         Ok(deleted)
     }
 
@@ -335,7 +371,7 @@ impl Database {
             .conn()
             .execute("DELETE FROM term WHERE id = ?1", [id])?;
         require_one_changed(changed, || format!("term {id}"))?;
-        self.record_word_counts()
+        self.record_word_counts(None)
     }
 }
 
@@ -750,6 +786,28 @@ mod tests {
         db.save_term(&edited).unwrap();
         assert_eq!(db.undo_mark_known(&added).unwrap(), 0);
         assert!(db.find_term("fr", "chien").unwrap().is_some());
+    }
+
+    #[test]
+    fn setting_a_status_keeps_the_rest() {
+        let db = french_db();
+        let mut chat = new_term("chat", Status::Learning(2));
+        chat.translation = "cat".into();
+        db.save_term(&chat).unwrap();
+        let before = db
+            .set_term_status("fr", "Chat", Status::Learning(3))
+            .unwrap();
+        assert_eq!(before, Some(Status::Learning(2)));
+        let saved = db.find_term("fr", "chat").unwrap().unwrap();
+        assert_eq!(
+            (saved.status, saved.translation.as_str()),
+            (Status::Learning(3), "cat")
+        );
+        assert_eq!(
+            db.set_term_status("fr", "chien", Status::WellKnown)
+                .unwrap(),
+            None
+        );
     }
 
     #[test]

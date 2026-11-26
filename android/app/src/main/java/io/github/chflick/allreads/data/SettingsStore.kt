@@ -11,6 +11,14 @@ enum class ThemeMode { System, Light, Dark }
 /** The reader's font. */
 enum class ReadingFont(val label: String) { Literata("Literata"), Serif("Serif"), Sans("Sans-serif") }
 
+/** How the library is ordered (a setting, so the choice is remembered). */
+enum class BookSort(val label: String) {
+    Recent("Recently read"),
+    Added("Recently added"),
+    Title("Title"),
+    Author("Author"),
+}
+
 /** The reader's page colours: the app's light or dark theme, or warm sepia. */
 enum class ReaderPage(val label: String) { App("Same as the app"), Sepia("Sepia") }
 
@@ -39,8 +47,7 @@ data class AppSettings(
     val doubleTapRaises: Boolean = true,
     /** The voice chosen per language code; a missing language uses the best installed voice. */
     val voices: Map<String, String> = emptyMap(),
-    /** The library's sort, by `BookSort` name. */
-    val librarySort: String = "Recent",
+    val librarySort: BookSort = BookSort.Recent,
 ) {
     companion object {
         /** DeepL target languages offered in Settings. */
@@ -66,7 +73,7 @@ class SettingsStore(context: Context) {
             .putString("theme", next.theme.name)
             .putString("reading_font", next.readingFont.name)
             .putString("reader_page", next.readerPage.name)
-            .putString("library_sort", next.librarySort)
+            .putString("library_sort", next.librarySort.name)
             .putBoolean("wallpaper_colors", next.wallpaperColors)
             .putBoolean("anki_word_card", next.ankiWordCard)
             .putFloat("speech_rate", next.speechRate)
@@ -86,15 +93,11 @@ class SettingsStore(context: Context) {
             nativeLanguage = prefs.getString("native_language", null) ?: defaults.nativeLanguage,
             fontScale = prefs.getFloat("font_scale", defaults.fontScale),
             lineSpacing = prefs.getFloat("line_spacing", defaults.lineSpacing),
-            theme = prefs.getString("theme", null)
-                ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
-                ?: defaults.theme,
+            theme = prefs.getEnum("theme", defaults.theme),
             wallpaperColors = prefs.getBoolean("wallpaper_colors", defaults.wallpaperColors),
-            librarySort = prefs.getString("library_sort", null) ?: defaults.librarySort,
-            readingFont = prefs.getString("reading_font", null)
-                ?.let { name -> ReadingFont.entries.firstOrNull { it.name == name } } ?: defaults.readingFont,
-            readerPage = prefs.getString("reader_page", null)
-                ?.let { name -> ReaderPage.entries.firstOrNull { it.name == name } } ?: defaults.readerPage,
+            librarySort = prefs.getEnum("library_sort", defaults.librarySort),
+            readingFont = prefs.getEnum("reading_font", defaults.readingFont),
+            readerPage = prefs.getEnum("reader_page", defaults.readerPage),
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),
             speechRate = prefs.getFloat("speech_rate", defaults.speechRate),
             speakOnTap = prefs.getBoolean("speak_on_tap", defaults.speakOnTap),
@@ -107,3 +110,7 @@ class SettingsStore(context: Context) {
         )
     }
 }
+
+/** A stored enum by its name; `default` when missing or no longer a value. */
+private inline fun <reified E : Enum<E>> SharedPreferences.getEnum(key: String, default: E): E =
+    getString(key, null)?.let { name -> enumValues<E>().firstOrNull { it.name == name } } ?: default
