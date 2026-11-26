@@ -22,9 +22,10 @@ use allreads_core::word_tally;
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
     saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookDifficulty, BookDifficultyOf,
-    BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, DictionaryLookup,
-    InstalledDictionary, LanguageInfo, MarkedKnown, PhraseMark, PhraseSuggestion, PreparedText,
-    SavedTerm, TermInput, Token, Translation, WordProgress, WordStatus,
+    BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, DictionaryLookup, ImportRow,
+    ImportStatus, ImportSummary, InstalledDictionary, LanguageInfo, MarkedKnown, PhraseMark,
+    PhraseSuggestion, PreparedText, SavedTerm, TermInput, Token, Translation, WordProgress,
+    WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -82,6 +83,17 @@ impl App {
 
     fn dictionaries_dir(&self) -> PathBuf {
         self.data_dir.join("dictionaries")
+    }
+
+    /// The articles stripped from imported words in a language ("le|la|les|l'").
+    fn articles(&self, language_code: &str) -> Result<String, AllreadsError> {
+        Ok(self
+            .db()?
+            .language(language_code)?
+            .ok_or_else(|| AllreadsError::Missing {
+                what: format!("language {language_code}"),
+            })?
+            .articles)
     }
 
     fn books_dir(&self) -> PathBuf {
@@ -383,6 +395,81 @@ impl App {
         drop(db);
         self.remember_open_book(id, Arc::new(prepared.book))?;
         Ok(summary)
+    }
+
+    /// The word an import would take from a field, for the import screen's
+    /// samples: "le chat (m.)" → "chat". `None` if nothing usable is left.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown language.
+    pub fn clean_import_word(
+        &self,
+        language_code: String,
+        raw: String,
+    ) -> Result<Option<String>, AllreadsError> {
+        let articles = self.articles(&language_code)?;
+        Ok(allreads_core::import::clean_word(&raw, &articles))
+    }
+
+    /// Imports words picked from notes: each row's word is cleaned, its status
+    /// set by `status`, and saved under "the more known status wins". `source`
+    /// is the badge ("Anki · French vocabulary"); with `from_anki`, the words
+    /// already have cards and are never sent to AnkiDroid.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown language, `InvalidInput` for a fixed
+    /// status of New, and `Database` if saving fails (then nothing is saved).
+    pub fn import_words(
+        &self,
+        language_code: String,
+        source: String,
+        from_anki: bool,
+        rows: Vec<ImportRow>,
+        status: ImportStatus,
+    ) -> Result<ImportSummary, AllreadsError> {
+        use allreads_core::db::import::ImportedWord;
+        use allreads_core::import::{clean_meaning, clean_word, status_for};
+        let fixed = match status {
+            ImportStatus::Fixed { status } => {
+                Some(
+                    status
+                        .to_status()?
+                        .ok_or_else(|| AllreadsError::InvalidInput {
+                            reason: "an import cannot mark words as new".into(),
+                        })?,
+                )
+            }
+            ImportStatus::FollowReviews => None,
+        };
+        let articles = self.articles(&language_code)?;
+        let mut skipped = 0;
+        let mut words = Vec::new();
+        for row in rows {
+            let progress = row
+                .progress
+                .map_or(allreads_core::import::CardProgress::New, Into::into);
+            let (Some(text), Some(status)) = (
+                clean_word(&row.word, &articles),
+                fixed.or_else(|| status_for(progress)),
+            ) else {
+                skipped += 1;
+                continue;
+            };
+            words.push(ImportedWord {
+                text,
+                meaning: row.meaning.as_deref().and_then(clean_meaning),
+                status,
+            });
+        }
+        let done = self
+            .db()?
+            .import_words(&language_code, source.trim(), from_anki, &words)?;
+        Ok(ImportSummary {
+            added: done.added,
+            upgraded: done.upgraded,
+            unchanged: done.unchanged,
+            skipped,
+        })
     }
 
     /// A free path in the books folder for a file the user picked, named after
@@ -1155,6 +1242,7 @@ pub fn read_book_meta(path: String) -> Result<BookMeta, AllreadsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::records::CardProgress;
     use allreads_core::db::term::Status;
     use allreads_core::db::SCHEMA_VERSION;
 
@@ -1579,6 +1667,86 @@ mod tests {
         assert_eq!(mark.status, WordStatus::Learning { level: 2 });
         // The words keep their own status too.
         assert_eq!(statuses_of(&chapter, "premier"), [WordStatus::New]);
+    }
+
+    #[test]
+    fn words_import_with_cleanup_status_rules_and_a_badge() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        assert_eq!(
+            app.clean_import_word("fr".into(), "le chat (m.)".into())
+                .unwrap()
+                .as_deref(),
+            Some("chat")
+        );
+        let row = |word: &str, meaning: Option<&str>, progress| ImportRow {
+            word: word.into(),
+            meaning: meaning.map(str::to_string),
+            progress,
+        };
+        let rows = vec![
+            row(
+                "le <b>chat</b>",
+                Some("cat<br>kitty"),
+                Some(CardProgress::Interval { days: 30 }),
+            ),
+            row("chien", None, Some(CardProgress::Interval { days: 4 })),
+            row("oiseau", None, Some(CardProgress::Suspended)),
+            row("[sound:x.mp3]", None, None),
+        ];
+        let summary = app
+            .import_words(
+                "fr".into(),
+                "Anki · Animaux".into(),
+                true,
+                rows.clone(),
+                ImportStatus::FollowReviews,
+            )
+            .unwrap();
+        assert_eq!((summary.added, summary.skipped), (2, 2));
+        let chat = app.find_term("fr".into(), "chat".into()).unwrap().unwrap();
+        assert_eq!(
+            (
+                chat.status,
+                chat.translation.as_str(),
+                chat.imported_from.as_str()
+            ),
+            (WordStatus::WellKnown, "cat; kitty", "Anki · Animaux")
+        );
+        assert_eq!(
+            app.find_term("fr".into(), "chien".into())
+                .unwrap()
+                .unwrap()
+                .status,
+            WordStatus::Learning { level: 3 }
+        );
+        // Again with one level for all: nothing is downgraded.
+        let again = app
+            .import_words(
+                "fr".into(),
+                "Anki · Animaux".into(),
+                true,
+                rows,
+                ImportStatus::Fixed {
+                    status: WordStatus::Learning { level: 1 },
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            (again.added, again.upgraded, again.unchanged, again.skipped),
+            (1, 0, 2, 1)
+        );
+        assert!(app
+            .import_words(
+                "fr".into(),
+                "x".into(),
+                false,
+                Vec::new(),
+                ImportStatus::Fixed {
+                    status: WordStatus::New
+                }
+            )
+            .is_err());
     }
 
     #[test]

@@ -351,6 +351,7 @@ mod tests {
                 sentence: "Le chat <i>dort</i>.".into(),
                 ..TermContext::default()
             },
+            imported_from: String::new(),
         };
         let note = build_note(&term, &builtin("fr"), 1, Some(9));
         assert_eq!(note.fields[1], "&lt;chat&gt;");
@@ -372,6 +373,7 @@ mod tests {
             notes: String::new(),
             parent_id: None,
             context: TermContext::default(),
+            imported_from: String::new(),
         };
         let note = build_note(&term, &builtin("fr"), 1, None);
         assert_eq!(note.fields[3], "<b>Chat</b>");

@@ -96,10 +96,12 @@ pub struct Term {
     pub parent_id: Option<i64>,
     /// Where the word was saved; empty fields when it was saved without context.
     pub context: TermContext,
+    /// Where an imported word came from ("Anki · French vocabulary"); empty otherwise.
+    pub imported_from: String,
 }
 
 const COLUMNS: &str = "id, language_code, text, lemma, status, translation, notes, parent_id, \
-     display_text, context_sentence, context_translation, source_book, source_chapter";
+     display_text, context_sentence, context_translation, source_book, source_chapter, imported_from";
 
 impl Database {
     /// Saves a term and returns its id. An existing term with the same language
@@ -161,15 +163,26 @@ impl Database {
             ],
             |row| row.get(0),
         )?;
-        // Words being learned (levels 1 to 4) go to Anki, and so do edits of a
-        // word that already has a card.
-        if term.status.makes_anki_card() || self.anki_link(id)?.is_some() {
+        if self.wants_anki_card(id, term.status)? {
             self.queue_for_anki(id)?;
         }
         // In the same transaction, so a save is one commit.
         self.record_word_counts(Some(&term.language_code))?;
         transaction.commit()?;
         Ok(id)
+    }
+
+    /// Whether a save at `status` should go to AnkiDroid: words being learned
+    /// (levels 1 to 4) get a card, and a word with a card has it updated. A
+    /// word with a card elsewhere (imported from Anki) never does, so no
+    /// duplicate is made.
+    pub(crate) fn wants_anki_card(&self, id: i64, status: Status) -> Result<bool, DbError> {
+        let elsewhere: bool = self.conn().query_row(
+            "SELECT card_elsewhere FROM term WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )?;
+        Ok(!elsewhere && (status.makes_anki_card() || self.anki_link(id)?.is_some()))
     }
 
     /// Fails if `parent_id` is the term itself, or if following its parents
@@ -328,8 +341,7 @@ impl Database {
             "UPDATE term SET status = ?2 WHERE id = ?1",
             params![term.id, status.code()],
         )?;
-        // As in save_term: a card for levels 1-4, and an update for one that exists.
-        if status.makes_anki_card() || self.anki_link(term.id)?.is_some() {
+        if self.wants_anki_card(term.id, status)? {
             self.queue_for_anki(term.id)?;
         }
         self.record_word_counts(Some(language_code))?;
@@ -397,6 +409,7 @@ fn term_from_row(row: &Row) -> rusqlite::Result<Term> {
             source_book: row.get(11)?,
             source_chapter: row.get(12)?,
         },
+        imported_from: row.get(13)?,
     })
 }
 

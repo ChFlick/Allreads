@@ -212,6 +212,9 @@ pub struct SavedTerm {
     pub translation: String,
     pub notes: String,
     pub lemma: Option<String>,
+    /// Where an imported word came from, for its badge ("Anki · French
+    /// vocabulary"); empty for words saved in Allreads.
+    pub imported_from: String,
 }
 
 impl From<Term> for SavedTerm {
@@ -225,8 +228,77 @@ impl From<Term> for SavedTerm {
             translation: term.translation,
             notes: term.notes,
             lemma: term.lemma,
+            imported_from: term.imported_from,
         }
     }
+}
+
+/// Where a card stands in Anki's reviews.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum CardProgress {
+    /// Not studied yet, or still in its first learning steps.
+    New,
+    /// In review, with this interval in days.
+    Interval { days: u32 },
+    /// Suspended by the user.
+    Suspended,
+}
+
+impl From<CardProgress> for allreads_core::import::CardProgress {
+    fn from(progress: CardProgress) -> Self {
+        match progress {
+            CardProgress::New => Self::New,
+            CardProgress::Interval { days } => Self::Interval(days),
+            CardProgress::Suspended => Self::Suspended,
+        }
+    }
+}
+
+/// A note or row from an import source: its fields, as in the source, and
+/// its review progress when the source has one.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportNote {
+    pub fields: Vec<String>,
+    pub progress: Option<CardProgress>,
+}
+
+/// Notes of one kind in an import source: an Anki note type, or a file's rows.
+/// The user picks which of its `fields` holds the word and the meaning.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportGroup {
+    /// The note type's name, or the file's.
+    pub name: String,
+    /// Field (or column) names, in the order of each note's fields.
+    pub fields: Vec<String>,
+    pub notes: Vec<ImportNote>,
+}
+
+/// A word to import, as picked from a note: the raw word and meaning fields.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ImportRow {
+    pub word: String,
+    pub meaning: Option<String>,
+    pub progress: Option<CardProgress>,
+}
+
+/// How an import decides each word's status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum ImportStatus {
+    /// The same status for every word, e.g. known.
+    Fixed { status: WordStatus },
+    /// From the card's review progress (see `import::status_for`); a row
+    /// without progress gets level 1.
+    FollowReviews,
+}
+
+/// What an import did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct ImportSummary {
+    pub added: u32,
+    pub upgraded: u32,
+    pub unchanged: u32,
+    /// Rows without a usable word, and suspended cards.
+    pub skipped: u32,
 }
 
 impl From<Status> for WordStatus {

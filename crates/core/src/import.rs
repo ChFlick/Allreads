@@ -15,6 +15,8 @@ struct Patterns {
     line_break: Regex,
     /// `[sound:…]`, `[image:…]` and other bracketed notes, such as `[ʃa]`.
     square: Regex,
+    /// Only media tags: `[sound:…]`.
+    sound: Regex,
     /// `(m.)`, `(fam.)` and other notes in round brackets.
     round: Regex,
     /// Cloze deletions: `{{c1::chat::animal}}` → `chat`.
@@ -26,6 +28,7 @@ fn patterns() -> &'static Patterns {
     PATTERNS.get_or_init(|| Patterns {
         line_break: Regex::new(r"(?i)<\s*(br|div|p)\b[^>]*>").expect("valid pattern"),
         square: Regex::new(r"\[[^\]]*\]").expect("valid pattern"),
+        sound: Regex::new(r"\[(sound|image):[^\]]*\]").expect("valid pattern"),
         round: Regex::new(r"\([^)]*\)").expect("valid pattern"),
         cloze: Regex::new(r"\{\{c\d+::(.*?)(?:::.*?)?\}\}").expect("valid pattern"),
     })
@@ -62,6 +65,25 @@ pub fn clean_word(raw: &str, articles: &str) -> Option<String> {
     word.chars()
         .any(char::is_alphabetic)
         .then(|| word.to_string())
+}
+
+/// A card's meaning field as plain text: HTML removed (line breaks become
+/// "; "), media tags and cloze markers gone, spaces tidied. Unlike
+/// [`clean_word`] it keeps everything else, e.g. "bed, layer (geology)".
+#[must_use]
+pub fn clean_meaning(raw: &str) -> Option<String> {
+    let patterns = patterns();
+    let text = patterns.cloze.replace_all(raw, "$1");
+    let text = patterns.line_break.replace_all(&text, "\n");
+    let text: String = Html::parse_fragment(&text).root_element().text().collect();
+    let text = patterns.sound.replace_all(&text, " ");
+    let parts: Vec<String> = text
+        .split('\n')
+        .map(|line| normalize_whitespace(&line.replace('\u{a0}', " ")))
+        .filter(|line| !line.is_empty())
+        .collect();
+    let meaning = parts.join("; ");
+    (!meaning.is_empty()).then_some(meaning)
 }
 
 /// `word` without one leading article: "le chat" → "chat", "l'homme" → "homme".
@@ -194,6 +216,19 @@ mod tests {
         assert_eq!(clean("[sound:x.mp3]", FRENCH), None);
         assert_eq!(clean("<img src=\"a.jpg\">", FRENCH), None);
         assert_eq!(clean("(m.) 42", FRENCH), None);
+    }
+
+    #[test]
+    fn meanings_keep_their_text_without_markup() {
+        assert_eq!(
+            clean_meaning("bed, layer <i>(geology)</i>[sound:lit.mp3]").as_deref(),
+            Some("bed, layer (geology)")
+        );
+        assert_eq!(
+            clean_meaning("<div>bed</div><div>layer</div>").as_deref(),
+            Some("bed; layer")
+        );
+        assert_eq!(clean_meaning(" [sound:x.mp3] "), None);
     }
 
     #[test]
