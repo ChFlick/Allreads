@@ -51,6 +51,36 @@ Deferred past v1: AI "Explain" (step 22), and all of step 26: the book browser, 
 
 Ideas kept for later, roughly in order of interest. None is planned in detail.
 
+- **Sentence cards** (planned 2026-11-26, first after v1; see the plan below): a word can have several cards, one per sentence and meaning.
+
+### Sentence cards (planned 2026-11-26)
+
+**Why.** Allreads is used for sentence mining, where the unit is the sentence card, not the word. Today a word (one per spelling and language) has one translation, one example sentence and one Anki note. Meeting "lit" again in another sentence with another meaning ("bed" in *« Il dort dans son lit »*, "reads" in *« Il lit un livre »*) can only overwrite. Worse, re-saving a word at a new level replaces its sentence but keeps the old translation, so the Anki card can pair *« Il lit un livre »* with "bed".
+
+**Model.** The word keeps what is about the word: status (level and colour in the reader), lemma, display text. A new **card** holds what is about one sentence: the sentence, the word's meaning in it, the sentence translation, the book and chapter, notes, and its own AnkiDroid note. A word has zero or more cards.
+
+**Decisions (recommended defaults, to confirm before starting):**
+1. The first save of a word in a sentence makes its first card automatically (mining stays one tap). Later sentences get a card only through "+ Card for this sentence".
+2. "+ Card" also works for known words, for a meaning not known yet. The automatic first card still follows today's rule (levels 1–4).
+3. Notes belong to the card (they usually explain that sentence).
+4. Changing a word's level never changes its cards.
+
+**Steps**, each with its check:
+1. **Core: card table and migration.** New `card` table (term id, sentence, meaning, sentence translation, book, chapter, notes, created). A migration turns every saved word's current context (sentence, translation, sentence translation, source, notes) into its first card, keeping its Anki note link. `save_term` stops touching context; new `add_card`, `update_card`, `delete_card`, `cards_for_term`.
+   - **Done when** core tests show: a migrated database has one card per word with context; re-saving a word at another level leaves its cards alone; two cards for one word are listed in order.
+2. **Core: Anki per card.** The outbox and the note link move from the word to the card (`anki_outbox.card_id`, `anki_note.card_id`); `pending_anki_notes` builds one note per card (Word, Meaning = card meaning, Sentence, Sentence translation, Source, Notes). Forgetting a word removes its queued cards; sent notes stay in AnkiDroid as today.
+   - **Done when** core tests show a word with two cards yields two pending notes, and recording a push for one leaves the other queued.
+3. **FFI.** `SavedTerm` gains its cards (or a `cards(term_id)` call); `TermInput` loses the context fields and a `CardInput` is added. Small and coarse, as the FFI rules ask.
+   - **Done when** the Kotlin bindings build and the FFI tests cover adding and listing cards.
+4. **Android: AnkiSync per card.** Drain per card. The duplicate check (`findNote`) matches on the Sentence field instead of Word, so a second card for "lit" is not mistaken for the first.
+   - **Done when** `AnkiSyncTest` covers two cards for one word becoming two notes, and a re-queued card updating its own note. **Phone check:** AnkiDroid marks notes with the same first field (Word) as duplicates; confirm both notes are added and how the duplicate marker looks.
+5. **Android: drawer.** A saved word tapped in a new sentence shows its cards ("1 card: « Il dort dans son lit », bed") and "+ Card for this sentence" with DeepL's in-context meaning, editable with ✎. In a sentence that already has a card, the drawer shows that card's meaning and notes. Level chips change only the status.
+   - **Done when** screenshots show both cases and, on the phone, adding a second card for a word sends a second note to AnkiDroid.
+6. **Android: Words.** A word lists all its meanings ("lit: bed; reads") and its number of cards; the editor lists the cards, each editable and deletable.
+   - **Done when** the editor can change and delete a card, and the change reaches AnkiDroid.
+
+**Risks.** The migration touches every saved word and the Anki links; it needs a test on a copy of a real database before release. AnkiDroid's duplicate marker (step 4) may push the note type's first field towards something unique per card, which would mean a new note-type version.
+
 - **Backup and restore** (F27, from step 26): the database, books and covers as one zip, saved through the system file picker or shared; restore on a new phone. Dropped from v1 on 2026-11-25.
 - **Book browser** (from step 26): find and download books from Standard Ebooks and Project Gutenberg (OPDS catalogues) without leaving the app.
 - **Stats** (F25, from step 26): known words per language, new words per day, % known per chapter.
