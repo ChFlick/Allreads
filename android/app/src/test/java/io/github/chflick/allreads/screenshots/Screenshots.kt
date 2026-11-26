@@ -40,6 +40,7 @@ import org.junit.runners.Parameterized
 import uniffi.allreads_ffi.BookSummary
 import uniffi.allreads_ffi.BookDifficulty
 import uniffi.allreads_ffi.DayCount
+import uniffi.allreads_ffi.WordProgress
 import uniffi.allreads_ffi.ChapterBlock
 import uniffi.allreads_ffi.DictionaryEntry
 import uniffi.allreads_ffi.DictionaryLookup
@@ -247,15 +248,15 @@ private object Samples {
     )
 
     /** Known words rising over five weeks, for the Words chart. */
-    val progress = io.github.chflick.allreads.ui.words.progressSeries(
-        (0..34).map { day ->
+    val progress = WordProgress(
+        days = (0..34).map { day ->
             DayCount(
                 java.time.LocalDate.parse("2026-10-23").plusDays(day.toLong()).toString(),
                 (180 + day * day / 3 + day * 4).toUInt(),
                 (40 + (day % 7) * 3 + day / 2).toUInt(),
             )
         },
-        java.time.LocalDate.parse("2026-11-26"),
+        knownThisWeek = 170u,
     )
 
     val terms = listOf(

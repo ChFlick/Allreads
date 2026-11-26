@@ -24,53 +24,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import io.github.chflick.allreads.ui.DotLabel
-import java.time.LocalDate
 import uniffi.allreads_ffi.DayCount
-
-/** Known and learning words on each day, gaps filled with the day before. */
-data class ProgressSeries(val days: List<LocalDate>, val known: List<Int>, val learning: List<Int>) {
-    val knownNow: Int get() = known.lastOrNull() ?: 0
-    val learningNow: Int get() = learning.lastOrNull() ?: 0
-
-    /** Known words gained in the last 7 days (0 if fewer are recorded). */
-    val knownThisWeek: Int
-        get() {
-            if (known.isEmpty()) return 0
-            val weekAgo = (known.size - 8).coerceAtLeast(0)
-            return known.last() - known[weekAgo]
-        }
-}
-
-/**
- * Turns the stored counts (one per day with a change) into one value per day
- * up to `today`, at most the last `maxDays` days.
- */
-fun progressSeries(history: List<DayCount>, today: LocalDate, maxDays: Int = 90): ProgressSeries {
-    val byDay = history.mapNotNull { count -> runCatching { LocalDate.parse(count.day) }.getOrNull()?.let { it to count } }
-        .sortedBy { it.first }
-    if (byDay.isEmpty()) return ProgressSeries(emptyList(), emptyList(), emptyList())
-    val first = maxOf(byDay.first().first, today.minusDays((maxDays - 1).toLong()))
-    val days = generateSequence(first) { it.plusDays(1) }.takeWhile { !it.isAfter(today) }.toList()
-    val known = mutableListOf<Int>()
-    val learning = mutableListOf<Int>()
-    var index = 0
-    var current: DayCount? = null
-    for (day in days) {
-        // Move to the last count on or before this day.
-        while (index < byDay.size && !byDay[index].first.isAfter(day)) {
-            current = byDay[index].second
-            index++
-        }
-        known += current?.known?.toInt() ?: 0
-        learning += current?.learning?.toInt() ?: 0
-    }
-    return ProgressSeries(days, known, learning)
-}
+import uniffi.allreads_ffi.WordProgress
 
 /** "1,204 known words · +56 this week", the learning count, and a chart of both. */
 @Composable
-fun ProgressCard(series: ProgressSeries, modifier: Modifier = Modifier) {
-    if (series.days.isEmpty()) return
+fun ProgressCard(progress: WordProgress, modifier: Modifier = Modifier) {
+    if (progress.days.isEmpty()) return
+    val now = progress.days.last()
     val knownColour = MaterialTheme.colorScheme.primary
     val learningColour = Color(0xFFE0A030)
     Card(
@@ -79,26 +40,26 @@ fun ProgressCard(series: ProgressSeries, modifier: Modifier = Modifier) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("%,d".format(series.knownNow), style = MaterialTheme.typography.headlineMedium)
+                Text("%,d".format(now.known.toInt()), style = MaterialTheme.typography.headlineMedium)
                 Text("known words", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp))
-                if (series.knownThisWeek > 0) {
+                if (progress.knownThisWeek > 0u) {
                     Text(
-                        "+%,d this week".format(series.knownThisWeek),
+                        "+%,d this week".format(progress.knownThisWeek.toInt()),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(bottom = 5.dp),
                     )
                 }
             }
-            if (series.days.size > 1) {
-                ProgressChart(series, knownColour, learningColour)
+            if (progress.days.size > 1) {
+                ProgressChart(progress.days, knownColour, learningColour)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     DotLabel(knownColour, "Known")
-                    DotLabel(learningColour, "Learning (%,d)".format(series.learningNow))
+                    DotLabel(learningColour, "Learning (%,d)".format(now.learning.toInt()))
                 }
             } else {
                 Text(
-                    "%,d words being learned. The chart starts tomorrow.".format(series.learningNow),
+                    "%,d words being learned. The chart starts tomorrow.".format(now.learning.toInt()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -109,14 +70,16 @@ fun ProgressCard(series: ProgressSeries, modifier: Modifier = Modifier) {
 
 /** Two lines over the days, both against the larger of the two counts. */
 @Composable
-private fun ProgressChart(series: ProgressSeries, knownColour: Color, learningColour: Color) {
+private fun ProgressChart(days: List<DayCount>, knownColour: Color, learningColour: Color) {
     val grid = MaterialTheme.colorScheme.outlineVariant
     Canvas(Modifier.fillMaxWidth().height(96.dp)) {
-        val top = maxOf(series.known.maxOrNull() ?: 0, series.learning.maxOrNull() ?: 0, 1)
-        val step = size.width / (series.days.size - 1)
+        val known = days.map { it.known.toInt() }
+        val learning = days.map { it.learning.toInt() }
+        val top = maxOf(known.maxOrNull() ?: 0, learning.maxOrNull() ?: 0, 1)
+        val step = size.width / (days.size - 1)
         fun y(value: Int) = size.height - value.toFloat() / top * size.height
         drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1.dp.toPx())
-        for ((values, colour) in listOf(series.learning to learningColour, series.known to knownColour)) {
+        for ((values, colour) in listOf(learning to learningColour, known to knownColour)) {
             val path = Path()
             values.forEachIndexed { i, value ->
                 if (i == 0) path.moveTo(0f, y(value)) else path.lineTo(i * step, y(value))

@@ -1,6 +1,5 @@
 package io.github.chflick.allreads.ui.words
 
-import java.time.LocalDate
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uniffi.allreads_ffi.SavedTerm
+import uniffi.allreads_ffi.WordProgress
 import uniffi.allreads_ffi.TermInput
 import uniffi.allreads_ffi.WordStatus
 
@@ -27,7 +27,7 @@ data class WordsState(
     val editing: SavedTerm? = null,
     val message: String? = null,
     /** Known and learning words per day in this language, for the chart. */
-    val progress: ProgressSeries = ProgressSeries(emptyList(), emptyList(), emptyList()),
+    val progress: WordProgress = WordProgress(emptyList(), 0u),
 ) {
     /** Words per filter chip, counted once per state, not on every recomposition. */
     private val counts: Map<WordFilter, Int> by lazy {
@@ -88,8 +88,8 @@ class WordsViewModel(
             runCatching { repository.listTerms(language) }
                 .onSuccess { terms -> _state.update { it.copy(terms = terms) } }
                 .onFailure { e -> _state.update { it.copy(message = describe(e)) } }
-            runCatching { repository.wordProgress(language) }.onSuccess { history ->
-                _state.update { it.copy(progress = progressSeries(history, LocalDate.now())) }
+            runCatching { repository.wordProgress(language) }.onSuccess { progress ->
+                _state.update { it.copy(progress = progress) }
             }
         }
     }

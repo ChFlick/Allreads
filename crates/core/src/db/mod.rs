@@ -145,8 +145,36 @@ pub(crate) fn u32_column(row: &rusqlite::Row, index: usize) -> rusqlite::Result<
 /// Shared helpers for the repository tests.
 #[cfg(test)]
 pub(crate) mod tests_support {
+    use super::book::NewBook;
+    use super::term::{NewTerm, Status};
     use super::Database;
     use crate::presets::parse_preset;
+
+    /// A French word to save, with nothing but its text and status.
+    pub(crate) fn new_term(text: &str, status: Status) -> NewTerm {
+        NewTerm {
+            language_code: "fr".into(),
+            text: text.into(),
+            lemma: None,
+            status,
+            translation: String::new(),
+            notes: String::new(),
+            parent_id: None,
+            context: None,
+        }
+    }
+
+    /// Adds a French book "Un" and returns its id.
+    pub(crate) fn insert_book(db: &Database) -> i64 {
+        db.insert_book(&NewBook {
+            title: "Un".into(),
+            author: None,
+            language_code: "fr".into(),
+            file_path: "un.epub".into(),
+            cover_path: None,
+        })
+        .expect("the test book is stored")
+    }
 
     /// A fresh in-memory database with the schema applied and no rows.
     pub(crate) fn test_database() -> Database {

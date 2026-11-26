@@ -57,6 +57,96 @@ pub struct DayCount {
     pub learning: u32,
 }
 
+/// Saved-word counts for every day of a window ending today, for the chart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgressSeries {
+    /// One entry per day, oldest first. A day without a stored count carries
+    /// the day before's (nothing changed that day).
+    pub days: Vec<DayCount>,
+    /// Known words gained over the last seven days (0 before there is a week).
+    pub known_this_week: u32,
+}
+
+/// Days since 1970-01-01 for a `YYYY-MM-DD` date, or `None` if it is not one.
+/// (Howard Hinnant's days-from-civil algorithm, so no date library is needed.)
+fn day_number(day: &str) -> Option<i64> {
+    let mut parts = day.splitn(3, '-').map(str::parse::<i64>);
+    let (year, month, date) = (
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+    );
+    if !(1..=12).contains(&month) || !(1..=31).contains(&date) {
+        return None;
+    }
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + date - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    Some(era * 146_097 + day_of_era - 719_468)
+}
+
+/// The `YYYY-MM-DD` date for a day number (the inverse of [`day_number`]).
+fn day_text(number: i64) -> String {
+    let z = number + 719_468;
+    let era = z.div_euclid(146_097);
+    let day_of_era = z - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let mp = (5 * day_of_year + 2) / 153;
+    let date = day_of_year - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{date:02}")
+}
+
+/// Fills the stored counts (one per day with a change, oldest first) into one
+/// count per day, for at most the last `max_days` days up to `today`.
+#[must_use]
+pub fn progress_series(history: &[DayCount], today: &str, max_days: u32) -> ProgressSeries {
+    let empty = ProgressSeries {
+        days: Vec::new(),
+        known_this_week: 0,
+    };
+    let Some(today_number) = day_number(today) else {
+        return empty;
+    };
+    let stored: Vec<(i64, &DayCount)> = history
+        .iter()
+        .filter_map(|count| day_number(&count.day).map(|n| (n, count)))
+        .collect();
+    let Some(&(first_stored, _)) = stored.first() else {
+        return empty;
+    };
+    let first = first_stored.max(today_number - i64::from(max_days) + 1);
+    let mut days = Vec::new();
+    let mut next = 0;
+    let mut current: Option<&DayCount> = None;
+    for number in first..=today_number {
+        // Move on to the last stored count on or before this day.
+        while next < stored.len() && stored[next].0 <= number {
+            current = Some(stored[next].1);
+            next += 1;
+        }
+        days.push(DayCount {
+            day: day_text(number),
+            known: current.map_or(0, |c| c.known),
+            learning: current.map_or(0, |c| c.learning),
+        });
+    }
+    let known_this_week = match (days.last(), days.len().checked_sub(8).map(|i| &days[i])) {
+        (Some(now), Some(week_ago)) => now.known.saturating_sub(week_ago.known),
+        (Some(now), None) => now.known.saturating_sub(days[0].known),
+        _ => 0,
+    };
+    ProgressSeries {
+        days,
+        known_this_week,
+    }
+}
+
 impl Database {
     /// The stamp a book's words were counted with (see
     /// [`crate::word_tally::count_stamp`]), or `None` if not counted.
@@ -276,6 +366,23 @@ impl Database {
         Ok(())
     }
 
+    /// A language's saved-word counts for each of the last `max_days` days up
+    /// to today (the phone's date), for the progress chart.
+    ///
+    /// # Errors
+    /// Returns a database error if a statement fails.
+    pub fn word_progress(
+        &self,
+        language_code: &str,
+        max_days: u32,
+    ) -> Result<ProgressSeries, DbError> {
+        let today: String =
+            self.conn()
+                .query_row("SELECT date('now', 'localtime')", [], |row| row.get(0))?;
+        let history = self.word_count_history(language_code)?;
+        Ok(progress_series(&history, &today, max_days))
+    }
+
     /// The saved-word counts of a language, oldest day first. Days without
     /// changes have no row; the count stayed as on the day before.
     ///
@@ -300,38 +407,13 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::book::NewBook;
-    use crate::db::term::{NewTerm, Status};
-    use crate::db::tests_support::french_db;
-
-    fn book(db: &Database) -> i64 {
-        db.insert_book(&NewBook {
-            title: "Un".into(),
-            author: None,
-            language_code: "fr".into(),
-            file_path: "un.txt".into(),
-            cover_path: None,
-        })
-        .unwrap()
-    }
-
-    fn term(text: &str, status: Status) -> NewTerm {
-        NewTerm {
-            language_code: "fr".into(),
-            text: text.into(),
-            lemma: None,
-            status,
-            translation: String::new(),
-            notes: String::new(),
-            parent_id: None,
-            context: None,
-        }
-    }
+    use crate::db::term::Status;
+    use crate::db::tests_support::{french_db, insert_book, new_term};
 
     #[test]
     fn difficulty_counts_running_and_unique_words() {
         let db = french_db();
-        let id = book(&db);
+        let id = insert_book(&db);
         assert_eq!(db.book_count_stamp(id).unwrap(), None);
         let word = |count, lemma: Option<&str>, is_name| BookWord {
             count,
@@ -352,8 +434,9 @@ mod tests {
         .collect();
         db.store_book_words(id, "1.3/", &words).unwrap();
         assert_eq!(db.book_count_stamp(id).unwrap().as_deref(), Some("1.3/"));
-        db.save_term(&term("le", Status::WellKnown)).unwrap();
-        db.save_term(&term("chat", Status::Learning(2))).unwrap();
+        db.save_term(&new_term("le", Status::WellKnown)).unwrap();
+        db.save_term(&new_term("chat", Status::Learning(2)))
+            .unwrap();
         let difficulty = db.book_difficulty(id).unwrap();
         assert_eq!(
             difficulty,
@@ -368,7 +451,8 @@ mod tests {
         );
         assert!((difficulty.new_percent() - 20.0).abs() < 1e-9);
         // Saving "dormir" makes its form "dormait" known too.
-        db.save_term(&term("dormir", Status::WellKnown)).unwrap();
+        db.save_term(&new_term("dormir", Status::WellKnown))
+            .unwrap();
         assert_eq!(db.book_difficulty(id).unwrap().new_words, 1);
         assert_eq!(
             db.book_names(id).unwrap(),
@@ -382,14 +466,15 @@ mod tests {
         );
         assert_eq!(counted[0].difficulty, db.book_difficulty(id).unwrap());
         // A name saved on purpose counts again.
-        db.save_term(&term("gregor", Status::Learning(1))).unwrap();
+        db.save_term(&new_term("gregor", Status::Learning(1)))
+            .unwrap();
         assert_eq!(db.book_difficulty(id).unwrap().words, 15);
     }
 
     #[test]
     fn an_uncounted_book_is_all_zero_and_a_missing_one_not_found() {
         let db = french_db();
-        let id = book(&db);
+        let id = insert_book(&db);
         assert_eq!(db.book_difficulty(id).unwrap(), Difficulty::default());
         assert!(matches!(
             db.book_count_stamp(99),
@@ -401,8 +486,9 @@ mod tests {
     fn saving_words_records_today_s_counts() {
         let db = french_db();
         assert!(db.word_count_history("fr").unwrap().is_empty());
-        db.save_term(&term("chat", Status::Learning(1))).unwrap();
-        db.save_term(&term("le", Status::WellKnown)).unwrap();
+        db.save_term(&new_term("chat", Status::Learning(1)))
+            .unwrap();
+        db.save_term(&new_term("le", Status::WellKnown)).unwrap();
         let history = db.word_count_history("fr").unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!((history[0].known, history[0].learning), (1, 1));
@@ -411,5 +497,61 @@ mod tests {
         db.delete_term(chat.id).unwrap();
         let history = db.word_count_history("fr").unwrap();
         assert_eq!((history[0].known, history[0].learning), (1, 0));
+    }
+
+    fn count(day: &str, known: u32, learning: u32) -> DayCount {
+        DayCount {
+            day: day.into(),
+            known,
+            learning,
+        }
+    }
+
+    #[test]
+    fn days_convert_both_ways_across_months_and_leap_years() {
+        for day in [
+            "1970-01-01",
+            "2024-02-29",
+            "2026-03-01",
+            "2026-12-31",
+            "2000-01-01",
+        ] {
+            assert_eq!(day_text(day_number(day).unwrap()), day);
+        }
+        assert_eq!(
+            day_number("2026-03-01").unwrap() - day_number("2026-02-28").unwrap(),
+            1
+        );
+        assert_eq!(day_number("2026-13-01"), None);
+    }
+
+    #[test]
+    fn gaps_carry_the_day_before_forward() {
+        let series = progress_series(
+            &[count("2026-11-22", 10, 5), count("2026-11-24", 14, 3)],
+            "2026-11-26",
+            90,
+        );
+        let known: Vec<u32> = series.days.iter().map(|d| d.known).collect();
+        let learning: Vec<u32> = series.days.iter().map(|d| d.learning).collect();
+        assert_eq!(known, [10, 10, 14, 14, 14]);
+        assert_eq!(learning, [5, 5, 3, 3, 3]);
+        assert_eq!(series.days[0].day, "2026-11-22");
+        // Less than a week recorded: the gain since the first day.
+        assert_eq!(series.known_this_week, 4);
+    }
+
+    #[test]
+    fn only_the_last_days_are_kept_with_the_count_before_carried_in() {
+        let series = progress_series(
+            &[count("2026-01-01", 1, 0), count("2026-11-20", 20, 0)],
+            "2026-11-26",
+            10,
+        );
+        let known: Vec<u32> = series.days.iter().map(|d| d.known).collect();
+        assert_eq!(series.days.first().unwrap().day, "2026-11-17");
+        assert_eq!(known, [1, 1, 1, 20, 20, 20, 20, 20, 20, 20]);
+        assert_eq!(series.known_this_week, 19);
+        assert!(progress_series(&[], "2026-11-26", 90).days.is_empty());
     }
 }

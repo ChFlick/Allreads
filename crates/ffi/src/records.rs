@@ -46,6 +46,23 @@ pub struct DayCount {
     pub learning: u32,
 }
 
+/// A language's saved-word counts for every day of the last 90, for the chart.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WordProgress {
+    /// One per day up to today, oldest first; empty before any word is saved.
+    pub days: Vec<DayCount>,
+    pub known_this_week: u32,
+}
+
+impl From<allreads_core::db::progress::ProgressSeries> for WordProgress {
+    fn from(series: allreads_core::db::progress::ProgressSeries) -> Self {
+        WordProgress {
+            days: series.days.into_iter().map(DayCount::from).collect(),
+            known_this_week: series.known_this_week,
+        }
+    }
+}
+
 impl From<allreads_core::db::progress::DayCount> for DayCount {
     fn from(d: allreads_core::db::progress::DayCount) -> Self {
         DayCount {

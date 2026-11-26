@@ -91,21 +91,12 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::book::NewBook;
     use crate::db::term::NewTerm;
-    use crate::db::tests_support::french_db;
+    use crate::db::tests_support::{french_db, insert_book};
 
     fn db_with_book() -> (Database, i64) {
         let db = french_db();
-        let id = db
-            .insert_book(&NewBook {
-                title: "Un".into(),
-                author: None,
-                language_code: "fr".into(),
-                file_path: "un.epub".into(),
-                cover_path: None,
-            })
-            .unwrap();
+        let id = insert_book(&db);
         (db, id)
     }
 

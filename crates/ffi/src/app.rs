@@ -22,9 +22,9 @@ use allreads_core::word_tally;
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
     saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookDifficulty, BookDifficultyOf,
-    BookMeta, BookSummary, Chapter, ChapterBlock, DayCount, DeepLKeyStatus, DictionaryLookup,
+    BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, DictionaryLookup,
     InstalledDictionary, LanguageInfo, MarkedKnown, PhraseMark, PhraseSuggestion, PreparedText,
-    SavedTerm, TermInput, Token, Translation, WordStatus,
+    SavedTerm, TermInput, Token, Translation, WordProgress, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -546,18 +546,13 @@ impl App {
             .map(WordStatus::from))
     }
 
-    /// The saved-word counts of a language per day, oldest first. Days without
-    /// a change have no entry.
+    /// A language's saved-word counts for each of the last 90 days, with the
+    /// known words gained this week, for the progress chart.
     ///
     /// # Errors
     /// Returns `Database` if the database cannot be read.
-    pub fn word_progress(&self, language_code: String) -> Result<Vec<DayCount>, AllreadsError> {
-        Ok(self
-            .db()?
-            .word_count_history(&language_code)?
-            .into_iter()
-            .map(DayCount::from)
-            .collect())
+    pub fn word_progress(&self, language_code: String) -> Result<WordProgress, AllreadsError> {
+        Ok(self.db()?.word_progress(&language_code, 90)?.into())
     }
 
     /// Every book in the library: recently read first, then unread books, newest first.
@@ -1720,8 +1715,8 @@ mod tests {
         let app = new_app(&dir);
         save_word(&app, "chat", Status::Learning(1));
         let progress = app.word_progress("fr".into()).unwrap();
-        assert_eq!(progress.len(), 1);
-        assert_eq!((progress[0].known, progress[0].learning), (0, 1));
+        assert_eq!(progress.days.len(), 1);
+        assert_eq!((progress.days[0].known, progress.days[0].learning), (0, 1));
     }
 
     #[test]

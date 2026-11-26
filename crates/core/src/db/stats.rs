@@ -87,21 +87,12 @@ fn stat_from_row(row: &Row) -> rusqlite::Result<ReadingStat> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::book::NewBook;
-    use crate::db::tests_support::french_db;
+    use crate::db::tests_support::{french_db, insert_book};
 
     fn db_with_book() -> (Database, i64) {
         let db = french_db();
-        let book_id = db
-            .insert_book(&NewBook {
-                title: "Un".into(),
-                author: None,
-                language_code: "fr".into(),
-                file_path: "un.epub".into(),
-                cover_path: None,
-            })
-            .unwrap();
-        (db, book_id)
+        let id = insert_book(&db);
+        (db, id)
     }
 
     #[test]

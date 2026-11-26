@@ -403,20 +403,7 @@ fn term_from_row(row: &Row) -> rusqlite::Result<Term> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::tests_support::french_db;
-
-    fn new_term(text: &str, status: Status) -> NewTerm {
-        NewTerm {
-            language_code: "fr".into(),
-            text: text.into(),
-            lemma: None,
-            status,
-            translation: String::new(),
-            notes: String::new(),
-            parent_id: None,
-            context: None,
-        }
-    }
+    use crate::db::tests_support::{french_db, new_term};
 
     fn context(sentence: &str) -> TermContext {
         TermContext {

@@ -5,7 +5,7 @@ import io.github.chflick.allreads.anki.SyncStore
 import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.BookDifficulty
 import uniffi.allreads_ffi.BookDifficultyOf
-import uniffi.allreads_ffi.DayCount
+import uniffi.allreads_ffi.WordProgress
 import uniffi.allreads_ffi.PreparedText
 import uniffi.allreads_ffi.WordStatus
 import uniffi.allreads_ffi.AnkiNote
@@ -72,7 +72,7 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
     suspend fun setTermStatus(languageCode: String, text: String, status: WordStatus): WordStatus? =
         io { app.setTermStatus(languageCode, text, status) }
 
-    suspend fun wordProgress(languageCode: String): List<DayCount> = io { app.wordProgress(languageCode) }
+    suspend fun wordProgress(languageCode: String): WordProgress = io { app.wordProgress(languageCode) }
 
 
 
