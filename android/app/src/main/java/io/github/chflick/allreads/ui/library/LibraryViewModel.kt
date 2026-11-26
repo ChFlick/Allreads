@@ -14,6 +14,8 @@ import io.github.chflick.allreads.data.SharedImport
 import io.github.chflick.allreads.ui.describe
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,18 +72,26 @@ class LibraryViewModel(
         _state.update { it.copy(view = view) }
     }
 
+    /** The running refresh; a new one replaces it, so books are not counted twice at once. */
+    private var refreshing: Job? = null
+
     fun refresh() {
-        viewModelScope.launch {
+        refreshing?.cancel()
+        refreshing = viewModelScope.launch {
             val books = runCatching { repository.library() }
             _state.update {
                 it.copy(
                     books = books.getOrDefault(it.books),
+                    // Deleted books leave the map too.
+                    difficulty = books.getOrNull()?.let { list -> it.difficulty.filterKeys { id -> list.any { b -> b.id == id } } }
+                        ?: it.difficulty,
                     loading = false,
                     message = books.exceptionOrNull()?.let(::describe) ?: it.message,
                 )
             }
             // One book at a time: the first count of a long book reads every chapter.
             books.getOrNull()?.forEach { book ->
+                ensureActive()
                 runCatching { repository.bookDifficulty(book.id) }.onSuccess { difficulty ->
                     _state.update { it.copy(difficulty = it.difficulty + (book.id to difficulty)) }
                 }

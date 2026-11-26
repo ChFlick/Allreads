@@ -54,7 +54,9 @@ class MainActivity : ComponentActivity() {
         lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) services.syncAnki() },
         )
-        handleShare(intent)
+        // Only on a fresh start: a recreated activity (rotation, restored process)
+        // still holds the original share intent, which was handled already.
+        if (savedInstanceState == null) handleShare(intent)
         setContent {
             val settings by services.settings.settings.collectAsStateWithLifecycle()
             AllreadsTheme(settings.theme, settings.wallpaperColors) {

@@ -156,7 +156,11 @@ class Dictionaries(
 
 /** [Fetcher] with `HttpURLConnection`. */
 class HttpFetcher : Fetcher {
-    override fun text(url: String): String = open(url).inputStream.use { it.readBytes().decodeToString() }
+    override fun text(url: String): String {
+        val connection = open(url)
+        val bytes = connection.inputStream.use { it.readBytes() }
+        return bytes.toString(charsetOf(connection.contentType, bytes))
+    }
 
     override fun download(url: String, target: File, progress: (Long) -> Unit) {
         val connection = open(url)
@@ -182,18 +186,48 @@ class HttpFetcher : Fetcher {
     }
 
     private fun open(url: String): HttpURLConnection {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
-        // GitHub answers release downloads with a redirect to its file host.
-        connection.instanceFollowRedirects = true
-        // Some sites refuse Java's default agent. A generic one, nothing about the user.
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) Allreads")
-        val code = connection.responseCode
-        if (code !in 200..299) {
-            connection.disconnect()
-            throw IOException("The server answered $code")
+        var address = URL(url)
+        // HttpURLConnection follows redirects only within one protocol, so an
+        // "http://" link that moved to "https://" is followed here.
+        repeat(MAX_REDIRECTS) {
+            val connection = address.openConnection() as HttpURLConnection
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            // GitHub answers release downloads with a redirect to its file host.
+            connection.instanceFollowRedirects = true
+            // Some sites refuse Java's default agent. A generic one, nothing about the user.
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) Allreads")
+            val code = connection.responseCode
+            val location = connection.getHeaderField("Location")
+            if (code in 300..399 && location != null) {
+                connection.disconnect()
+                address = URL(address, location)
+                return@repeat
+            }
+            if (code !in 200..299) {
+                connection.disconnect()
+                throw IOException("The server answered $code")
+            }
+            return connection
         }
-        return connection
+        throw IOException("Too many redirects")
+    }
+
+    private companion object {
+        const val MAX_REDIRECTS = 5
+
+        private val metaCharset = Regex("""<meta[^>]+charset\s*=\s*["']?([\w-]+)""", RegexOption.IGNORE_CASE)
+
+        /**
+         * A page's character set: from the Content-Type header, else from its
+         * `<meta charset>`, else UTF-8. Older sites still send Latin-1 pages.
+         */
+        fun charsetOf(contentType: String?, bytes: ByteArray): java.nio.charset.Charset {
+            val header = contentType?.substringAfter("charset=", "")?.substringBefore(';')
+                ?.trim(' ', '"', '\'')?.takeIf { it.isNotEmpty() }
+            val name = header ?: metaCharset.find(String(bytes, 0, minOf(bytes.size, 4096), Charsets.ISO_8859_1))
+                ?.groupValues?.get(1)
+            return name?.let { runCatching { java.nio.charset.Charset.forName(it) }.getOrNull() } ?: Charsets.UTF_8
+        }
     }
 }

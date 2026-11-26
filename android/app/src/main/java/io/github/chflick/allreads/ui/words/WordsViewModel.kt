@@ -69,7 +69,9 @@ class WordsViewModel(
             // The languages of the books (not every preset the app knows), the
             // most recently read first; all languages before any book is imported.
             val books = runCatching { repository.library() }.getOrDefault(emptyList())
-            val languages = books.map { it.languageCode }.distinct().sorted()
+            // Plus languages with saved words, which stay reachable after their book is deleted.
+            val withWords = runCatching { repository.termLanguageCodes() }.getOrDefault(emptyList())
+            val languages = (books.map { it.languageCode } + withWords).distinct().sorted()
                 .ifEmpty { runCatching { repository.languageCodes() }.getOrDefault(emptyList()) }
             val recent = books.firstOrNull()?.languageCode
             _state.update { it.copy(languages = languages, language = recent ?: languages.firstOrNull()) }

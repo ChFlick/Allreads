@@ -302,8 +302,8 @@ impl Database {
     }
 
     /// Undoes [`Database::mark_known`]: deletes the terms it added, except any
-    /// whose status was changed since (those were saved on purpose). Returns
-    /// how many were deleted.
+    /// that were changed since (another status, a translation or notes, or an
+    /// `AnkiDroid` card): those were saved on purpose. Returns how many were deleted.
     ///
     /// # Errors
     /// Returns a database error if a statement fails.
@@ -311,8 +311,11 @@ impl Database {
         let transaction = self.conn().unchecked_transaction()?;
         let mut deleted = 0;
         {
-            let mut delete =
-                transaction.prepare("DELETE FROM term WHERE id = ?1 AND status = ?2")?;
+            let mut delete = transaction.prepare(
+                "DELETE FROM term
+                 WHERE id = ?1 AND status = ?2 AND translation = '' AND notes = ''
+                   AND id NOT IN (SELECT term_id FROM anki_link)",
+            )?;
             for id in term_ids {
                 deleted += delete.execute(params![id, Status::WellKnown.code()])?;
             }
@@ -736,6 +739,17 @@ mod tests {
             db.find_term("fr", "oiseau").unwrap().unwrap().status,
             Status::Learning(2)
         );
+    }
+
+    #[test]
+    fn undoing_mark_known_keeps_a_known_word_given_a_translation_since() {
+        let db = french_db();
+        let added = db.mark_known("fr", &pairs(&["chien"])).unwrap();
+        let mut edited = new_term("chien", Status::WellKnown);
+        edited.translation = "dog".into();
+        db.save_term(&edited).unwrap();
+        assert_eq!(db.undo_mark_known(&added).unwrap(), 0);
+        assert!(db.find_term("fr", "chien").unwrap().is_some());
     }
 
     #[test]

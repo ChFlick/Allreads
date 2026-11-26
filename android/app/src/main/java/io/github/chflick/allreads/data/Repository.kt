@@ -51,6 +51,8 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun bookDifficulty(bookId: Long): BookDifficulty = io { app.bookDifficulty(bookId) }
 
+    suspend fun termLanguageCodes(): List<String> = io { app.termLanguageCodes() }
+
     suspend fun wordProgress(languageCode: String): List<DayCount> = io { app.wordProgress(languageCode) }
 
     suspend fun articleFromHtml(html: String): WebArticle = io { uniffi.allreads_ffi.articleFromHtml(html) }

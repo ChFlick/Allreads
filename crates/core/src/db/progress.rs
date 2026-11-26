@@ -150,6 +150,18 @@ impl Database {
         })
     }
 
+    /// The languages that have saved words, in code order.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn term_languages(&self) -> Result<Vec<String>, DbError> {
+        let mut statement = self
+            .conn()
+            .prepare("SELECT DISTINCT language_code FROM term ORDER BY language_code")?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// The words of a book taken for names, by term key. Empty until counted.
     ///
     /// # Errors
@@ -339,6 +351,7 @@ mod tests {
         let history = db.word_count_history("fr").unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!((history[0].known, history[0].learning), (1, 1));
+        assert_eq!(db.term_languages().unwrap(), ["fr"]);
         let chat = db.find_term("fr", "chat").unwrap().unwrap();
         db.delete_term(chat.id).unwrap();
         let history = db.word_count_history("fr").unwrap();

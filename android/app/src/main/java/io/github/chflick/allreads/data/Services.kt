@@ -25,9 +25,23 @@ sealed interface SharedImport {
             if (shared.isEmpty()) return null
             url.find(shared)?.let { match ->
                 // Only the link and maybe a title: import the page, not the words around the link.
-                if (shared.length - match.value.length < 200) return Link(match.value.trimEnd(')', '.', ','))
+                if (shared.length - match.value.length < 200) return Link(trimLink(match.value))
             }
             return Text(subject?.takeIf { it.isNotBlank() }, shared)
+        }
+
+        /**
+         * Drops punctuation that ends the sentence around a link, not the link:
+         * "(see https://x.org/a)." loses ")." but ".../Paris_(mythology)" keeps its ")".
+         */
+        private fun trimLink(link: String): String {
+            var end = link.length
+            while (end > 0) {
+                val last = link[end - 1]
+                val unbalanced = last == ')' && link.take(end).count { it == ')' } > link.take(end).count { it == '(' }
+                if (last == '.' || last == ',' || unbalanced) end-- else break
+            }
+            return link.take(end)
         }
     }
 }

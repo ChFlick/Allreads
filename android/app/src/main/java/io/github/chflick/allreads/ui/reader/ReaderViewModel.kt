@@ -180,13 +180,13 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         viewModelScope.launch { runCatching { repository.savePosition(bookId, chapter, block.toUInt()) } }
     }
 
-    /** Shows the sentence's translation under it, or hides it if shown. */
     /** Asks DeepL again for a sentence whose translation failed. */
     fun retryTranslation(row: ReaderRow) {
         _state.update { it.copy(translations = it.translations - row.key) }
         toggleTranslation(row)
     }
 
+    /** Shows the sentence's translation under it, or hides it if shown. */
     fun toggleTranslation(row: ReaderRow) {
         val key = row.key
         if (_state.value.translations.containsKey(key)) {

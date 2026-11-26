@@ -15,6 +15,13 @@ class SharedImportTest {
     }
 
     @Test
+    fun aClosingBracketThatBelongsToTheLinkStays() {
+        val link = "https://en.wikipedia.org/wiki/Paris_(mythology)"
+        assertEquals(SharedImport.Link(link), SharedImport.from(link, null))
+        assertEquals(SharedImport.Link(link), SharedImport.from("($link).", null))
+    }
+
+    @Test
     fun longTextWithALinkInsideIsText() {
         val text = "Bonjour ! ".repeat(30) + "https://example.org"
         assertEquals(SharedImport.Text(null, text), SharedImport.from(text, null))

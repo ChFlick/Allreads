@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use allreads_core::db::book::Book as BookRow;
@@ -44,6 +45,9 @@ pub struct App {
     open_books: Mutex<Vec<(i64, Arc<OpenedBook>)>>,
     /// Installed dictionaries opened so far, by pair (e.g. `fr-en`).
     dictionaries: Mutex<HashMap<String, Dictionary>>,
+    /// Bumped whenever a dictionary is installed or removed, so a book counted
+    /// meanwhile (with the old dictionary) is not stored as up to date.
+    dictionary_changes: AtomicU64,
 }
 
 impl App {
@@ -151,7 +155,10 @@ impl App {
     /// Marks the books in a dictionary's language ("fr" of "fr-en") for counting again.
     fn recount_pair(&self, pair: &str) -> Result<(), AllreadsError> {
         if let Some((language, _)) = pair.split_once('-') {
-            self.db()?.recount_books(language)?;
+            // Bumped under the database lock, which storing counts also holds.
+            let db = self.db()?;
+            self.dictionary_changes.fetch_add(1, Ordering::SeqCst);
+            db.recount_books(language)?;
         }
         Ok(())
     }
@@ -271,6 +278,7 @@ impl App {
             data_dir: folder,
             open_books: Mutex::new(Vec::new()),
             dictionaries: Mutex::new(HashMap::new()),
+            dictionary_changes: AtomicU64::new(0),
         }))
     }
 
@@ -371,7 +379,13 @@ impl App {
         let row = self.book_row(book_id)?;
         // The stored counts must come from today's parser and counting rules.
         let version = PARSER_VERSION * 100 + TALLY_VERSION;
-        if self.db()?.book_words_counted_with(book_id)? != Some(version) {
+        // A dictionary installed or removed while counting makes the count
+        // stale; count again with the new one (a few tries, then give up).
+        for _ in 0..3 {
+            if self.db()?.book_words_counted_with(book_id)? == Some(version) {
+                break;
+            }
+            let changes = self.dictionary_changes.load(Ordering::SeqCst);
             let rules = self.rules(&row.language_code)?;
             let book = self.opened_book(book_id)?;
             let chapters = self.db()?.chapter_titles(book_id)?.len();
@@ -406,9 +420,21 @@ impl App {
             if let Some(error) = failed.into_inner() {
                 return Err(error);
             }
-            self.db()?.store_book_words(book_id, version, &words)?;
+            let db = self.db()?;
+            if self.dictionary_changes.load(Ordering::SeqCst) == changes {
+                db.store_book_words(book_id, version, &words)?;
+            }
         }
         Ok(self.db()?.book_difficulty(book_id)?.into())
+    }
+
+    /// The languages that have saved words, e.g. for the Words tab, so words
+    /// stay reachable after their book is deleted.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn term_language_codes(&self) -> Result<Vec<String>, AllreadsError> {
+        Ok(self.db()?.term_languages()?)
     }
 
     /// The saved-word counts of a language per day, oldest first. Days without
