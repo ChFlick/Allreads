@@ -176,15 +176,22 @@ impl Database {
     }
 
     /// Marks a language's books for counting again, e.g. after its dictionary
-    /// was installed or removed (names and forms come from it).
+    /// was installed or removed (names and forms come from it). Their counted
+    /// words are deleted, so the reader does not use stale names meanwhile.
     ///
     /// # Errors
-    /// Returns a database error if the statement fails.
+    /// Returns a database error if a statement fails.
     pub fn recount_books(&self, language_code: &str) -> Result<(), DbError> {
-        self.conn().execute(
+        let transaction = self.conn().unchecked_transaction()?;
+        transaction.execute(
+            "DELETE FROM book_word WHERE book_id IN (SELECT id FROM book WHERE language_code = ?1)",
+            [language_code],
+        )?;
+        transaction.execute(
             "UPDATE book SET words_counted_with = 0 WHERE language_code = ?1",
             [language_code],
         )?;
+        transaction.commit()?;
         Ok(())
     }
 

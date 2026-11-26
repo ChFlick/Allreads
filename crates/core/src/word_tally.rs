@@ -3,12 +3,12 @@
 
 use std::collections::HashMap;
 
-use crate::dictionary::Lookup;
+use crate::dictionary::WordKinds;
 use crate::reader::ParsedChapter;
 use crate::text::LanguageRules;
 
 /// Bumped when the counting rules change, so books are counted again.
-pub const TALLY_VERSION: i64 = 2;
+pub const TALLY_VERSION: i64 = 3;
 
 /// One word of a book, ready to store.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,16 +30,25 @@ struct Evidence {
     capital_inside: u32,
 }
 
+/// Languages that capitalise every noun, where capitals say nothing about names.
+const CAPITALISED_NOUNS: [&str; 2] = ["de", "lb"];
+
 /// Collects a book's words chapter by chapter.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Tally {
     words: HashMap<String, Evidence>,
+    /// Whether capitals may mark a name in this language (not in German).
+    capitals_mark_names: bool,
 }
 
 impl Tally {
+    /// A tally for a book in `language_code`.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(language_code: &str) -> Self {
+        Self {
+            words: HashMap::new(),
+            capitals_mark_names: !CAPITALISED_NOUNS.contains(&language_code),
+        }
     }
 
     /// Counts a chapter's words. Headings count, but say nothing about
@@ -78,27 +87,31 @@ impl Tally {
     ///   meanings ("lit", bed) keep their own count.
     pub fn finish(
         self,
-        lookup: &dyn Fn(&str) -> Option<Lookup>,
+        lookup: &dyn Fn(&str) -> Option<WordKinds>,
         rules: &LanguageRules,
     ) -> HashMap<String, BookWord> {
+        let capitals_mark_names = self.capitals_mark_names;
         self.words
             .into_iter()
             .map(|(key, evidence)| {
-                let found = lookup(&key);
-                let common = found.as_ref().is_some_and(|l| {
-                    !l.forms.is_empty() || l.entries.iter().any(|e| e.pos != "name")
-                });
-                let name_only = found.as_ref().is_some_and(|l| {
-                    l.forms.is_empty()
-                        && !l.entries.is_empty()
-                        && l.entries.iter().all(|e| e.pos == "name")
-                });
-                let always_capital = evidence.lower == 0 && evidence.capital_inside > 0;
-                let is_name = name_only || (!common && always_capital);
-                let lemma_key = found
-                    .filter(|l| l.entries.is_empty())
-                    .and_then(|l| l.forms.first().map(|f| rules.term_key(&f.lemma)))
-                    .filter(|lemma| !lemma.is_empty() && *lemma != key);
+                let kinds = lookup(&key).unwrap_or_default();
+                let names_only = !kinds.parts_of_speech.is_empty()
+                    && kinds.parts_of_speech.iter().all(|pos| pos == "name");
+                let common = !kinds.lemmas.is_empty()
+                    || kinds.parts_of_speech.iter().any(|pos| pos != "name");
+                // "I" in English, or one-letter abbreviations, are not names.
+                let always_capital = capitals_mark_names
+                    && key.chars().count() > 1
+                    && evidence.lower == 0
+                    && evidence.capital_inside > 0;
+                let is_name =
+                    (names_only && kinds.lemmas.is_empty()) || (!common && always_capital);
+                // Only a form of exactly one word: "suis" (être, suivre) stays itself.
+                let lemma_key = match kinds.lemmas.as_slice() {
+                    [lemma] if kinds.parts_of_speech.is_empty() => Some(rules.term_key(lemma)),
+                    _ => None,
+                }
+                .filter(|lemma| !lemma.is_empty() && *lemma != key);
                 let word = BookWord {
                     count: evidence.count,
                     lemma_key,
@@ -113,7 +126,6 @@ impl Tally {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dictionary::{DictionaryEntry, FormOf};
     use crate::reader::{ParsedBlock, ParsedToken};
     use crate::text::test_rules::builtin;
 
@@ -133,45 +145,30 @@ mod tests {
         }
     }
 
-    fn entry(pos: &str) -> DictionaryEntry {
-        DictionaryEntry {
-            word: String::new(),
-            pos: pos.into(),
-            ipa: String::new(),
-            senses: vec!["x".into()],
-            synonyms: Vec::new(),
+    fn kinds(parts: &[&str], lemmas: &[&str]) -> WordKinds {
+        WordKinds {
+            parts_of_speech: parts.iter().map(|p| (*p).to_string()).collect(),
+            lemmas: lemmas.iter().map(|l| (*l).to_string()).collect(),
         }
     }
 
-    /// A tiny dictionary: "paris" is a name, "coq" a noun, "lisait" a form of "lire".
-    fn lookup(key: &str) -> Option<Lookup> {
+    /// A tiny dictionary: "paris" is a name, "coq" a noun, "lisait" a form of
+    /// "lire", "suis" a form of both "être" and "suivre".
+    fn lookup(key: &str) -> Option<WordKinds> {
         Some(match key {
-            "paris" => Lookup {
-                entries: vec![entry("name")],
-                forms: Vec::new(),
-            },
-            "coq" => Lookup {
-                entries: vec![entry("noun")],
-                forms: Vec::new(),
-            },
-            "lisait" => Lookup {
-                entries: Vec::new(),
-                forms: vec![FormOf {
-                    lemma: "lire".into(),
-                    pos: "verb".into(),
-                    tags: String::new(),
-                }],
-            },
-            _ => Lookup::default(),
+            "paris" => kinds(&["name"], &[]),
+            "coq" => kinds(&["noun"], &[]),
+            "lisait" => kinds(&[], &["lire"]),
+            "suis" => kinds(&[], &["suivre", "être"]),
+            _ => WordKinds::default(),
         })
     }
 
     fn tally(blocks: Vec<ParsedBlock>) -> HashMap<String, BookWord> {
-        let mut tally = Tally::new();
+        let mut tally = Tally::new("fr");
         tally.add_chapter(&ParsedChapter { blocks });
         tally.finish(&lookup, &builtin("fr"))
     }
-
     #[test]
     fn capitals_inside_sentences_mark_unknown_names() {
         let words = tally(vec![
@@ -213,15 +210,41 @@ mod tests {
     }
 
     #[test]
-    fn forms_point_to_their_dictionary_form() {
-        let words = tally(vec![block(false, &[("il", 0), ("lisait", 0)])]);
+    fn forms_point_to_their_only_dictionary_form() {
+        let words = tally(vec![block(
+            false,
+            &[("il", 0), ("lisait", 0), ("je", 0), ("suis", 0)],
+        )]);
         assert_eq!(words["lisait"].lemma_key.as_deref(), Some("lire"));
         assert_eq!(words["il"].lemma_key, None);
+        // A form of two words is linked to neither.
+        assert_eq!(words["suis"].lemma_key, None);
+    }
+
+    #[test]
+    fn capitals_say_nothing_in_german_or_for_one_letter() {
+        let mut german = Tally::new("de");
+        german.add_chapter(&ParsedChapter {
+            blocks: vec![block(
+                false,
+                &[
+                    ("Der", 0),
+                    ("Mann", 0),
+                    ("sieht", 0),
+                    ("das", 0),
+                    ("Haus", 0),
+                ],
+            )],
+        });
+        let words = german.finish(&|_| None, &builtin("de"));
+        assert!(!words["haus"].is_name);
+        let words = tally(vec![block(false, &[("Alors", 0), ("A", 0), ("dit", 0)])]);
+        assert!(!words["a"].is_name);
     }
 
     #[test]
     fn without_a_dictionary_only_capitals_decide() {
-        let mut tally = Tally::new();
+        let mut tally = Tally::new("fr");
         tally.add_chapter(&ParsedChapter {
             blocks: vec![block(false, &[("Alors", 0), ("Nemo", 0), ("parla", 0)])],
         });

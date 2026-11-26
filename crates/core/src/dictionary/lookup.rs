@@ -46,6 +46,17 @@ pub struct PhraseHit {
     pub gloss: String,
 }
 
+/// What counting a book needs to know about a word: its parts of speech and
+/// the dictionary forms it is a form of. Cheaper than [`Dictionary::lookup`],
+/// which also reads meanings and synonyms.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WordKinds {
+    /// Parts of speech of the word's own entries, e.g. `["noun"]` or `["name"]`.
+    pub parts_of_speech: Vec<String>,
+    /// Distinct dictionary forms it is a form of, e.g. `["lire"]`.
+    pub lemmas: Vec<String>,
+}
+
 /// Everything the dictionary knows about one term key.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Lookup {
@@ -161,6 +172,29 @@ impl Dictionary {
         Ok(hits)
     }
 
+    /// The parts of speech and dictionary forms of a term key, in two small queries.
+    ///
+    /// # Errors
+    /// Returns `Sqlite` if a query fails.
+    pub fn word_kinds(&self, key: &str) -> Result<WordKinds, DictionaryError> {
+        let mut entries = self
+            .conn
+            .prepare_cached("SELECT pos FROM entry WHERE key = ?1 ORDER BY id")?;
+        let parts_of_speech = entries
+            .query_map([key], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        let mut forms = self
+            .conn
+            .prepare_cached("SELECT DISTINCT lemma FROM form WHERE key = ?1 ORDER BY lemma")?;
+        let lemmas = forms
+            .query_map([key], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        Ok(WordKinds {
+            parts_of_speech,
+            lemmas,
+        })
+    }
+
     /// Entries and form links for a term key (as the reader's tokens carry).
     ///
     /// # Errors
@@ -246,6 +280,15 @@ mod tests {
         assert_eq!(lit.entries[0].ipa, "/li/");
         assert_eq!(lit.entries[0].synonyms, ["couche", "couchette"]);
         assert_eq!(lit.suggested_lemma(), Some("lire"));
+    }
+
+    #[test]
+    fn word_kinds_give_parts_of_speech_and_lemmas() {
+        let (_dir, dictionary) = tiny();
+        let lit = dictionary.word_kinds("lit").unwrap();
+        assert_eq!(lit.parts_of_speech, ["noun"]);
+        assert_eq!(lit.lemmas, ["lire"]);
+        assert_eq!(dictionary.word_kinds("xyz").unwrap(), WordKinds::default());
     }
 
     #[test]

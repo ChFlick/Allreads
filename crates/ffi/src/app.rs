@@ -1,5 +1,6 @@
 //! `App`: the library object Kotlin creates once, and the calls it offers.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -147,7 +148,6 @@ impl App {
         LanguageRules::new(&language).map_err(|reason| AllreadsError::Database { reason })
     }
 
-    /// A chapter's tokens from the cache, or parsed and cached on a miss.
     /// Marks the books in a dictionary's language ("fr" of "fr-en") for counting again.
     fn recount_pair(&self, pair: &str) -> Result<(), AllreadsError> {
         if let Some((language, _)) = pair.split_once('-') {
@@ -156,6 +156,7 @@ impl App {
         Ok(())
     }
 
+    /// A chapter's tokens from the cache, or parsed and cached on a miss.
     fn parsed_chapter(&self, row: &BookRow, index: u32) -> Result<ParsedChapter, AllreadsError> {
         let cached = self.db()?.cached_chapter(row.id, index, PARSER_VERSION)?;
         if let Some(chapter) = cached.as_deref().and_then(ParsedChapter::from_bytes) {
@@ -374,19 +375,37 @@ impl App {
             let rules = self.rules(&row.language_code)?;
             let book = self.opened_book(book_id)?;
             let chapters = self.db()?.chapter_titles(book_id)?.len();
-            let mut tally = Tally::new();
+            let mut tally = Tally::new(&row.language_code);
             // Parsed directly, not through the chapter cache, so counting a
             // whole book does not store every chapter.
             for index in 0..chapters {
                 tally.add_chapter(&parse_blocks(&book.chapter_blocks(index)?, &rules));
             }
             // Names and forms come from the offline dictionary, when installed.
+            // Checked once, so a book is not stat'ed for the file per word, and
+            // a dictionary that fails to open is an error, not "no dictionary".
+            let has_dictionary = self
+                .with_dictionary(&row.language_code, |_| Ok(()))?
+                .is_some();
+            // The first lookup error, if any: the counts are then not stored,
+            // so the book is not left counted as if it had no dictionary.
+            let failed: RefCell<Option<AllreadsError>> = RefCell::new(None);
             let lookup = |key: &str| {
-                self.with_dictionary(&row.language_code, |d| d.lookup(key))
-                    .ok()
-                    .flatten()
+                if !has_dictionary || failed.borrow().is_some() {
+                    return None;
+                }
+                match self.with_dictionary(&row.language_code, |d| d.word_kinds(key)) {
+                    Ok(found) => found,
+                    Err(error) => {
+                        *failed.borrow_mut() = Some(error);
+                        None
+                    }
+                }
             };
             let words = tally.finish(&lookup, &rules);
+            if let Some(error) = failed.into_inner() {
+                return Err(error);
+            }
             self.db()?.store_book_words(book_id, version, &words)?;
         }
         Ok(self.db()?.book_difficulty(book_id)?.into())

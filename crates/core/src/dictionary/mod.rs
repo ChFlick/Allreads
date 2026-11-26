@@ -10,7 +10,7 @@ mod lookup;
 mod manifest;
 
 pub use install::{file_sha256, install, installed, remove, valid_pair, InstalledDictionary};
-pub use lookup::{Dictionary, DictionaryEntry, FormOf, Lookup, PhraseHit};
+pub use lookup::{Dictionary, DictionaryEntry, FormOf, Lookup, PhraseHit, WordKinds};
 pub use manifest::{parse_manifest, AvailableDictionary};
 
 /// The tables of a dictionary file. Indexes are created by
