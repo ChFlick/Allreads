@@ -52,6 +52,7 @@ Deferred past v1: AI "Explain" (step 22), and all of step 26: the book browser, 
 Ideas kept for later, roughly in order of interest. None is planned in detail.
 
 - **Sentence cards** (planned 2026-11-26, first after v1; see the plan below): a word can have several cards, one per sentence and meaning.
+- **Import words from Anki** (planned 2026-11-26; see the plan below): words studied in Anki show as known or learning in the reader, without duplicate cards.
 - **Word families** (2026-11-26): treat the forms of a word as one word, so "lisait", "lis" and "lu" share the status of "lire" in the reader, can be marked known together, and do not each make their own card. Builds on the dictionary's form → lemma links (already used for the book difficulty) and on sentence cards (a form met in a new sentence adds a card to the family instead of a new word). Open questions: whether a form keeps its own status once saved on its own, how a family shows in Words, and what happens to forms already saved separately.
 
 ### Sentence cards (planned 2026-11-26)
@@ -259,3 +260,40 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 27. **Release.** Set up a release keystore and signing, reproducible-build settings, and fastlane metadata with screenshots.
     - Publish signed APKs on GitHub releases. F-Droid was dropped on 2026-11-24.
     - **Done when** the app installs from a GitHub release APK. M5 is complete, and v1.0 is out.
+
+### Import words from Anki (planned 2026-11-26)
+
+**Goal.** Words you already study in Anki colour the reader (known or learning), so the share of new words and the underlines are right. Allreads never edits those Anki cards and never makes a second card for an imported word.
+
+**Decisions (interview 2026-11-26):**
+- **Sources:** AnkiDroid on the phone first, then a text/CSV export, then an `.apkg` file. All three feed the same core import.
+- **Word field:** picked by hand per note type, from a list of its fields, with three sample cards showing the cleaned word. Optionally a **meaning field** too (or none); a meaning only fills an empty translation.
+- **Cleanup:** remove HTML, `[sound:…]` and other media tags, cloze markers, bracketed notes such as "(m.)", everything after the first `,` `;` `/` or `|`, then a leading article ("le chat" → "chat"). The articles per language live in the language presets (`articles = "le|la|les|l'|un|une|des"`). A card whose word cleans to nothing is skipped and counted.
+- **Status**, chosen per import:
+  - **one level for all**, e.g. all Known or all level 3; or
+  - **follow Anki's review progress:** new or still in learning → level 1, interval under 3 days → 2, under 7 → 3, under 14 → 4, under 21 → 5, 21 days or more (mature) → Known; suspended cards are skipped.
+  - (More configuration later, not now.)
+- **Conflicts:** the more known status wins (Known > 5 > … > 1), so an import never downgrades a word. Ignored words stay ignored.
+- **No duplicates:** imported words are marked as having a card in Anki already; Allreads never sends them to AnkiDroid. (With sentence cards, a sentence card can still be added on purpose.)
+- **Running it again:** adds new words and upgrades earlier ones under the same rule; never removes anything.
+- **Entry point:** the Words tab's ⋮ menu → "Import from Anki…".
+
+**Steps**, each with its check:
+1. **Core: cleaning and status rules.** `import::clean_word(raw, rules)` with the article lists from the presets, and `import::status_for(review)` for the review-progress rule.
+   - **Done when** tests cover HTML, media tags, cloze, brackets, separators, French/German/Spanish/Italian/English articles, and every interval boundary.
+2. **Core: storing.** `import_words(language, items, mode) -> ImportSummary` in one transaction, with "more known wins", meaning only into empty translations, and a new `term.anki_external` flag (migration) that keeps the word out of the Anki queue. FFI: `import_anki_words`, and `clean_import_word` for the previews.
+   - **Done when** tests show the counts (added, upgraded, unchanged, skipped), that a downgrade never happens, and that an imported word saved again is not queued for AnkiDroid.
+3. **Phone spike: reading AnkiDroid.** Through AnkiDroid's content provider (`FlashCardsContract.Note`), with Anki search syntax:
+   - list the notes of a deck (`deck:"French"`, subdecks included) with their note type and fields;
+   - get the review buckets by searching per bucket (`is:new`, `is:suspended`, `prop:ivl>=21`, `prop:ivl<3` …), since the API may not give intervals directly.
+   - **Done when** on the phone, a deck's notes are read with fields and buckets, and reading 5,000 notes takes under a few seconds. (Risk: whether the search filters work through the API; a fallback is "one level for all" only.)
+4. **Android: the import screen.** In Words ⋮ → "Import from Anki…":
+   - choose the deck (subdecks included) and the language;
+   - per note type, pick the word field and an optional meaning field, with three cleaned samples;
+   - choose the status: one level, or review progress;
+   - import with a progress bar, then a summary ("412 added · 37 upgraded · 9 skipped").
+   - **Done when** importing a real deck on the phone colours its words in the reader, and saving one of them sends nothing to AnkiDroid.
+5. **Text/CSV import.** Anki's "Notes in Plain Text" (tab-separated, with its `#separator`/`#html` header lines) and plain CSV: column pickers instead of field pickers; one level for all (no review data).
+   - **Done when** a core test imports an Anki text export and a CSV.
+6. **`.apkg` import.** Read the zip's `collection.anki21` / `collection.anki2` SQLite (notes, note types, cards with intervals and queue). Newer exports (`collection.anki21b`) are zstd-compressed; either support that (a zstd dependency) or ask for Anki's "Support older Anki versions" export option.
+   - **Done when** core tests import a small legacy `.apkg` with review states, and the newer format is either read or explained to the user.

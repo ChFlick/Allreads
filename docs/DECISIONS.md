@@ -99,3 +99,7 @@ A setting (Settings → Dictionaries, off by default) makes the word drawer show
 ## 2026-11-26: names and word forms in the difficulty
 
 Names are left out of a book's share of new words and get no "new" underline in the reader; a form ("lisait") counts as known when its dictionary form ("lire") is saved, but only in the share: the reader keeps colouring each spelling on its own. Why: the share should say how much there is to learn, and names and inflections inflate it; colouring forms by their lemma would hide forms a learner may not recognise. Linking forms into one word in the reader and for cards is on the roadmap as "Word families".
+
+## 2026-11-26: importing words from Anki
+
+Import is for colouring the reader and avoiding duplicate cards, not for managing Anki cards: Allreads never edits imported notes and never sends imported words to AnkiDroid. Sources in order: AnkiDroid on the phone, text/CSV, `.apkg`. The word field (and an optional meaning field) is picked by hand per note type with cleaned samples; cleanup strips HTML, media, brackets, anything after a separator, and a leading article. Status is one chosen level, or follows Anki's review progress (mature → Known). The more known status always wins; re-imports add and upgrade, never remove. The import sits in the Words tab's menu. Plan: IMPLEMENTATION_PLAN, "Import words from Anki".
