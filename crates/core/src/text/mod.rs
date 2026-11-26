@@ -111,6 +111,16 @@ impl LanguageRules {
     }
 }
 
+/// Languages that capitalise every noun ("das Haus"), where a capital letter
+/// says nothing about a name.
+const CAPITALISED_NOUNS: [&str; 2] = ["de", "lb"];
+
+/// True for a language that capitalises every noun, such as German.
+#[must_use]
+pub fn capitalises_nouns(language_code: &str) -> bool {
+    CAPITALISED_NOUNS.contains(&language_code)
+}
+
 /// True if `class` has a `[` or `]` that is not preceded by a backslash.
 fn has_unescaped_bracket(class: &str) -> bool {
     let mut escaped = false;

@@ -449,10 +449,14 @@ pub struct DictionaryLookup {
     pub forms: Vec<DictionaryForm>,
     /// The dictionary form to prefill the Lemma field with, if any.
     pub suggested_lemma: Option<String>,
+    /// The form to send to a translator: "coq" for a capitalised "Coq" the
+    /// dictionary knows as a common word, else the word as looked up.
+    pub common_form: String,
 }
 
-impl From<allreads_core::dictionary::Lookup> for DictionaryLookup {
-    fn from(lookup: allreads_core::dictionary::Lookup) -> Self {
+impl DictionaryLookup {
+    /// A lookup as the word drawer shows it, with the form to translate.
+    pub(crate) fn new(lookup: allreads_core::dictionary::Lookup, common_form: String) -> Self {
         let suggested_lemma = lookup.suggested_lemma().map(str::to_string);
         DictionaryLookup {
             entries: lookup
@@ -476,6 +480,7 @@ impl From<allreads_core::dictionary::Lookup> for DictionaryLookup {
                 })
                 .collect(),
             suggested_lemma,
+            common_form,
         }
     }
 }

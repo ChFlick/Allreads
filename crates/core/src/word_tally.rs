@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::dictionary::WordKinds;
 use crate::reader::ParsedChapter;
-use crate::text::LanguageRules;
+use crate::text::{capitalises_nouns, LanguageRules};
 
 /// Bumped when the counting rules change, so books are counted again.
 pub const TALLY_VERSION: i64 = 3;
@@ -30,9 +30,6 @@ struct Evidence {
     capital_inside: u32,
 }
 
-/// Languages that capitalise every noun, where capitals say nothing about names.
-const CAPITALISED_NOUNS: [&str; 2] = ["de", "lb"];
-
 /// Collects a book's words chapter by chapter.
 #[derive(Debug)]
 pub struct Tally {
@@ -47,7 +44,7 @@ impl Tally {
     pub fn new(language_code: &str) -> Self {
         Self {
             words: HashMap::new(),
-            capitals_mark_names: !CAPITALISED_NOUNS.contains(&language_code),
+            capitals_mark_names: !capitalises_nouns(language_code),
         }
     }
 
@@ -95,16 +92,13 @@ impl Tally {
             .into_iter()
             .map(|(key, evidence)| {
                 let kinds = lookup(&key).unwrap_or_default();
-                // A common word: a form of something, or an entry that is not a name.
-                let common = !kinds.lemmas.is_empty()
-                    || kinds.parts_of_speech.iter().any(|pos| pos != "name");
                 // "I" in English, or one-letter abbreviations, are not names.
                 let always_capital = capitals_mark_names
                     && key.chars().count() > 1
                     && evidence.lower == 0
                     && evidence.capital_inside > 0;
-                // Not common, and either the dictionary has it (only as a name) or the book always capitalises it.
-                let is_name = !common && (!kinds.parts_of_speech.is_empty() || always_capital);
+                // The same rule as for saving (`common_form`): a common word is never a name.
+                let is_name = kinds.is_name_only() || (!kinds.is_common() && always_capital);
                 // Only a form of exactly one word: "suis" (être, suivre) stays itself.
                 let lemma_key = match kinds.lemmas.as_slice() {
                     [lemma] if kinds.parts_of_speech.is_empty() => Some(rules.term_key(lemma)),

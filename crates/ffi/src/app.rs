@@ -11,7 +11,7 @@ use allreads_core::db::book::Book as BookRow;
 use allreads_core::db::term::NewTerm;
 use allreads_core::db::translation_cache::CacheKey;
 use allreads_core::db::Database;
-use allreads_core::dictionary::{self, Dictionary};
+use allreads_core::dictionary::{self, common_form, Dictionary};
 use allreads_core::library::{self, OpenedBook};
 use allreads_core::presets::builtin_presets;
 use allreads_core::reader::{parse_blocks, ParsedChapter};
@@ -666,12 +666,24 @@ impl App {
             .ok_or_else(|| AllreadsError::InvalidInput {
                 reason: "a saved word cannot be New; use forget_term".into(),
             })?;
+        // "Coq" at a sentence start is saved as "coq" when the dictionary knows
+        // the common word; names and words it does not know stay as written.
+        let text = {
+            let key = self
+                .db()?
+                .term_key(&input.language_code, input.text.trim())?;
+            let kinds = match key {
+                Some(key) => self.with_dictionary(&input.language_code, |d| d.word_kinds(&key))?,
+                None => None,
+            };
+            common_form(input.text.trim(), kinds.as_ref(), &input.language_code)
+        };
         let db = self.db()?;
         let context = input.context();
         let id = db.save_term(&NewTerm {
             context,
             language_code: input.language_code,
-            text: input.text,
+            text,
             lemma: input.lemma,
             status,
             translation: input.translation,
@@ -970,7 +982,10 @@ impl App {
                 what: format!("language {language_code}"),
             })?;
         let lookup = self.with_dictionary(&language_code, |dictionary| dictionary.lookup(&key))?;
-        Ok(lookup.map(DictionaryLookup::from))
+        Ok(lookup.map(|lookup| {
+            let common = common_form(text.trim(), Some(&lookup.kinds()), &language_code);
+            DictionaryLookup::new(lookup, common)
+        }))
     }
 
     /// Deletes a book, its cover, and its file if the file is in app storage.
@@ -1508,6 +1523,35 @@ mod tests {
         assert_eq!(mark.status, WordStatus::Learning { level: 2 });
         // The words keep their own status too.
         assert_eq!(statuses_of(&chapter, "premier"), [WordStatus::New]);
+    }
+
+    #[test]
+    fn a_capitalised_common_word_is_saved_and_translated_in_lower_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        // Without a dictionary, words stay as written.
+        assert_eq!(
+            app.save_term(input("Lire", WordStatus::Learning { level: 1 }))
+                .unwrap()
+                .display_text,
+            "Lire"
+        );
+        let (gz, sum) = tiny_dictionary_download(dir.path());
+        app.install_dictionary(gz, sum, "fr-en".into()).unwrap();
+        let saved = app
+            .save_term(input("Lisait", WordStatus::Learning { level: 1 }))
+            .unwrap();
+        assert_eq!(saved.display_text, "lisait");
+        // Unknown to the dictionary: kept, as it may be a name.
+        let saved = app
+            .save_term(input("Gregor", WordStatus::Learning { level: 1 }))
+            .unwrap();
+        assert_eq!(saved.display_text, "Gregor");
+        let lookup = app
+            .lookup_word("fr".into(), "Pierre précieuse".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(lookup.common_form, "pierre précieuse");
     }
 
     #[test]

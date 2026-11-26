@@ -57,6 +57,21 @@ pub struct WordKinds {
     pub lemmas: Vec<String>,
 }
 
+impl WordKinds {
+    /// A common word: a form of another word, or an entry that is not a name.
+    /// "pierre" (stone) is common; "Paris", known only as a name, is not.
+    #[must_use]
+    pub fn is_common(&self) -> bool {
+        !self.lemmas.is_empty() || self.parts_of_speech.iter().any(|pos| pos != "name")
+    }
+
+    /// Known to the dictionary only as a name.
+    #[must_use]
+    pub fn is_name_only(&self) -> bool {
+        !self.is_common() && !self.parts_of_speech.is_empty()
+    }
+}
+
 /// Everything the dictionary knows about one term key.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Lookup {
@@ -69,6 +84,18 @@ impl Lookup {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty() && self.forms.is_empty()
+    }
+
+    /// The parts of speech and dictionary forms in this lookup, as [`Dictionary::word_kinds`] gives them.
+    #[must_use]
+    pub fn kinds(&self) -> WordKinds {
+        let mut lemmas: Vec<String> = self.forms.iter().map(|f| f.lemma.clone()).collect();
+        lemmas.sort();
+        lemmas.dedup();
+        WordKinds {
+            parts_of_speech: self.entries.iter().map(|e| e.pos.clone()).collect(),
+            lemmas,
+        }
     }
 
     /// The dictionary form to suggest for the Lemma field: the first lemma

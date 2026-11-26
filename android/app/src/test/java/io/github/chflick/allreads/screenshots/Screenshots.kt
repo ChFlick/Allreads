@@ -227,6 +227,7 @@ private object Samples {
             ),
             forms = emptyList(),
             suggestedLemma = null,
+            commonForm = "perle",
         ),
         phraseSuggestions = listOf(
             PhraseChoice(PhraseSuggestion(firstWord = 4u, lastWord = 5u, text = "perle rare", termKey = "perle rare", gloss = "rare gem, treasure"), 0..0),
