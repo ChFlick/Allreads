@@ -229,7 +229,8 @@ private fun SentenceRow(
     val dark = LocalDarkTheme.current
     val text = remember(row, dark) { styledText(row, dark) }
     // Words inside a saved phrase take the phrase's colour, so they get no underline.
-    val newWords = remember(row) { row.content.ranges { it.status == WordStatus.New && it.phrase == null } }
+    // Names get no underline either: they are not words to learn.
+    val newWords = remember(row) { row.content.ranges { it.status == WordStatus.New && it.phrase == null && !it.name } }
     // The words being selected by a long-press and drag, as token indexes.
     var selection by remember(row) { mutableStateOf<IntRange?>(null) }
     val selectionColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
@@ -435,11 +436,15 @@ fun openTtsSettings(context: Context) {
     }
 }
 
-/** The share of the chapter's running words that are new (not saved, not in a saved phrase), or null if it has none. */
+/**
+ * The share of the chapter's running words that are new, as for a book on the
+ * library card: names are left out, and a form of a saved word ("lisait" with
+ * "lire" saved) or a word in a saved phrase is not new. Null without words.
+ */
 internal fun chapterNewPercent(rows: List<ReaderRow>): Double? {
-    val words = rows.flatMap { row -> row.content.tokens.filter { it.termKey != null } }
+    val words = rows.flatMap { row -> row.content.tokens.filter { it.termKey != null && (!it.name || it.status != WordStatus.New) } }
     if (words.isEmpty()) return null
-    val new = words.count { it.status == WordStatus.New && it.phrase == null }
+    val new = words.count { it.status == WordStatus.New && it.phrase == null && !it.formOfSaved }
     return new * 100.0 / words.size
 }
 

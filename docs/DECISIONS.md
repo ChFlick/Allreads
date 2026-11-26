@@ -95,3 +95,7 @@ A setting (Settings → Dictionaries, off by default) makes the word drawer show
 - **Progress** is stored as one row per language and day (`word_count_day`), rewritten whenever words are saved, forgotten or marked known. History starts on the day of the update; there is no way to reconstruct earlier days.
 - **Web articles** are imported as TXT books: the core picks the article out of the page (title, language, paragraphs) and the app writes it as a text file. No reader-mode service is involved; the page is fetched by the phone.
 - **Double tap** raises a learning word one level (5 → known) without the drawer, keeps the card's sentence, and offers Undo. It is a setting (on by default) because Compose must wait for a possible second tap before handling a single one.
+
+## 2026-11-26: names and word forms in the difficulty
+
+Names are left out of a book's share of new words and get no "new" underline in the reader; a form ("lisait") counts as known when its dictionary form ("lire") is saved, but only in the share: the reader keeps colouring each spelling on its own. Why: the share should say how much there is to learn, and names and inflections inflate it; colouring forms by their lemma would hide forms a learner may not recognise. Linking forms into one word in the reader and for cards is on the roadmap as "Word families".

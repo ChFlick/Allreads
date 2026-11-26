@@ -17,6 +17,7 @@ use allreads_core::text::phrases::{find_phrases, WordSlot};
 use allreads_core::text::{LanguageRules, PARSER_VERSION};
 use allreads_core::translate::deepl::DeepL;
 use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
+use allreads_core::word_tally::{Tally, TALLY_VERSION};
 
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
@@ -147,6 +148,14 @@ impl App {
     }
 
     /// A chapter's tokens from the cache, or parsed and cached on a miss.
+    /// Marks the books in a dictionary's language ("fr" of "fr-en") for counting again.
+    fn recount_pair(&self, pair: &str) -> Result<(), AllreadsError> {
+        if let Some((language, _)) = pair.split_once('-') {
+            self.db()?.recount_books(language)?;
+        }
+        Ok(())
+    }
+
     fn parsed_chapter(&self, row: &BookRow, index: u32) -> Result<ParsedChapter, AllreadsError> {
         let cached = self.db()?.cached_chapter(row.id, index, PARSER_VERSION)?;
         if let Some(chapter) = cached.as_deref().and_then(ParsedChapter::from_bytes) {
@@ -359,26 +368,26 @@ impl App {
     /// a chapter cannot be read.
     pub fn book_difficulty(&self, book_id: i64) -> Result<BookDifficulty, AllreadsError> {
         let row = self.book_row(book_id)?;
-        if self.db()?.book_words_counted_with(book_id)? != Some(PARSER_VERSION) {
+        // The stored counts must come from today's parser and counting rules.
+        let version = PARSER_VERSION * 100 + TALLY_VERSION;
+        if self.db()?.book_words_counted_with(book_id)? != Some(version) {
             let rules = self.rules(&row.language_code)?;
             let book = self.opened_book(book_id)?;
             let chapters = self.db()?.chapter_titles(book_id)?.len();
-            let mut counts: HashMap<String, u32> = HashMap::new();
+            let mut tally = Tally::new();
             // Parsed directly, not through the chapter cache, so counting a
             // whole book does not store every chapter.
             for index in 0..chapters {
-                let parsed = parse_blocks(&book.chapter_blocks(index)?, &rules);
-                for key in parsed
-                    .blocks
-                    .iter()
-                    .flat_map(|b| &b.tokens)
-                    .filter_map(|t| t.key.clone())
-                {
-                    *counts.entry(key).or_insert(0) += 1;
-                }
+                tally.add_chapter(&parse_blocks(&book.chapter_blocks(index)?, &rules));
             }
-            self.db()?
-                .store_book_words(book_id, PARSER_VERSION, &counts)?;
+            // Names and forms come from the offline dictionary, when installed.
+            let lookup = |key: &str| {
+                self.with_dictionary(&row.language_code, |d| d.lookup(key))
+                    .ok()
+                    .flatten()
+            };
+            let words = tally.finish(&lookup, &rules);
+            self.db()?.store_book_words(book_id, version, &words)?;
         }
         Ok(self.db()?.book_difficulty(book_id)?.into())
     }
@@ -450,6 +459,9 @@ impl App {
         let row = self.book_row(book_id)?;
         let parsed = self.parsed_chapter(&row, index)?;
         let statuses = self.db()?.term_statuses(&row.language_code)?;
+        // From the book's counted words (empty until its difficulty was asked for).
+        let names = self.db()?.book_names(book_id)?;
+        let lemmas = self.db()?.book_lemmas(book_id)?;
         let status_of = |key: &str| {
             statuses
                 .get(key)
@@ -490,6 +502,12 @@ impl App {
                         .zip(marks)
                         .map(|(token, phrase)| Token {
                             status: token.key.as_deref().map(status_of),
+                            name: token.key.as_ref().is_some_and(|k| names.contains(k)),
+                            form_of_saved: token
+                                .key
+                                .as_ref()
+                                .and_then(|k| lemmas.get(k))
+                                .is_some_and(|lemma| statuses.contains_key(lemma)),
                             text: token.text,
                             term_key: token.key,
                             sentence: token.sentence,
@@ -832,6 +850,8 @@ impl App {
             &pair,
             &self.dictionaries_dir(),
         )?;
+        // Names and word forms in the books' difficulty come from the dictionary.
+        self.recount_pair(&pair)?;
         Ok(info.into())
     }
 
@@ -844,7 +864,9 @@ impl App {
             .lock()
             .map_err(|_| poisoned())?
             .remove(&pair);
-        Ok(dictionary::remove(&self.dictionaries_dir(), &pair)?)
+        let removed = dictionary::remove(&self.dictionaries_dir(), &pair)?;
+        self.recount_pair(&pair)?;
+        Ok(removed)
     }
 
     /// Looks a word up in the language's `-en` dictionary. `None` if no

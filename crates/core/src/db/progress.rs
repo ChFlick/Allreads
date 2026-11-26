@@ -1,14 +1,17 @@
 //! Progress: how hard a book is (its share of new words), and how many words
 //! are known per day.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::params;
 
 use super::{Database, DbError};
+use crate::word_tally::BookWord;
 
-/// A book's words compared with the saved ones. Counts are running words
-/// ("le" twice is 2) except the `unique_` ones.
+/// A book's words compared with the saved ones, names left out. Counts are
+/// running words ("le" twice is 2) except the `unique_` ones, which count a
+/// word and its forms once ("lire", "lisait"). A form whose dictionary form is
+/// saved counts as that word.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Difficulty {
     pub words: u64,
@@ -69,28 +72,37 @@ impl Database {
         }
     }
 
-    /// Replaces a book's word counts (term key → occurrences).
+    /// Replaces a book's counted words (term key → count, form, name).
+    /// `version` says which parser and counting rules made them.
     ///
     /// # Errors
     /// Returns a database error if a statement fails.
     pub fn store_book_words(
         &self,
         book_id: i64,
-        parser_version: i64,
-        counts: &HashMap<String, u32>,
+        version: i64,
+        words: &HashMap<String, BookWord>,
     ) -> Result<(), DbError> {
         let transaction = self.conn().unchecked_transaction()?;
         transaction.execute("DELETE FROM book_word WHERE book_id = ?1", [book_id])?;
         {
-            let mut insert = transaction
-                .prepare("INSERT INTO book_word (book_id, key, count) VALUES (?1, ?2, ?3)")?;
-            for (key, count) in counts {
-                insert.execute(params![book_id, key, count])?;
+            let mut insert = transaction.prepare(
+                "INSERT INTO book_word (book_id, key, count, lemma_key, is_name)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?;
+            for (key, word) in words {
+                insert.execute(params![
+                    book_id,
+                    key,
+                    word.count,
+                    word.lemma_key,
+                    word.is_name
+                ])?;
             }
         }
         transaction.execute(
             "UPDATE book SET words_counted_with = ?2 WHERE id = ?1",
-            params![book_id, parser_version],
+            params![book_id, version],
         )?;
         transaction.commit()?;
         Ok(())
@@ -103,15 +115,19 @@ impl Database {
     /// Returns a database error if the statement fails.
     pub fn book_difficulty(&self, book_id: i64) -> Result<Difficulty, DbError> {
         let row = self.conn().query_row(
+            // A word's status is its own, else its dictionary form's. Names
+            // are left out unless saved on purpose.
             "SELECT COALESCE(SUM(w.count), 0),
-                    COALESCE(SUM(CASE WHEN t.status IS NULL THEN w.count END), 0),
-                    COALESCE(SUM(CASE WHEN t.status BETWEEN 1 AND 5 THEN w.count END), 0),
-                    COUNT(*),
-                    COALESCE(SUM(t.status IS NULL), 0)
+                    COALESCE(SUM(CASE WHEN COALESCE(t.status, l.status) IS NULL THEN w.count END), 0),
+                    COALESCE(SUM(CASE WHEN COALESCE(t.status, l.status) BETWEEN 1 AND 5 THEN w.count END), 0),
+                    COUNT(DISTINCT COALESCE(w.lemma_key, w.key)),
+                    COUNT(DISTINCT CASE WHEN COALESCE(t.status, l.status) IS NULL
+                                        THEN COALESCE(w.lemma_key, w.key) END)
              FROM book_word w
              JOIN book b ON b.id = w.book_id
              LEFT JOIN term t ON t.language_code = b.language_code AND t.text = w.key
-             WHERE w.book_id = ?1",
+             LEFT JOIN term l ON l.language_code = b.language_code AND l.text = w.lemma_key
+             WHERE w.book_id = ?1 AND (w.is_name = 0 OR t.status IS NOT NULL)",
             [book_id],
             |row| {
                 Ok([
@@ -132,6 +148,44 @@ impl Database {
             unique_words,
             unique_new_words,
         })
+    }
+
+    /// The words of a book taken for names, by term key. Empty until counted.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn book_names(&self, book_id: i64) -> Result<HashSet<String>, DbError> {
+        let mut statement = self
+            .conn()
+            .prepare("SELECT key FROM book_word WHERE book_id = ?1 AND is_name = 1")?;
+        let rows = statement.query_map([book_id], |row| row.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The book's forms and their dictionary forms' term keys ("lisait" →
+    /// "lire"). Empty until counted.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn book_lemmas(&self, book_id: i64) -> Result<HashMap<String, String>, DbError> {
+        let mut statement = self.conn().prepare(
+            "SELECT key, lemma_key FROM book_word WHERE book_id = ?1 AND lemma_key IS NOT NULL",
+        )?;
+        let rows = statement.query_map([book_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Marks a language's books for counting again, e.g. after its dictionary
+    /// was installed or removed (names and forms come from it).
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn recount_books(&self, language_code: &str) -> Result<(), DbError> {
+        self.conn().execute(
+            "UPDATE book SET words_counted_with = 0 WHERE language_code = ?1",
+            [language_code],
+        )?;
+        Ok(())
     }
 
     /// Rewrites today's saved-word counts for every language that has words
@@ -211,11 +265,24 @@ mod tests {
         let db = french_db();
         let id = book(&db);
         assert_eq!(db.book_words_counted_with(id).unwrap(), None);
-        let counts: HashMap<String, u32> = [("le", 6), ("chat", 2), ("dort", 2)]
-            .into_iter()
-            .map(|(k, n)| (k.to_string(), n))
-            .collect();
-        db.store_book_words(id, 1, &counts).unwrap();
+        let word = |count, lemma: Option<&str>, is_name| BookWord {
+            count,
+            lemma_key: lemma.map(str::to_string),
+            is_name,
+        };
+        let words: HashMap<String, BookWord> = [
+            ("le", word(6, None, false)),
+            ("chat", word(2, None, false)),
+            ("dort", word(1, None, false)),
+            // A form of "dormir"; new while "dormir" is not saved.
+            ("dormait", word(1, Some("dormir"), false)),
+            // A name: left out.
+            ("gregor", word(5, None, true)),
+        ]
+        .into_iter()
+        .map(|(k, w)| (k.to_string(), w))
+        .collect();
+        db.store_book_words(id, 1, &words).unwrap();
         assert_eq!(db.book_words_counted_with(id).unwrap(), Some(1));
         db.save_term(&term("le", Status::WellKnown)).unwrap();
         db.save_term(&term("chat", Status::Learning(2))).unwrap();
@@ -226,11 +293,23 @@ mod tests {
                 words: 10,
                 new_words: 2,
                 learning_words: 2,
-                unique_words: 3,
-                unique_new_words: 1,
+                // le, chat, dort, dormir (for "dormait"); the name is left out.
+                unique_words: 4,
+                unique_new_words: 2,
             }
         );
         assert!((difficulty.new_percent() - 20.0).abs() < 1e-9);
+        // Saving "dormir" makes its form "dormait" known too.
+        db.save_term(&term("dormir", Status::WellKnown)).unwrap();
+        assert_eq!(db.book_difficulty(id).unwrap().new_words, 1);
+        assert_eq!(
+            db.book_names(id).unwrap(),
+            HashSet::from(["gregor".to_string()])
+        );
+        assert_eq!(db.book_lemmas(id).unwrap()["dormait"], "dormir");
+        // A name saved on purpose counts again.
+        db.save_term(&term("gregor", Status::Learning(1))).unwrap();
+        assert_eq!(db.book_difficulty(id).unwrap().words, 15);
     }
 
     #[test]

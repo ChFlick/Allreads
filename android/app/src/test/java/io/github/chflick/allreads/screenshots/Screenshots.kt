@@ -180,6 +180,8 @@ private object Samples {
                 bold = false,
                 // `phrase` is the token range of the saved phrase, spaces between its words included.
                 phrase = if (phrase != null && i in phrase) gemstone else null,
+                name = false,
+                formOfSaved = false,
             )
         }.toList()
 

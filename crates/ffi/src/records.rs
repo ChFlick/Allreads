@@ -219,6 +219,11 @@ pub struct Token {
     /// The saved phrase this token is part of, if any. Every token of the
     /// phrase, spaces and punctuation between its words too, carries it.
     pub phrase: Option<PhraseMark>,
+    /// Taken for a name ("Gregor"): not marked as new, left out of the difficulty.
+    pub name: bool,
+    /// A form whose dictionary form is saved ("lisait" with "lire" saved):
+    /// counted as known in the chapter's share of new words.
+    pub form_of_saved: bool,
 }
 
 /// One occurrence of a saved phrase in a chapter.

@@ -52,6 +52,7 @@ Deferred past v1: AI "Explain" (step 22), and all of step 26: the book browser, 
 Ideas kept for later, roughly in order of interest. None is planned in detail.
 
 - **Sentence cards** (planned 2026-11-26, first after v1; see the plan below): a word can have several cards, one per sentence and meaning.
+- **Word families** (2026-11-26): treat the forms of a word as one word, so "lisait", "lis" and "lu" share the status of "lire" in the reader, can be marked known together, and do not each make their own card. Builds on the dictionary's form → lemma links (already used for the book difficulty) and on sentence cards (a form met in a new sentence adds a card to the family instead of a new word). Open questions: whether a form keeps its own status once saved on its own, how a family shows in Words, and what happens to forms already saved separately.
 
 ### Sentence cards (planned 2026-11-26)
 

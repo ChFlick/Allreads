@@ -14,9 +14,9 @@ import uniffi.allreads_ffi.WordStatus
 
 class ReaderTextTest {
     private fun word(text: String, sentence: UInt = 0u) =
-        Token(text, text.lowercase(), WordStatus.New, sentence, false, false, null)
+        Token(text, text.lowercase(), WordStatus.New, sentence, false, false, null, false, false)
 
-    private fun gap(text: String, sentence: UInt = 0u) = Token(text, null, null, sentence, false, false, null)
+    private fun gap(text: String, sentence: UInt = 0u) = Token(text, null, null, sentence, false, false, null, false, false)
 
     private fun Token.inPhrase(id: UInt) =
         copy(phrase = PhraseMark(id, "pierre précieuse", WordStatus.Learning(2u)))
