@@ -3,6 +3,7 @@ package io.github.chflick.allreads.anki
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import com.ichi2.anki.FlashCardsContract
 import com.ichi2.anki.api.AddContentApi
 import uniffi.allreads_ffi.AnkiNoteType
 
@@ -55,6 +56,38 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
 
     override fun findNote(noteTypeId: Long, word: String): Long? =
         api.findDuplicateNotes(noteTypeId, word)?.firstOrNull()?.id
+
+    override fun fieldNames(noteTypeId: Long): List<String> =
+        runCatching { api.getFieldList(noteTypeId)?.toList() }.getOrNull().orEmpty()
+
+    override fun searchNotes(query: String): List<AnkiNoteData> = query(query, withFields = true)
+
+    override fun searchNoteIds(query: String): Set<Long> = query(query, withFields = false).map { it.id }.toSet()
+
+    /** Notes through AnkiDroid's content provider, which takes an Anki search as its selection. */
+    private fun query(search: String, withFields: Boolean): List<AnkiNoteData> {
+        val projection = if (withFields) {
+            arrayOf(FlashCardsContract.Note._ID, FlashCardsContract.Note.MID, FlashCardsContract.Note.FLDS)
+        } else {
+            arrayOf(FlashCardsContract.Note._ID)
+        }
+        val cursor = context.contentResolver.query(FlashCardsContract.Note.CONTENT_URI, projection, search, null, null)
+            ?: return emptyList()
+        return cursor.use {
+            buildList {
+                while (it.moveToNext()) {
+                    add(
+                        AnkiNoteData(
+                            id = it.getLong(0),
+                            noteTypeId = if (withFields) it.getLong(1) else 0,
+                            // Fields are separated by the "unit separator" character.
+                            fields = if (withFields) it.getString(2).orEmpty().split('\u001f') else emptyList(),
+                        ),
+                    )
+                }
+            }
+        }
+    }
 
     companion object {
         const val PERMISSION: String = AddContentApi.READ_WRITE_PERMISSION

@@ -289,7 +289,8 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 3. **Phone spike: reading AnkiDroid.** Through AnkiDroid's content provider (`FlashCardsContract.Note`), with Anki search syntax:
    - list the notes of a deck (`deck:"French"`, subdecks included) with their note type and fields;
    - get the review buckets by searching per bucket (`is:new`, `is:suspended`, `prop:ivl>=21`, `prop:ivl<3` …), since the API may not give intervals directly.
-   - **Done when** on the phone, a deck's notes are read with fields and buckets, and reading 5,000 notes takes under a few seconds. (Risk: whether the search filters work through the API; a fallback is "one level for all" only.)
+   - **Done when** on the phone, a deck's notes are read with fields and buckets, and reading 5,000 notes takes under a few seconds.
+   - *Built 2026-11-26, phone check open:* `AnkiDroidBridge.searchNotes`/`searchNoteIds` (content provider with Anki searches) and `DeckImport` (buckets from `prop:ivl>=21/14/7/3`, `is:review`, `-is:suspended`), tested with a fake. (Risk: whether the search filters work through the API; a fallback is "one level for all" only.)
 4. **Android: the import screen.** In Words ⋮ → "Import from Anki…":
    - choose the deck (subdecks included) and the language;
    - per note type, pick the word field and an optional meaning field, with three cleaned samples;
@@ -297,7 +298,10 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
    - import with a progress bar, then a summary ("412 added · 37 upgraded · 9 skipped");
    - the source badge on imported words in Words (row and editor) and in the word drawer.
    - **Done when** importing a real deck on the phone colours its words in the reader, and saving one of them sends nothing to AnkiDroid.
+   - *Built 2026-11-26, phone check open:* `AnkiImportScreen` and `AnkiImportViewModel` (Words ⋮ → Import from Anki…), `SourceBadge` in Words and the word drawer.
 5. **Text/CSV import.** Anki's "Notes in Plain Text" (tab-separated, with its `#separator`/`#html` header lines) and plain CSV: column pickers instead of field pickers; one level for all (no review data).
    - **Done when** a core test imports an Anki text export and a CSV.
+   - *Done 2026-11-26:* `import::read_text_export`; the same screen's "Or a file" button.
 6. **`.apkg` import.** Read the zip's `collection.anki21` / `collection.anki2` SQLite (notes, note types, cards with intervals and queue). Newer exports (`collection.anki21b`) are zstd-compressed; either support that (a zstd dependency) or ask for Anki's "Support older Anki versions" export option.
    - **Done when** core tests import a small legacy `.apkg` with review states, and the newer format is either read or explained to the user.
+   - *Done 2026-11-26:* `apkg::read_apkg` reads both, the newer one with `ruzstd` (pure Rust); tests build both kinds of file.

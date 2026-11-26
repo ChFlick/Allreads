@@ -1,5 +1,18 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.chflick.allreads.data.Services
+import io.github.chflick.allreads.ui.SourceBadge
+import androidx.compose.runtime.mutableIntStateOf
 import io.github.chflick.allreads.ui.languageName
 import io.github.chflick.allreads.ui.SearchPill
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -53,8 +66,11 @@ import uniffi.allreads_ffi.WordStatus
 /** The Words tab: every saved word in a language. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WordsScreen(viewModel: WordsViewModel) {
+fun WordsScreen(viewModel: WordsViewModel, services: Services? = null) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var importing by rememberSaveable { mutableStateOf(false) }
+    // Each opening gets a fresh import screen.
+    var importOpens by rememberSaveable { mutableIntStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { viewModel.refresh() }
     LaunchedEffect(state.message) {
@@ -71,7 +87,25 @@ fun WordsScreen(viewModel: WordsViewModel) {
         onSearch = viewModel::search,
         onFilter = viewModel::filter,
         onEdit = viewModel::edit,
+        onImport = services?.let {
+            {
+                importOpens += 1
+                importing = true
+            }
+        },
     )
+
+    if (importing && services != null) {
+        val context = LocalContext.current
+        val importer = viewModel(key = "anki-import-$importOpens") {
+            AnkiImportViewModel(services.repository, services.anki, state.language, context.cacheDir)
+        }
+        AnkiImportScreen(importer, onClose = {
+            importing = false
+            // The new words in the list now.
+            viewModel.refresh()
+        })
+    }
 
     state.editing?.let { term ->
         TermEditor(
@@ -87,7 +121,16 @@ private fun TermRow(term: SavedTerm, onClick: () -> Unit) {
     ListItem(
         modifier = Modifier.clickable(onClick = onClick),
         headlineContent = { Text(term.displayText) },
-        supportingContent = term.translation.takeIf { it.isNotBlank() }?.let { { Text(it) } },
+        supportingContent = if (term.translation.isBlank() && term.importedFrom.isBlank()) {
+            null
+        } else {
+            {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (term.translation.isNotBlank()) Text(term.translation)
+                    SourceBadge(term.importedFrom)
+                }
+            }
+        },
         trailingContent = { StatusPill(term.status) },
     )
 }
@@ -109,6 +152,7 @@ private fun TermEditor(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(term.displayText, style = MaterialTheme.typography.headlineSmall)
+            SourceBadge(term.importedFrom)
             OutlinedTextField(
                 value = translation,
                 onValueChange = { translation = it },
@@ -136,6 +180,21 @@ private fun TermEditor(
     }
 }
 
+/** The ⋮ menu next to the search, with the import. */
+@Composable
+private fun WordsMenu(onImport: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.padding(end = 8.dp)) {
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("Import from Anki…") }, onClick = {
+                open = false
+                onImport()
+            })
+        }
+    }
+}
+
 /** The word list without its view model, so it can be shown in previews and screenshots. */
 @Composable
 fun WordsContent(
@@ -145,13 +204,17 @@ fun WordsContent(
     onSearch: (String) -> Unit,
     onFilter: (WordFilter) -> Unit,
     onEdit: (SavedTerm) -> Unit,
+    onImport: (() -> Unit)? = null,
 ) {
     Scaffold(
         // A slim header like the library's: the search, then one row of chips
         // whose labels carry the counts.
         topBar = {
             Column(Modifier.statusBarsPadding().padding(top = 8.dp, bottom = 8.dp)) {
-                SearchPill(state.query, "Search words or translations", onQuery = onSearch)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SearchPill(state.query, "Search words or translations", onQuery = onSearch, modifier = Modifier.weight(1f))
+                    onImport?.let { WordsMenu(it) }
+                }
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

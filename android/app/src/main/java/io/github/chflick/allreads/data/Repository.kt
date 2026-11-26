@@ -4,6 +4,10 @@ import io.github.chflick.allreads.anki.NoteTypeStore
 import io.github.chflick.allreads.anki.SyncStore
 import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.BookDifficulty
+import uniffi.allreads_ffi.ImportGroup
+import uniffi.allreads_ffi.ImportRow
+import uniffi.allreads_ffi.ImportStatus
+import uniffi.allreads_ffi.ImportSummary
 import uniffi.allreads_ffi.BookDifficultyOf
 import uniffi.allreads_ffi.WordProgress
 import uniffi.allreads_ffi.PreparedText
@@ -66,6 +70,20 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
     suspend fun ensureBookCounted(bookId: Long): Boolean = io { app.ensureBookCounted(bookId) }
 
     suspend fun wordLanguageCodes(): List<String> = io { app.wordLanguageCodes() }
+
+    /** The word an import would take from a field ("le chat (m.)" → "chat"), for samples. */
+    suspend fun cleanImportWord(languageCode: String, raw: String): String? = io { app.cleanImportWord(languageCode, raw) }
+
+    /** An `.apkg` deck or a text/CSV export, read into groups of notes. */
+    suspend fun readImportFile(path: String, name: String): List<ImportGroup> = io { app.readImportFile(path, name) }
+
+    suspend fun importWords(
+        languageCode: String,
+        source: String,
+        fromAnki: Boolean,
+        rows: List<ImportRow>,
+        status: ImportStatus,
+    ): ImportSummary = io { app.importWords(languageCode, source, fromAnki, rows, status) }
 
     suspend fun countedDifficulties(): List<BookDifficultyOf> = io { app.countedDifficulties() }
 

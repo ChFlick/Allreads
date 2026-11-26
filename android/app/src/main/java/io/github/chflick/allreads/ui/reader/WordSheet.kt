@@ -5,6 +5,7 @@ import io.github.chflick.allreads.ui.settings.onMobileData
 import androidx.compose.material3.AlertDialog
 import io.github.chflick.allreads.data.DownloadState
 import io.github.chflick.allreads.ui.megabytes
+import io.github.chflick.allreads.ui.SourceBadge
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.PaddingValues
 import uniffi.allreads_ffi.DictionaryEntry
@@ -187,6 +188,8 @@ fun WordSheetContent(
                 )
             }
         }
+        // Where an imported word came from, e.g. "Anki · French vocabulary".
+        word.saved?.importedFrom?.let { SourceBadge(it) }
         // A chip saves straight away; "New" forgets a saved word. The line under
         // the chips confirms what a tap just did.
         var justSaved by remember(word.text) { mutableStateOf<WordStatus?>(null) }

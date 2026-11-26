@@ -14,6 +14,9 @@ enum class AnkiAccess {
 
 data class AnkiDeck(val id: Long, val name: String)
 
+/** A note as read for importing words: its id, note type and field values. */
+data class AnkiNoteData(val id: Long, val noteTypeId: Long, val fields: List<String>)
+
 /**
  * Everything the app asks of AnkiDroid. An interface, so the sync logic can be
  * tested on the JVM with a fake; [AnkiDroidBridge] is the real one. Calls
@@ -42,4 +45,13 @@ interface AnkiBridge {
 
     /** A note of this type whose first field (Word) is `word`, if one exists. */
     fun findNote(noteTypeId: Long, word: String): Long?
+
+    /** A note type's field names, in order; empty if it does not exist. */
+    fun fieldNames(noteTypeId: Long): List<String>
+
+    /** The notes matching an Anki search, e.g. `deck:"French"` (subdecks included). */
+    fun searchNotes(query: String): List<AnkiNoteData>
+
+    /** The ids of the notes matching an Anki search, e.g. `deck:"French" prop:ivl>=21`. */
+    fun searchNoteIds(query: String): Set<Long>
 }

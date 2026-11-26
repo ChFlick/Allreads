@@ -2,6 +2,7 @@ package io.github.chflick.allreads
 
 import io.github.chflick.allreads.anki.AnkiAccess
 import io.github.chflick.allreads.anki.AnkiBridge
+import io.github.chflick.allreads.anki.AnkiNoteData
 import io.github.chflick.allreads.anki.AnkiDeck
 import io.github.chflick.allreads.anki.AnkiNoteTypes
 import io.github.chflick.allreads.anki.NoteTypeStore
@@ -40,11 +41,20 @@ class FakeAnki : AnkiBridge {
         notes.entries.firstOrNull { it.value.noteTypeId == noteTypeId && it.value.fields.first() == word }?.key
     override fun decks() = listOf(AnkiDeck(1, "Default"))
     override fun addDeck(name: String): Long? = if (refuse) null else nextId.getAndIncrement()
-    override fun noteTypes(): Map<Long, String> = noteTypes.mapValues { it.value.name }
+    override fun noteTypes(): Map<Long, String> = noteTypes.mapValues { it.value.name } + typeNames
     override fun addNoteType(noteType: AnkiNoteType, deckId: Long): Long? {
         if (refuse) return null
         return nextId.getAndIncrement().also { noteTypes[it] = noteType }
     }
+
+    /** Notes for imports, and the ids each Anki search returns. */
+    val deckNotes = mutableListOf<AnkiNoteData>()
+    val searches = mutableMapOf<String, Set<Long>>()
+    val fieldLists = mutableMapOf<Long, List<String>>()
+    val typeNames = mutableMapOf<Long, String>()
+    override fun fieldNames(noteTypeId: Long) = fieldLists[noteTypeId].orEmpty()
+    override fun searchNotes(query: String) = deckNotes.toList()
+    override fun searchNoteIds(query: String) = searches[query].orEmpty()
 }
 
 class FakeStore : NoteTypeStore {

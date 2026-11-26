@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 
 /** A rounded search field for the top of a list, with a clear button once something is typed. */
 @Composable
-fun SearchPill(query: String, placeholder: String, onQuery: (String) -> Unit) {
+fun SearchPill(query: String, placeholder: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier.fillMaxWidth()) {
     val focus = LocalFocusManager.current
     TextField(
         value = query,
@@ -50,7 +50,7 @@ fun SearchPill(query: String, placeholder: String, onQuery: (String) -> Unit) {
         ),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = modifier.padding(horizontal = 16.dp),
     )
 }
 

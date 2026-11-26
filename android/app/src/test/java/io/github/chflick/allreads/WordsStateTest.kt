@@ -9,7 +9,7 @@ import uniffi.allreads_ffi.WordStatus
 
 class WordsStateTest {
     private fun term(id: Long, key: String, status: WordStatus, translation: String = "") =
-        SavedTerm(id, "fr", key, key, status, translation, "", null)
+        SavedTerm(id, "fr", key, key, status, translation, "", null, "")
 
     private val terms = listOf(
         term(1, "chat", WordStatus.Learning(2u), "cat"),
