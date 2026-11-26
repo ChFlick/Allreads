@@ -60,6 +60,9 @@ data class SelectedWord(
     val phraseSuggestions: List<PhraseChoice> = emptyList(),
 )
 
+/** A word's level before and after a double tap. */
+data class LevelChange(val text: String, val from: WordStatus, val to: WordStatus)
+
 /** A dictionary phrase in the tapped word's sentence, and the tokens it covers in the row. */
 data class PhraseChoice(val suggestion: PhraseSuggestion, val tokens: IntRange)
 
@@ -74,6 +77,8 @@ data class ReaderState(
     val translations: Map<String, SentenceTranslation> = emptyMap(),
     val selected: SelectedWord? = null,
     val message: String? = null,
+    /** A level just raised by a double tap, offered for undo in a snackbar. */
+    val levelChange: LevelChange? = null,
     /** Words just marked known, offered for undo in a snackbar. */
     val markedKnown: MarkedKnown? = null,
     /** Set when read-aloud found no voice for the book's language; the screen offers the TTS settings. */
@@ -426,6 +431,63 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     }
 
     fun markedKnownShown() = _state.update { it.copy(markedKnown = null) }
+
+    /**
+     * A double tap on a learning word (or saved phrase) raises it one level,
+     * from 5 to known, without opening the drawer. Other words open the
+     * drawer, as a single tap would.
+     */
+    fun raiseLevel(row: ReaderRow, tokenIndex: Int) {
+        val token = row.content.tokens.getOrNull(tokenIndex) ?: return
+        val phrase = row.content.phraseRange(tokenIndex)
+        val text = phrase?.let { row.content.textOf(it) } ?: token.text
+        val status = token.phrase?.status ?: token.status
+        val raised = (status as? WordStatus.Learning)?.let { learning ->
+            if (learning.level < 5u) WordStatus.Learning((learning.level + 1u).toUByte()) else WordStatus.WellKnown
+        }
+        if (raised == null) {
+            select(row, tokenIndex)
+            return
+        }
+        changeLevel(LevelChange(text, from = status, to = raised))
+    }
+
+    fun levelChangeShown() = _state.update { it.copy(levelChange = null) }
+
+    fun undoLevelChange(change: LevelChange) = changeLevel(change.copy(from = change.to, to = change.from), offerUndo = false)
+
+    /** Saves a word at a new level, keeping its translation, notes and card sentence. */
+    private fun changeLevel(change: LevelChange, offerUndo: Boolean = true) {
+        val language = _state.value.book?.languageCode ?: return
+        viewModelScope.launch {
+            val result = runCatching {
+                val saved = repository.findTerm(language, change.text) ?: error("“${change.text}” is not saved")
+                repository.saveTerm(
+                    TermInput(
+                        languageCode = language,
+                        text = saved.displayText,
+                        status = change.to,
+                        translation = saved.translation,
+                        notes = saved.notes,
+                        lemma = saved.lemma,
+                        // No context: the card keeps the sentence it was saved with.
+                        sentence = null,
+                        sentenceTranslation = null,
+                        sourceBook = null,
+                        sourceChapter = null,
+                    ),
+                )
+            }
+            _state.update { state ->
+                result.fold(
+                    { if (offerUndo) state.copy(levelChange = change) else state },
+                    { state.copy(message = describe(it)) },
+                )
+            }
+            reloadStatuses()
+            if (result.isSuccess) services.syncAnki()
+        }
+    }
 
     /** Puts the words from the last "mark the rest as known" back to new. */
     fun undoMarkKnown(marked: MarkedKnown) {

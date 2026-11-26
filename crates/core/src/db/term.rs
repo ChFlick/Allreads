@@ -167,6 +167,7 @@ impl Database {
             self.queue_for_anki(id)?;
         }
         transaction.commit()?;
+        self.record_word_counts()?;
         Ok(id)
     }
 
@@ -296,6 +297,7 @@ impl Database {
             }
         }
         transaction.commit()?;
+        self.record_word_counts()?;
         Ok(added)
     }
 
@@ -316,6 +318,7 @@ impl Database {
             }
         }
         transaction.commit()?;
+        self.record_word_counts()?;
         Ok(deleted)
     }
 
@@ -328,7 +331,8 @@ impl Database {
         let changed = self
             .conn()
             .execute("DELETE FROM term WHERE id = ?1", [id])?;
-        require_one_changed(changed, || format!("term {id}"))
+        require_one_changed(changed, || format!("term {id}"))?;
+        self.record_word_counts()
     }
 }
 

@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.library
 
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -82,6 +84,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uniffi.allreads_ffi.BookSummary
+import uniffi.allreads_ffi.BookDifficulty
+import kotlin.math.roundToInt
 
 /** Step 9: the list of books, with import and delete. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -109,6 +113,8 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit) {
         onOpen = onOpen,
         onLongPress = { toDelete = it },
         onView = viewModel::changeView,
+        onImportArticle = viewModel::importArticle,
+        onImportText = viewModel::importText,
     )
 
     state.pending?.let { pending ->
@@ -137,6 +143,103 @@ private fun BookSummary.progress(): Float =
 private fun BookSummary.chapterLine(): String =
     "${languageName(languageCode)} · chapter ${chapterIndex.toInt() + 1} of $chapterCount"
 
+/**
+ * "● 4 % new words": the share of the book's running words not saved yet. The
+ * dot follows the usual rule for reading to learn: up to 5 % new is a good
+ * level (green), up to 12 % a stretch (amber), more is hard going (red).
+ */
+@Composable
+internal fun DifficultyLine(difficulty: BookDifficulty) {
+    if (difficulty.words == 0uL) return
+    val percent = difficulty.newPercent
+    val colour = when {
+        percent <= 5.0 -> Color(0xFF4F8A3B)
+        percent <= 12.0 -> Color(0xFFD39A2C)
+        else -> Color(0xFFC0533F)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(8.dp).background(colour, CircleShape))
+        Text(
+            "${newPercentText(percent)} new words",
+            style = MaterialTheme.typography.labelMedium,
+        )
+    }
+}
+
+/** "4 %", or "<1 %" for a few new words in a long book. */
+internal fun newPercentText(percent: Double): String = when {
+    percent <= 0.0 -> "0 %"
+    percent < 1.0 -> "<1 %"
+    else -> "${percent.roundToInt()} %"
+}
+
+private enum class ImportKind { Article, Text }
+
+/** Asks for a web page's address; tip: "Share → Allreads" in the browser skips this. */
+@Composable
+private fun ArticleDialog(onImport: (String) -> Unit, onDismiss: () -> Unit) {
+    var url by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import a web article") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text("Address") },
+                    placeholder = { Text("https://…") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { if (url.isNotBlank()) onImport(url) }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "Tip: in your browser, Share → Allreads imports the page you are on.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(enabled = url.isNotBlank(), onClick = { onImport(url) }) { Text("Fetch") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Asks for text to read, e.g. from a newsletter or a chat, with an optional title. */
+@Composable
+private fun TextDialog(onImport: (String?, String) -> Unit, onDismiss: () -> Unit) {
+    var title by rememberSaveable { mutableStateOf("") }
+    var text by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Paste text") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Text") },
+                    minLines = 4,
+                    maxLines = 10,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = text.isNotBlank(), onClick = { onImport(title.ifBlank { null }, text) }) { Text("Import") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
 /** A book's ⋮ menu, with Delete. */
 @Composable
 private fun BookMenu(book: BookSummary, onDelete: () -> Unit) {
@@ -156,7 +259,7 @@ private fun BookMenu(book: BookSummary, onDelete: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookRow(book: BookSummary, onOpen: () -> Unit, onLongPress: () -> Unit) {
+private fun BookRow(book: BookSummary, difficulty: BookDifficulty?, onOpen: () -> Unit, onLongPress: () -> Unit) {
     Card(Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress)) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             BookCover(book, width = 56.dp)
@@ -164,6 +267,7 @@ private fun BookRow(book: BookSummary, onOpen: () -> Unit, onLongPress: () -> Un
                 Text(book.title, style = MaterialTheme.typography.titleMedium)
                 book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
+                difficulty?.let { DifficultyLine(it) }
                 if (book.lastReadAt != null) {
                     LinearProgressIndicator(
                         progress = { book.progress() },
@@ -181,7 +285,7 @@ private fun BookRow(book: BookSummary, onOpen: () -> Unit, onLongPress: () -> Un
 /** The last book read, large, with a Continue button: the most common thing to do here. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ContinueCard(book: BookSummary, onOpen: () -> Unit, onLongPress: () -> Unit) {
+private fun ContinueCard(book: BookSummary, difficulty: BookDifficulty?, onOpen: () -> Unit, onLongPress: () -> Unit) {
     ElevatedCard(
         Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -197,6 +301,7 @@ private fun ContinueCard(book: BookSummary, onOpen: () -> Unit, onLongPress: () 
                 Text(book.title, style = MaterialTheme.typography.titleLarge)
                 book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
+                difficulty?.let { DifficultyLine(it) }
                 LinearProgressIndicator(
                     progress = { book.progress() },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -244,8 +349,24 @@ fun LibraryContent(
     onOpen: (BookSummary) -> Unit,
     onLongPress: (BookSummary) -> Unit,
     onView: (LibraryView) -> Unit = {},
+    onImportArticle: (url: String) -> Unit = {},
+    onImportText: (title: String?, text: String) -> Unit = { _, _ -> },
 ) {
     val view = state.view
+    var askFor by rememberSaveable { mutableStateOf<ImportKind?>(null) }
+    when (askFor) {
+        ImportKind.Article -> ArticleDialog(onImport = { askFor = null; onImportArticle(it) }, onDismiss = { askFor = null })
+        ImportKind.Text -> TextDialog(onImport = { title, text -> askFor = null; onImportText(title, text) }, onDismiss = { askFor = null })
+        null -> Unit
+    }
+    if (state.fetching) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Fetching the article…") },
+            text = { LinearProgressIndicator(Modifier.fillMaxWidth()) },
+            confirmButton = {},
+        )
+    }
     val focus = LocalFocusManager.current
     // Back first clears a search, then leaves the library.
     BackHandler(enabled = view.query.isNotEmpty()) {
@@ -267,9 +388,16 @@ fun LibraryContent(
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onImport,
-            ) { Text("Import book") }
+            // One button, three sources: a book file, a web page, or pasted text.
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                ExtendedFloatingActionButton(onClick = { menu = true }) { Text("Import") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Book file (EPUB or TXT)") }, onClick = { menu = false; onImport() })
+                    DropdownMenuItem(text = { Text("Web article") }, onClick = { menu = false; askFor = ImportKind.Article })
+                    DropdownMenuItem(text = { Text("Paste text") }, onClick = { menu = false; askFor = ImportKind.Text })
+                }
+            }
         },
     ) { padding ->
         if (state.books.isEmpty() && !state.loading) {
@@ -296,11 +424,11 @@ fun LibraryContent(
             val current = shown.firstOrNull()?.takeIf { view.isDefault && it.lastReadAt != null }
             current?.let { book ->
                 item(key = "continue") {
-                    ContinueCard(book, onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
+                    ContinueCard(book, state.difficulty[book.id], onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
                 }
             }
             items(shown.drop(if (current != null) 1 else 0), key = { it.id }) { book ->
-                BookRow(book, onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
+                BookRow(book, state.difficulty[book.id], onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
             }
         }
     }

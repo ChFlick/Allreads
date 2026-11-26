@@ -81,6 +81,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chflick.allreads.data.AppSettings
 import io.github.chflick.allreads.ui.StopIcon
+import io.github.chflick.allreads.ui.library.newPercentText
+import io.github.chflick.allreads.ui.theme.longLabel
 import io.github.chflick.allreads.reader.ReaderRow
 import io.github.chflick.allreads.reader.firstRowOf
 import io.github.chflick.allreads.ui.theme.LocalDarkTheme
@@ -130,6 +132,16 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
         )
         if (result == SnackbarResult.ActionPerformed) viewModel.undoMarkKnown(marked)
     }
+    LaunchedEffect(state.levelChange) {
+        val change = state.levelChange ?: return@LaunchedEffect
+        viewModel.levelChangeShown()
+        val result = snackbar.showSnackbar(
+            "${change.text}: ${change.to.longLabel().lowercase()}",
+            actionLabel = "Undo",
+            duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) viewModel.undoLevelChange(change)
+    }
     LaunchedEffect(state.noVoice) {
         if (!state.noVoice) return@LaunchedEffect
         viewModel.noVoiceShown()
@@ -160,6 +172,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             onBack = onBack,
             onMarkRestKnown = viewModel::markRestKnown,
             onWord = viewModel::select,
+            onRaise = viewModel::raiseLevel,
             onSelectRange = viewModel::selectRange,
             onTranslate = viewModel::toggleTranslation,
             onRetryTranslation = viewModel::retryTranslation,
@@ -206,6 +219,8 @@ private fun SentenceRow(
     translation: SentenceTranslation?,
     playing: Boolean,
     onWord: (Int) -> Unit,
+    onRaise: (Int) -> Unit,
+    doubleTapRaises: Boolean,
     onSelectRange: (IntRange) -> Unit,
     onTranslate: () -> Unit,
     onRetryTranslation: () -> Unit,
@@ -250,10 +265,17 @@ private fun SentenceRow(
                             drawFaintUnderlines(textLayout, newWords, underline)
                         }
                     }
-                    .pointerInput(row) {
-                        detectTapGestures { position ->
-                            val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures
-                            row.content.wordAt(offset)?.let(onWord)
+                    .pointerInput(row, doubleTapRaises) {
+                        fun wordAt(position: Offset): Int? =
+                            layout?.getOffsetForPosition(position)?.let { row.content.wordAt(it) }
+                        if (doubleTapRaises) {
+                            // Waiting to see whether a second tap follows delays a single tap a little.
+                            detectTapGestures(
+                                onDoubleTap = { position -> wordAt(position)?.let(onRaise) },
+                                onTap = { position -> wordAt(position)?.let(onWord) },
+                            )
+                        } else {
+                            detectTapGestures { position -> wordAt(position)?.let(onWord) }
                         }
                     }
                     // Step 24: long-press a word and drag to select a phrase.
@@ -413,11 +435,20 @@ fun openTtsSettings(context: Context) {
     }
 }
 
+/** The share of the chapter's running words that are new (not saved, not in a saved phrase), or null if it has none. */
+internal fun chapterNewPercent(rows: List<ReaderRow>): Double? {
+    val words = rows.flatMap { row -> row.content.tokens.filter { it.termKey != null } }
+    if (words.isEmpty()) return null
+    val new = words.count { it.status == WordStatus.New && it.phrase == null }
+    return new * 100.0 / words.size
+}
+
 /** What the reader's rows and bars can ask for. */
 data class ReaderActions(
     val onBack: () -> Unit = {},
     val onMarkRestKnown: (block: Int) -> Unit = {},
     val onWord: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
+    val onRaise: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
     val onSelectRange: (ReaderRow, IntRange) -> Unit = { _, _ -> },
     val onTranslate: (ReaderRow) -> Unit = {},
     val onRetryTranslation: (ReaderRow) -> Unit = {},
@@ -447,8 +478,14 @@ fun ReaderContent(
                         Column {
                             val number = state.chapterIndex.toInt() + 1
                             Text(state.chapterTitle ?: "Chapter $number", maxLines = 1)
+                            // The chapter's share of new words, next to the book's title.
+                            val newShare = remember(state.rows) { chapterNewPercent(state.rows) }
                             state.book?.let {
-                                Text(it.title, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                Text(
+                                    it.title + (newShare?.let { p -> " · ${newPercentText(p)} new" } ?: ""),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                )
                             }
                         }
                     },
@@ -504,6 +541,8 @@ fun ReaderContent(
                     translation = state.translations[row.key],
                     playing = speaking == row.key,
                     onWord = { tokenIndex -> actions.onWord(row, tokenIndex) },
+                    onRaise = { tokenIndex -> actions.onRaise(row, tokenIndex) },
+                    doubleTapRaises = settings.doubleTapRaises,
                     onSelectRange = { range -> actions.onSelectRange(row, range) },
                     onTranslate = { actions.onTranslate(row) },
                     onRetryTranslation = { actions.onRetryTranslation(row) },

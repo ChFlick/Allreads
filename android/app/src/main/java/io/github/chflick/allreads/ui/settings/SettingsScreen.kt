@@ -131,6 +131,21 @@ fun SettingsScreen(services: Services) {
                     )
                 }
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Double-tap to raise a level", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "A double tap on a word you are learning moves it up one level (5 becomes known) " +
+                            "without opening the drawer. Single taps then wait a moment for a possible second tap.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.doubleTapRaises,
+                    onCheckedChange = { on -> services.settings.update { it.copy(doubleTapRaises = on) } },
+                )
+            }
             // The preview shows the page as the reader will: its font, size, spacing and colours.
             ReaderPageTheme(settings.readerPage) {
                 Surface(

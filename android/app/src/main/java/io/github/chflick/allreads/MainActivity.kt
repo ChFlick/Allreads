@@ -1,6 +1,8 @@
 package io.github.chflick.allreads
 
+import android.content.Intent
 import android.os.Bundle
+import io.github.chflick.allreads.data.SharedImport
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -52,12 +54,25 @@ class MainActivity : ComponentActivity() {
         lifecycle.addObserver(
             LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) services.syncAnki() },
         )
+        handleShare(intent)
         setContent {
             val settings by services.settings.settings.collectAsStateWithLifecycle()
             AllreadsTheme(settings.theme, settings.wallpaperColors) {
                 AllreadsNavigation(services)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleShare(intent)
+    }
+
+    /** "Share → Allreads": hands the link or text to the library to import. */
+    private fun handleShare(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val shared = SharedImport.from(intent.getStringExtra(Intent.EXTRA_TEXT), intent.getStringExtra(Intent.EXTRA_SUBJECT))
+        if (shared != null) (application as AllreadsApplication).services.sharedImport.value = shared
     }
 }
 
@@ -76,6 +91,15 @@ private fun AllreadsNavigation(services: Services) {
     // Counts book opens, so each open gets a fresh reader at the saved position.
     var opens by rememberSaveable { mutableIntStateOf(0) }
     var tab by rememberSaveable { mutableStateOf(Tab.Library) }
+
+    // Something shared to the app opens the library, which imports it.
+    val shared by services.sharedImport.collectAsStateWithLifecycle()
+    LaunchedEffect(shared) {
+        if (shared != null) {
+            openBookId = null
+            tab = Tab.Library
+        }
+    }
 
     val bookId = openBookId
     if (bookId != null) {
@@ -117,6 +141,12 @@ private fun AllreadsNavigation(services: Services) {
                     val library = viewModel { LibraryViewModel(services.repository, services.settings) }
                     // Reading changes progress, so refresh whenever the library is shown.
                     LaunchedEffect(Unit) { library.refresh() }
+                    LaunchedEffect(shared) {
+                        shared?.let {
+                            services.sharedImport.value = null
+                            library.importShared(it)
+                        }
+                    }
                     LibraryScreen(library, onOpen = {
                         opens += 1
                         openBookId = it.id

@@ -4,6 +4,50 @@ use allreads_core::db::term::{Status, Term, TermContext};
 
 use crate::error::AllreadsError;
 
+/// How hard a book is for the reader: its words against the saved ones.
+/// Counts are running words, except the `unique_` ones.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct BookDifficulty {
+    pub words: u64,
+    pub new_words: u64,
+    pub learning_words: u64,
+    pub unique_words: u64,
+    pub unique_new_words: u64,
+    /// `new_words` as a share of `words`, 0 to 100.
+    pub new_percent: f64,
+}
+
+impl From<allreads_core::db::progress::Difficulty> for BookDifficulty {
+    fn from(d: allreads_core::db::progress::Difficulty) -> Self {
+        BookDifficulty {
+            words: d.words,
+            new_words: d.new_words,
+            learning_words: d.learning_words,
+            unique_words: d.unique_words,
+            unique_new_words: d.unique_new_words,
+            new_percent: d.new_percent(),
+        }
+    }
+}
+
+/// Saved words in a language at the end of a day, for the progress chart.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct DayCount {
+    /// `YYYY-MM-DD`.
+    pub day: String,
+    pub known: u32,
+    pub learning: u32,
+}
+
+/// The readable part of a web page, to import as a book.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct WebArticle {
+    pub title: String,
+    /// The page's language, e.g. `fr-FR`, if it says.
+    pub language: Option<String>,
+    pub paragraphs: Vec<String>,
+}
+
 /// Facts read from a book file before it is imported, e.g. to suggest its language.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct BookMeta {

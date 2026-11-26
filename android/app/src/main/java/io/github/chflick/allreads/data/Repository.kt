@@ -3,6 +3,9 @@ package io.github.chflick.allreads.data
 import io.github.chflick.allreads.anki.NoteTypeStore
 import io.github.chflick.allreads.anki.SyncStore
 import uniffi.allreads_ffi.MarkedKnown
+import uniffi.allreads_ffi.BookDifficulty
+import uniffi.allreads_ffi.DayCount
+import uniffi.allreads_ffi.WebArticle
 import uniffi.allreads_ffi.AnkiNote
 import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.DictionaryLookup
@@ -42,8 +45,15 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun readMeta(path: String): BookMeta = io { readBookMeta(path) }
 
-    suspend fun importBook(path: String, languageCode: String): BookSummary =
-        io { app.importBook(path, languageCode) }
+    /** `title` replaces the file's own title (a TXT copy is named by a random id). */
+    suspend fun importBook(path: String, languageCode: String, title: String? = null): BookSummary =
+        io { app.importBook(path, languageCode, title) }
+
+    suspend fun bookDifficulty(bookId: Long): BookDifficulty = io { app.bookDifficulty(bookId) }
+
+    suspend fun wordProgress(languageCode: String): List<DayCount> = io { app.wordProgress(languageCode) }
+
+    suspend fun articleFromHtml(html: String): WebArticle = io { uniffi.allreads_ffi.articleFromHtml(html) }
 
     suspend fun deleteBook(bookId: Long) = io { app.deleteBook(bookId) }
 

@@ -88,3 +88,10 @@ The app uses its own navy and amber colours, taken from the icon, instead of the
 ## 2026-11-26: meanings in the book's language, translations on reveal
 
 A setting (Settings → Dictionaries, off by default) makes the word drawer show synonyms in the book's language and the dictionary forms, and hide the DeepL translation, the English definitions and the translation field behind "Reveal translation". DeepL is still asked in the background, so revealing is instant and saved cards still get the translation. Synonyms come from the English Wiktionary (kaikki.org), stored in a new optional `synonym` table in dictionary files. The table is additive, so the format stays 1: old files work without synonyms, and old apps ignore the table. Real monolingual definitions (from the French Wiktionary) are on the roadmap.
+
+## 2026-11-26: learning features
+
+- **Difficulty** is the share of a book's running words that are not saved at all ("new"). Learning words count as not new. The dot's thresholds (5 % and 12 %) follow the usual advice that 95–98 % known words is comfortable reading for learning. Word counts per book are stored once (`book_word`), so the share is one query as words are saved.
+- **Progress** is stored as one row per language and day (`word_count_day`), rewritten whenever words are saved, forgotten or marked known. History starts on the day of the update; there is no way to reconstruct earlier days.
+- **Web articles** are imported as TXT books: the core picks the article out of the page (title, language, paragraphs) and the app writes it as a text file. No reader-mode service is involved; the page is fetched by the phone.
+- **Double tap** raises a learning word one level (5 → known) without the drawer, keeps the card's sentence, and offers Undo. It is a setting (on by default) because Compose must wait for a possible second tap before handling a single one.

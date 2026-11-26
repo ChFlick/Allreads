@@ -38,6 +38,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import uniffi.allreads_ffi.BookSummary
+import uniffi.allreads_ffi.BookDifficulty
+import uniffi.allreads_ffi.DayCount
 import uniffi.allreads_ffi.ChapterBlock
 import uniffi.allreads_ffi.DictionaryEntry
 import uniffi.allreads_ffi.DictionaryLookup
@@ -79,7 +81,7 @@ class Screenshots(private val dark: Boolean) {
     @Test
     fun library() = shot {
         LibraryContent(
-            state = LibraryState(books = Samples.books, loading = false),
+            state = LibraryState(books = Samples.books, loading = false, difficulty = Samples.difficulty),
             snackbar = SnackbarHostState(),
             onImport = {},
             onOpen = {},
@@ -132,7 +134,7 @@ class Screenshots(private val dark: Boolean) {
     @Test
     fun words() = shot {
         WordsContent(
-            state = WordsState(languages = listOf("fr"), language = "fr", terms = Samples.terms),
+            state = WordsState(languages = listOf("fr"), language = "fr", terms = Samples.terms, progress = Samples.progress),
             snackbar = SnackbarHostState(),
             onLanguage = {},
             onSearch = {},
@@ -227,6 +229,30 @@ private object Samples {
         phraseSuggestions = listOf(
             PhraseChoice(PhraseSuggestion(firstWord = 4u, lastWord = 5u, text = "perle rare", termKey = "perle rare", gloss = "rare gem, treasure"), 0..0),
         ),
+    )
+
+    val difficulty = mapOf(
+        1L to difficulty(4.2),
+        3L to difficulty(11.0),
+        4L to difficulty(23.0),
+        2L to difficulty(2.6),
+    )
+
+    private fun difficulty(percent: Double) = BookDifficulty(
+        words = 10_000u, newWords = (percent * 100).toULong(), learningWords = 300u,
+        uniqueWords = 2_000u, uniqueNewWords = 400u, newPercent = percent,
+    )
+
+    /** Known words rising over five weeks, for the Words chart. */
+    val progress = io.github.chflick.allreads.ui.words.progressSeries(
+        (0..34).map { day ->
+            DayCount(
+                java.time.LocalDate.parse("2026-10-23").plusDays(day.toLong()).toString(),
+                (180 + day * day / 3 + day * 4).toUInt(),
+                (40 + (day % 7) * 3 + day / 2).toUInt(),
+            )
+        },
+        java.time.LocalDate.parse("2026-11-26"),
     )
 
     val terms = listOf(

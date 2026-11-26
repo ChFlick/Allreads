@@ -8,7 +8,29 @@ import io.github.chflick.allreads.ui.describe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+
+/** Something shared to the app: a web page's address, or text with an optional title. */
+sealed interface SharedImport {
+    data class Link(val url: String) : SharedImport
+    data class Text(val title: String?, val text: String) : SharedImport
+
+    companion object {
+        private val url = Regex("""https?://\S+""")
+
+        /** A shared text that holds a link becomes a [Link] (browsers often add the page title); else [Text]. */
+        fun from(text: String?, subject: String?): SharedImport? {
+            val shared = text?.trim().orEmpty()
+            if (shared.isEmpty()) return null
+            url.find(shared)?.let { match ->
+                // Only the link and maybe a title: import the page, not the words around the link.
+                if (shared.length - match.value.length < 200) return Link(match.value.trimEnd(')', '.', ','))
+            }
+            return Text(subject?.takeIf { it.isNotBlank() }, shared)
+        }
+    }
+}
 
 /** Everything the screens need, created once by the application. */
 class Services(
@@ -27,6 +49,9 @@ class Services(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val dictionaries = Dictionaries(repository, HttpFetcher(), cacheDir, scope, ::describe)
+
+    /** A link or text shared to the app ("Share → Allreads"), waiting for the library to import it. */
+    val sharedImport = MutableStateFlow<SharedImport?>(null)
 
     /** Pushes queued words to AnkiDroid in the background; words that fail stay queued. */
     fun syncAnki() {

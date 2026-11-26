@@ -186,6 +186,8 @@ fun WordsContent(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         val visible = state.visible
+        // The chart sits on top of the full list, not of search results.
+        val showProgress = state.query.isBlank() && state.filter == WordFilter.All && state.progress.days.isNotEmpty()
         if (visible.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text(
@@ -196,6 +198,11 @@ fun WordsContent(
             }
         } else {
             LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+                if (showProgress) {
+                    item(key = "progress") {
+                        ProgressCard(state.progress, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    }
+                }
                 items(visible, key = { it.id }) { term ->
                     TermRow(term, onClick = { onEdit(term) })
                 }

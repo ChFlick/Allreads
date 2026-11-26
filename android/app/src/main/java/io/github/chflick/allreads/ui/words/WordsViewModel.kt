@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import java.time.LocalDate
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.chflick.allreads.data.Repository
@@ -24,6 +26,8 @@ data class WordsState(
     val filter: WordFilter = WordFilter.All,
     val editing: SavedTerm? = null,
     val message: String? = null,
+    /** Known and learning words per day in this language, for the chart. */
+    val progress: ProgressSeries = ProgressSeries(emptyList(), emptyList(), emptyList()),
 ) {
     val learningCount: Int get() = terms.count { it.status is WordStatus.Learning }
     val knownCount: Int get() = terms.count { it.status == WordStatus.WellKnown }
@@ -79,6 +83,9 @@ class WordsViewModel(
             runCatching { repository.listTerms(language) }
                 .onSuccess { terms -> _state.update { it.copy(terms = terms) } }
                 .onFailure { e -> _state.update { it.copy(message = describe(e)) } }
+            runCatching { repository.wordProgress(language) }.onSuccess { history ->
+                _state.update { it.copy(progress = progressSeries(history, LocalDate.now())) }
+            }
         }
     }
 

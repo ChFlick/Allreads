@@ -187,6 +187,8 @@ class HttpFetcher : Fetcher {
         connection.readTimeout = 30_000
         // GitHub answers release downloads with a redirect to its file host.
         connection.instanceFollowRedirects = true
+        // Some sites refuse Java's default agent. A generic one, nothing about the user.
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) Allreads")
         val code = connection.responseCode
         if (code !in 200..299) {
             connection.disconnect()
