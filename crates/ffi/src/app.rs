@@ -216,6 +216,7 @@ impl App {
             chapter_count,
             chapter_index: row.chapter_index,
             paragraph_index: row.paragraph_index,
+            last_read_at: row.last_read_at,
         })
     }
 
@@ -340,7 +341,7 @@ impl App {
         Ok(summary)
     }
 
-    /// Every book in the library, in the order they were added.
+    /// Every book in the library: recently read first, then unread books, newest first.
     ///
     /// # Errors
     /// Returns `Database` if the database cannot be read.

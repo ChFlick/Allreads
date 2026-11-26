@@ -21,6 +21,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -104,48 +108,83 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit) {
     }
 }
 
+/** How far into the book the reader is, by chapter: 0 at the start. */
+private fun BookSummary.progress(): Float =
+    if (chapterCount == 0u) 0f else (chapterIndex.toFloat() / chapterCount.toFloat()).coerceIn(0f, 1f)
+
+private fun BookSummary.chapterLine(): String =
+    "${languageName(languageCode)} · chapter ${chapterIndex.toInt() + 1} of $chapterCount"
+
+/** A book's ⋮ menu, with Delete. */
+@Composable
+private fun BookMenu(book: BookSummary, onDelete: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { menu = true }) {
+            Icon(Icons.Default.MoreVert, contentDescription = "More for “${book.title}”")
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("Delete") }, onClick = {
+                menu = false
+                onDelete()
+            })
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BookRow(book: BookSummary, onOpen: () -> Unit, onLongPress: () -> Unit) {
     Card(Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress)) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Cover(book.coverPath)
+            BookCover(book, width = 56.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(book.title, style = MaterialTheme.typography.titleMedium)
                 book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                val chapter = book.chapterIndex.toInt() + 1
-                Text(
-                    "${languageName(book.languageCode)} · chapter $chapter of ${book.chapterCount}",
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
-            var menu by remember { mutableStateOf(false) }
-            Box {
-                IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More for “${book.title}”")
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Delete") }, onClick = {
-                        menu = false
-                        onLongPress()
-                    })
+                Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
+                if (book.lastReadAt != null) {
+                    LinearProgressIndicator(
+                        progress = { book.progress() },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        drawStopIndicator = {},
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    )
                 }
             }
+            BookMenu(book, onDelete = onLongPress)
         }
     }
 }
 
+/** The last book read, large, with a Continue button: the most common thing to do here. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Cover(path: String?) {
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, path) {
-        value = path?.let {
-            withContext(Dispatchers.IO) { BitmapFactory.decodeFile(it)?.asImageBitmap() }
+private fun ContinueCard(book: BookSummary, onOpen: () -> Unit, onLongPress: () -> Unit) {
+    ElevatedCard(
+        Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            BookCover(book, width = 88.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "Continue reading",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                )
+                Text(book.title, style = MaterialTheme.typography.titleLarge)
+                book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
+                LinearProgressIndicator(
+                    progress = { book.progress() },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    drawStopIndicator = {},
+                        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                )
+                Button(onClick = onOpen) { Text("Continue") }
+            }
         }
     }
-    val modifier = Modifier.size(width = 48.dp, height = 72.dp)
-    bitmap?.let {
-        Image(it, contentDescription = null, modifier = modifier, contentScale = ContentScale.Crop)
-    } ?: Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant))
 }
 
 @Composable
@@ -204,7 +243,14 @@ fun LibraryContent(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(state.books, key = { it.id }) { book ->
+                // The library lists the last book read first; it gets the big card.
+                val current = state.books.firstOrNull()?.takeIf { it.lastReadAt != null }
+                current?.let { book ->
+                    item(key = "continue") {
+                        ContinueCard(book, onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
+                    }
+                }
+                items(state.books.drop(if (current != null) 1 else 0), key = { it.id }) { book ->
                     BookRow(book, onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
                 }
             }

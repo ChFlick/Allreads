@@ -127,6 +127,8 @@ A second pass, looking at the app as a designer and a learner would rather than 
 
 2026-11-26: 41 (own navy/amber colours; wallpaper colours are an opt-in switch in Appearance), 42 (dotted underline), 43 (one amber hue fading by level), 44, 45, 46, 52, 55 (chips, also in the Words editor). More dictionaries (60) are on hold for now.
 
+2026-11-26: 49 (covers drawn from the title and author for books without one), 50 (progress bar by chapter; recently read books first, via `book.last_read_at`, migration V8), 51 (Continue reading card).
+
 ## Suggested order (round 2)
 
 1. **Design quick wins:** 41, 42, 43, 44, 45, 46, 52, 55. Together these change the whole look, and each is small.

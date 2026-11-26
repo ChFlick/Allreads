@@ -26,10 +26,12 @@ pub struct Book {
     pub cover_path: Option<String>,
     pub chapter_index: u32,
     pub paragraph_index: u32,
+    /// When the book was last read, in milliseconds since 1970; `None` if never opened.
+    pub last_read_at: Option<i64>,
 }
 
 const COLUMNS: &str = "id, title, author, language_code, file_path, cover_path, \
-     chapter_index, paragraph_index";
+     chapter_index, paragraph_index, last_read_at";
 
 impl Database {
     /// Adds a book and returns its id.
@@ -71,23 +73,28 @@ impl Database {
             .optional()?)
     }
 
-    /// All books, in the order they were added.
+    /// All books: the most recently read first, then unread books, newest first.
     /// # Errors
     /// Returns a database error if the statement fails.
     pub fn books(&self) -> Result<Vec<Book>, DbError> {
-        let sql = format!("SELECT {COLUMNS} FROM book ORDER BY id");
+        let sql = format!(
+            "SELECT {COLUMNS} FROM book \
+             ORDER BY last_read_at IS NULL, last_read_at DESC, id DESC"
+        );
         let mut statement = self.conn().prepare(&sql)?;
         let rows = statement.query_map([], book_from_row)?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Saves where the reader stopped in a book.
+    /// Saves where the reader stopped in a book, and marks it as just read.
     ///
     /// # Errors
     /// Returns `NotFound` if no book has this id.
     pub fn save_position(&self, book_id: i64, chapter: u32, paragraph: u32) -> Result<(), DbError> {
         let changed = self.conn().execute(
-            "UPDATE book SET chapter_index = ?2, paragraph_index = ?3 WHERE id = ?1",
+            "UPDATE book SET chapter_index = ?2, paragraph_index = ?3,
+                 last_read_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+             WHERE id = ?1",
             params![book_id, chapter, paragraph],
         )?;
         require_one_changed(changed, || format!("book {book_id}"))
@@ -166,6 +173,7 @@ fn book_from_row(row: &Row) -> rusqlite::Result<Book> {
         cover_path: row.get(5)?,
         chapter_index: u32_column(row, 6)?,
         paragraph_index: u32_column(row, 7)?,
+        last_read_at: row.get(8)?,
     })
 }
 
@@ -188,14 +196,29 @@ mod tests {
         }
     }
 
+    fn titles(db: &Database) -> Vec<String> {
+        db.books().unwrap().into_iter().map(|b| b.title).collect()
+    }
+
     #[test]
-    fn inserted_books_are_listed_in_order() {
+    fn unread_books_are_listed_newest_first() {
         let db = db_with_french();
         let first = db.insert_book(&new_book("Un")).unwrap();
         let second = db.insert_book(&new_book("Deux")).unwrap();
-        let titles: Vec<String> = db.books().unwrap().into_iter().map(|b| b.title).collect();
-        assert_eq!(titles, ["Un", "Deux"]);
+        assert_eq!(titles(&db), ["Deux", "Un"]);
         assert!(second > first);
+        assert_eq!(db.book(first).unwrap().unwrap().last_read_at, None);
+    }
+
+    #[test]
+    fn a_book_that_was_read_comes_first() {
+        let db = db_with_french();
+        let first = db.insert_book(&new_book("Un")).unwrap();
+        db.insert_book(&new_book("Deux")).unwrap();
+        db.insert_book(&new_book("Trois")).unwrap();
+        db.save_position(first, 0, 0).unwrap();
+        assert_eq!(titles(&db), ["Un", "Trois", "Deux"]);
+        assert!(db.book(first).unwrap().unwrap().last_read_at.is_some());
     }
 
     #[test]

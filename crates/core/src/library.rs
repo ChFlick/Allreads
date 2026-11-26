@@ -227,7 +227,9 @@ mod tests {
             import(&db, &covers, "sample.txt", "fr");
         }
         let db = library_db(&db_path);
-        let books = db.books().unwrap();
+        // Unread books are listed newest first; reverse to check them in import order.
+        let mut books = db.books().unwrap();
+        books.reverse();
         let titles: Vec<&str> = books.iter().map(|b| b.title.as_str()).collect();
         assert_eq!(titles, ["Le Petit Test", "Mise en page", "sample"]);
         assert!(books.iter().all(|b| b.language_code == "fr"));

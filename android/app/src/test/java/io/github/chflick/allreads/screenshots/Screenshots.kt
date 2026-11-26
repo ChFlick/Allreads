@@ -145,10 +145,11 @@ class Screenshots(private val dark: Boolean) {
 /** Sample data: La Fontaine's fable "Le Coq et la Perle", in the public domain. */
 private object Samples {
     val books = listOf(
-        BookSummary(1, "Fables", "Jean de La Fontaine", "fr", null, 12u, 3u, 0u),
-        BookSummary(2, "Le Petit Prince", "Antoine de Saint-Exupéry", "fr", null, 27u, 0u, 0u),
-        BookSummary(3, "Vingt mille lieues sous les mers", "Jules Verne", "fr", null, 47u, 14u, 0u),
-        BookSummary(4, "Die Verwandlung", "Franz Kafka", "de", null, 3u, 1u, 0u),
+        // In the library's order: recently read first, then unread, newest first.
+        BookSummary(1, "Fables", "Jean de La Fontaine", "fr", null, 12u, 3u, 0u, 1_764_100_000_000),
+        BookSummary(3, "Vingt mille lieues sous les mers", "Jules Verne", "fr", null, 47u, 14u, 0u, 1_763_900_000_000),
+        BookSummary(4, "Die Verwandlung", "Franz Kafka", "de", null, 3u, 1u, 0u, 1_763_000_000_000),
+        BookSummary(2, "Le Petit Prince", "Antoine de Saint-Exupéry", "fr", null, 27u, 0u, 0u, null),
     )
 
     private val levels = mapOf(

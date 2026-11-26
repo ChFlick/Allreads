@@ -36,6 +36,8 @@ pub struct BookSummary {
     /// Where the reader stopped.
     pub chapter_index: u32,
     pub paragraph_index: u32,
+    /// When the book was last read, in milliseconds since 1970; `None` if never opened.
+    pub last_read_at: Option<i64>,
 }
 
 /// How well a word is known, for colouring it in the reader.
