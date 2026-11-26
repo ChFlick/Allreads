@@ -56,8 +56,9 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
     /** Writes pasted or shared text as a TXT book; its first words title it if `title` is null. */
     suspend fun prepareText(title: String?, text: String): PreparedText = io { app.prepareText(title, text) }
 
-    /** Picks the article out of a page's HTML and writes it as a TXT book. */
-    suspend fun prepareArticle(html: String): PreparedText = io { app.prepareArticle(html) }
+    /** Decodes a fetched page, picks out its article and writes it as a TXT book. */
+    suspend fun prepareArticle(page: ByteArray, contentType: String?): PreparedText =
+        io { app.prepareArticle(page, contentType) }
 
     suspend fun bookDifficulty(bookId: Long): BookDifficulty = io { app.bookDifficulty(bookId) }
 

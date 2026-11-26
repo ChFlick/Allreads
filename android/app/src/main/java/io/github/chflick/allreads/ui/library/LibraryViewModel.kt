@@ -155,8 +155,8 @@ class LibraryViewModel(
         _state.update { it.copy(fetching = true) }
         viewModelScope.launch {
             val result = runCatching {
-                val html = withContext(Dispatchers.IO) { fetcher.text(url) }
-                pending(repository.prepareArticle(html))
+                val page = withContext(Dispatchers.IO) { fetcher.page(url) }
+                pending(repository.prepareArticle(page.bytes, page.contentType))
             }
             _state.update {
                 it.copy(

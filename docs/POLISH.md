@@ -151,9 +151,8 @@ Redesigned the same day: a "Search your library" pill always at the top (in plac
 
 2026-11-26, clean-up pass (reuse, simplification, efficiency, layering) over the day's work. Done: unused imports removed; shared `SwitchSetting`, `ChoiceChips`, `DotLabel`, `BookProgressBar` and an undo-snackbar helper; settings enums parsed by one helper and the library sort stored as `BookSort`; `MarkedKnown` carries only the ids; a double tap now calls a new core `set_term_status` (one call, only the status changes) instead of find-then-save; the library loads every counted difficulty in one query and counts the rest in a single background job; covers are decoded at the size shown and cached; the progress counts are written inside the save's transaction for one language, with an index (migration V12); the Words tab gets its languages from one core query; chip counts and the library's filtered list are worked out once per state.
 
-Left for later (tech debt, moving logic from Kotlin into the core as the project rules ask):
-- Web pages: charset detection is in Kotlin's `HttpFetcher`; `article_from_html` should take bytes and decode in the core.
-- The daily progress series (gap filling, 90-day window, weekly gain) is built in Kotlin; the core could return it ready.
-- Test fixtures for terms and books are repeated across core test modules; they belong in `db::tests_support`.
+Left for later (tech debt, moving logic from Kotlin into the core as the project rules ask): all done, see below.
 
 2026-11-26: moved into the core: the common form of saved words (`dictionary::common_form`, sharing `WordKinds::is_common` with the name rule); book counting (`word_tally::count_book`, with a stamp of rules and dictionary per book instead of a change counter, migration V13; the reader counts a new book on first open); and writing pasted text and articles as TXT books (`prepare_text`, `prepare_article`; picked files are copied under their own name, so `import_book` lost its title override).
+
+2026-11-26: the rest of the tech debt: web pages are decoded in the core (`article::decode_html`, with `encoding_rs`: byte-order mark, then the HTTP header, then `<meta charset>`, else UTF-8; Kotlin passes the raw bytes); the progress chart's daily series is built in the core (`progress_series`, with its own date arithmetic, so no date library); core tests share `new_term` and `insert_book` from `db::tests_support`.

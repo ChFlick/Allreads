@@ -22,8 +22,15 @@ const val DICTIONARY_MANIFEST_URL =
     "https://github.com/ChFlick/Allreads/releases/download/dictionaries/dictionaries.json"
 
 /** Fetching over HTTPS; an interface so the JVM tests can use files instead. */
+/** A fetched web page as it arrived: its bytes and the `Content-Type` header, for the core to decode. */
+class FetchedPage(val bytes: ByteArray, val contentType: String?)
+
 interface Fetcher {
+    /** A UTF-8 text file, such as the dictionary list. */
     fun text(url: String): String
+
+    /** A web page, undecoded: the core works out its character set. */
+    fun page(url: String): FetchedPage = FetchedPage(text(url).toByteArray(), "text/html; charset=utf-8")
 
     /** Writes `url` to `target`, calling `progress` with the bytes written so far. */
     fun download(url: String, target: File, progress: (Long) -> Unit)
@@ -156,10 +163,11 @@ class Dictionaries(
 
 /** [Fetcher] with `HttpURLConnection`. */
 class HttpFetcher : Fetcher {
-    override fun text(url: String): String {
+    override fun text(url: String): String = open(url).inputStream.use { it.readBytes().decodeToString() }
+
+    override fun page(url: String): FetchedPage {
         val connection = open(url)
-        val bytes = connection.inputStream.use { it.readBytes() }
-        return bytes.toString(charsetOf(connection.contentType, bytes))
+        return FetchedPage(connection.inputStream.use { it.readBytes() }, connection.contentType)
     }
 
     override fun download(url: String, target: File, progress: (Long) -> Unit) {
@@ -215,19 +223,5 @@ class HttpFetcher : Fetcher {
 
     private companion object {
         const val MAX_REDIRECTS = 5
-
-        private val metaCharset = Regex("""<meta[^>]+charset\s*=\s*["']?([\w-]+)""", RegexOption.IGNORE_CASE)
-
-        /**
-         * A page's character set: from the Content-Type header, else from its
-         * `<meta charset>`, else UTF-8. Older sites still send Latin-1 pages.
-         */
-        fun charsetOf(contentType: String?, bytes: ByteArray): java.nio.charset.Charset {
-            val header = contentType?.substringAfter("charset=", "")?.substringBefore(';')
-                ?.trim(' ', '"', '\'')?.takeIf { it.isNotEmpty() }
-            val name = header ?: metaCharset.find(String(bytes, 0, minOf(bytes.size, 4096), Charsets.ISO_8859_1))
-                ?.groupValues?.get(1)
-            return name?.let { runCatching { java.nio.charset.Charset.forName(it) }.getOrNull() } ?: Charsets.UTF_8
-        }
     }
 }

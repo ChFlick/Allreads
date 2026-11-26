@@ -422,13 +422,19 @@ impl App {
         self.write_text(title, None, &paragraphs)
     }
 
-    /// Picks the article out of a web page's HTML and writes it as a TXT book,
-    /// titled with its headline, ready to import.
+    /// Picks the article out of a web page and writes it as a TXT book, titled
+    /// with its headline, ready to import. `page` is the page as fetched; its
+    /// character set comes from `content_type` (the HTTP header) or the page.
     ///
     /// # Errors
     /// Returns `InvalidInput` if the page has no readable text, and `Storage`
     /// if it cannot be written.
-    pub fn prepare_article(&self, html: String) -> Result<PreparedText, AllreadsError> {
+    pub fn prepare_article(
+        &self,
+        page: Vec<u8>,
+        content_type: Option<String>,
+    ) -> Result<PreparedText, AllreadsError> {
+        let html = allreads_core::article::decode_html(&page, content_type.as_deref());
         let article = allreads_core::article::extract(&html);
         if article.paragraphs.is_empty() {
             return Err(AllreadsError::InvalidInput {
@@ -1727,6 +1733,7 @@ mod tests {
             .prepare_article(
                 "<html lang=fr><head><title>Le titre</title></head><body><article><p>Bonjour tout le monde.</p></article></body></html>"
                     .into(),
+                Some("text/html; charset=utf-8".into()),
             )
             .unwrap();
         assert_eq!(
@@ -1747,7 +1754,7 @@ mod tests {
             Err(AllreadsError::InvalidInput { .. })
         ));
         assert!(matches!(
-            app.prepare_article("<html></html>".into()),
+            app.prepare_article("<html></html>".into(), None),
             Err(AllreadsError::InvalidInput { .. })
         ));
         let picked = app.new_book_path(Some("Notes.txt".into()), "txt".into());

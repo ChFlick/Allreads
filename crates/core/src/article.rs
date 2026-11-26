@@ -1,6 +1,7 @@
 //! Web articles: the readable text of a page (title, language, paragraphs),
 //! without menus, footers and ads, so it can be imported like a TXT book.
 
+use encoding_rs::{Encoding, UTF_8};
 use scraper::{ElementRef, Html, Selector};
 
 use crate::text::normalize_whitespace;
@@ -13,6 +14,38 @@ pub struct Article {
     pub language: Option<String>,
     /// Headings and paragraphs in reading order.
     pub paragraphs: Vec<String>,
+}
+
+/// Decodes a web page's bytes into text. The character set comes from a
+/// byte-order mark, then the `Content-Type` header (`text/html;
+/// charset=iso-8859-1`), then the page's own `<meta charset>` near its start,
+/// and is UTF-8 otherwise. Older French sites still send Latin-1 pages, which
+/// read as UTF-8 would turn "été" into "\u{fffd}t\u{fffd}".
+#[must_use]
+pub fn decode_html(bytes: &[u8], content_type: Option<&str>) -> String {
+    let from_header = content_type.and_then(|value| {
+        value
+            .split(';')
+            .filter_map(|part| part.trim().strip_prefix("charset="))
+            .find_map(|label| Encoding::for_label(label.trim_matches(['"', '\'']).as_bytes()))
+    });
+    let encoding = from_header.or_else(|| meta_charset(bytes)).unwrap_or(UTF_8);
+    // `decode` also honours a byte-order mark, which wins over the label.
+    encoding.decode(bytes).0.into_owned()
+}
+
+/// The encoding named by `<meta charset="…">` or `<meta http-equiv=…
+/// content="…; charset=…">` in the first few kilobytes of a page. Those
+/// bytes are ASCII in every encoding a page may use, so they are read as such.
+fn meta_charset(bytes: &[u8]) -> Option<&'static Encoding> {
+    let head = String::from_utf8_lossy(&bytes[..bytes.len().min(4096)]).to_lowercase();
+    let after = head.split("charset=").nth(1)?;
+    let label: String = after
+        .trim_start_matches(['"', '\'', ' '])
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    Encoding::for_label(label.as_bytes())
 }
 
 /// Elements whose text is never part of the article.
@@ -203,5 +236,27 @@ mod tests {
         let article = extract("<html><body></body></html>");
         assert_eq!(article.title, "Web article");
         assert!(article.paragraphs.is_empty());
+    }
+
+    #[test]
+    fn pages_are_decoded_from_their_declared_character_set() {
+        // "Été" in Latin-1: É = 0xC9, é = 0xE9.
+        let latin1: &[u8] =
+            b"<html><head><meta charset=\"iso-8859-1\"></head><body><p>\xc9t\xe9</p></body></html>";
+        assert!(decode_html(latin1, None).contains("Été"));
+        // The header wins over a missing meta.
+        let bare: &[u8] = b"<p>\xe9t\xe9</p>";
+        assert_eq!(
+            decode_html(bare, Some("text/html; charset=windows-1252")),
+            "<p>été</p>"
+        );
+        // The old http-equiv form.
+        let old: &[u8] = b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=ISO-8859-1\"><p>\xe9</p>";
+        assert!(decode_html(old, None).ends_with("<p>é</p>"));
+        // UTF-8 by default.
+        assert_eq!(
+            decode_html("<p>été</p>".as_bytes(), Some("text/html")),
+            "<p>été</p>"
+        );
     }
 }
