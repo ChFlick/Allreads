@@ -111,7 +111,7 @@ private fun AllreadsNavigation(services: Services) {
         Box(Modifier.padding(bottom).consumeWindowInsets(bottom)) {
             when (tab) {
                 Tab.Library -> {
-                    val library = viewModel { LibraryViewModel(services.repository) }
+                    val library = viewModel { LibraryViewModel(services.repository, services.settings) }
                     // Reading changes progress, so refresh whenever the library is shown.
                     LaunchedEffect(Unit) { library.refresh() }
                     LibraryScreen(library, onOpen = {

@@ -32,3 +32,12 @@ val BookIcon: ImageVector = materialIcon(name = "Filled.Book") {
         close()
     }
 }
+
+/** Three lines getting shorter, Material's "sort" icon, which the core icon set lacks. */
+val SortIcon: ImageVector = materialIcon(name = "Filled.Sort") {
+    materialPath {
+        moveTo(3f, 18f); horizontalLineToRelative(6f); verticalLineToRelative(-2f); horizontalLineTo(3f); close()
+        moveTo(3f, 6f); verticalLineToRelative(2f); horizontalLineToRelative(18f); verticalLineTo(6f); close()
+        moveTo(3f, 13f); horizontalLineToRelative(12f); verticalLineToRelative(-2f); horizontalLineTo(3f); close()
+    }
+}

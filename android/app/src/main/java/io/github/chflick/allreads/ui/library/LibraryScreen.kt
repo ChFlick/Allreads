@@ -1,5 +1,15 @@
 package io.github.chflick.allreads.ui.library
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import io.github.chflick.allreads.ui.SortIcon
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -87,6 +97,7 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit) {
         onImport = { picker.launch(arrayOf("application/epub+zip", "text/plain")) },
         onOpen = onOpen,
         onLongPress = { toDelete = it },
+        onView = viewModel::changeView,
     )
 
     state.pending?.let { pending ->
@@ -222,9 +233,33 @@ fun LibraryContent(
     onImport: () -> Unit,
     onOpen: (BookSummary) -> Unit,
     onLongPress: (BookSummary) -> Unit,
+    onView: (LibraryView) -> Unit = {},
 ) {
+    val view = state.view
+    // The search panel (search field and filter chips) opens from the top bar.
+    var searching by rememberSaveable { mutableStateOf(view.query.isNotBlank()) }
+    val closeSearch = {
+        searching = false
+        onView(view.copy(query = "", language = null, progress = BookProgress.All))
+    }
+    BackHandler(enabled = searching, onBack = closeSearch)
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Allreads") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Allreads") },
+                actions = {
+                    if (state.books.isNotEmpty()) {
+                        IconButton(onClick = { if (searching) closeSearch() else searching = true }) {
+                            Icon(
+                                if (searching) Icons.Default.Close else Icons.Default.Search,
+                                contentDescription = if (searching) "Close the search" else "Search and filter books",
+                            )
+                        }
+                        SortMenu(view.sort, onSort = { onView(view.copy(sort = it)) })
+                    }
+                },
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
@@ -236,23 +271,98 @@ fun LibraryContent(
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text("No books yet. Import an EPUB or TXT file.")
             }
-        } else {
+            return@Scaffold
+        }
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            if (searching) SearchPanel(state, onView)
+            val shown = state.shown
+            if (shown.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No books match.", modifier = Modifier.padding(24.dp))
+                }
+                return@Column
+            }
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 // The bottom leaves room for the import button.
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // The library lists the last book read first; it gets the big card.
-                val current = state.books.firstOrNull()?.takeIf { it.lastReadAt != null }
+                // With nothing searched, filtered or re-sorted, the last book read
+                // comes first and gets the big card.
+                val current = shown.firstOrNull()?.takeIf { view.isDefault && it.lastReadAt != null }
                 current?.let { book ->
                     item(key = "continue") {
                         ContinueCard(book, onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
                     }
                 }
-                items(state.books.drop(if (current != null) 1 else 0), key = { it.id }) { book ->
+                items(shown.drop(if (current != null) 1 else 0), key = { it.id }) { book ->
                     BookRow(book, onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
                 }
+            }
+        }
+    }
+}
+
+/** The search field, then chips for reading progress and (with several) languages. */
+@Composable
+private fun SearchPanel(state: LibraryState, onView: (LibraryView) -> Unit) {
+    val view = state.view
+    val focus = remember { FocusRequester() }
+    // Opening the search puts the cursor in the field.
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    Column(Modifier.padding(horizontal = 16.dp)) {
+        OutlinedTextField(
+            value = view.query,
+            onValueChange = { onView(view.copy(query = it)) },
+            placeholder = { Text("Title or author") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
+        )
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            BookProgress.entries.forEach { progress ->
+                FilterChip(
+                    selected = view.progress == progress,
+                    onClick = { onView(view.copy(progress = progress)) },
+                    label = { Text(progress.label) },
+                )
+            }
+            if (state.languages.size > 1) {
+                state.languages.forEach { code ->
+                    FilterChip(
+                        selected = view.language == code,
+                        // A second tap on the chosen language shows every language again.
+                        onClick = { onView(view.copy(language = code.takeIf { view.language != it })) },
+                        label = { Text(languageName(code)) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The sort button and its menu. */
+@Composable
+private fun SortMenu(sort: BookSort, onSort: (BookSort) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(SortIcon, contentDescription = "Sort books, now by ${sort.label.lowercase()}")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            BookSort.entries.forEach { choice ->
+                DropdownMenuItem(
+                    text = { Text(choice.label) },
+                    leadingIcon = { RadioButton(selected = choice == sort, onClick = null) },
+                    onClick = {
+                        open = false
+                        onSort(choice)
+                    },
+                )
             }
         }
     }

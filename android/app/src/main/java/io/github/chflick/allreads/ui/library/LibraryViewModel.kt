@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.chflick.allreads.data.BookFiles
 import io.github.chflick.allreads.data.Repository
+import io.github.chflick.allreads.data.SettingsStore
 import io.github.chflick.allreads.ui.describe
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -31,14 +32,31 @@ data class LibraryState(
     val loading: Boolean = true,
     val pending: PendingImport? = null,
     val message: String? = null,
-)
+    /** The search, filters and sort; [shown] is the result. */
+    val view: LibraryView = LibraryView(),
+) {
+    val shown: List<BookSummary> get() = arrange(books, view)
+    /** The languages of the books, for the filter chips. */
+    val languages: List<String> get() = books.map { it.languageCode }.distinct().sorted()
+}
 
-class LibraryViewModel(private val repository: Repository) : ViewModel() {
-    private val _state = MutableStateFlow(LibraryState())
+class LibraryViewModel(
+    private val repository: Repository,
+    private val settings: SettingsStore? = null,
+) : ViewModel() {
+    private val savedSort = settings?.settings?.value?.librarySort
+        ?.let { name -> BookSort.entries.firstOrNull { it.name == name } } ?: BookSort.Recent
+    private val _state = MutableStateFlow(LibraryState(view = LibraryView(sort = savedSort)))
     val state: StateFlow<LibraryState> = _state.asStateFlow()
 
     init {
         refresh()
+    }
+
+    /** Changes the search or filters. A new sort is remembered for next time. */
+    fun changeView(view: LibraryView) {
+        if (view.sort != _state.value.view.sort) settings?.update { it.copy(librarySort = view.sort.name) }
+        _state.update { it.copy(view = view) }
     }
 
     fun refresh() {

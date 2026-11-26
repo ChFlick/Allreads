@@ -25,6 +25,8 @@ data class AppSettings(
     val speakOnTap: Boolean = false,
     /** The voice chosen per language code; a missing language uses the best installed voice. */
     val voices: Map<String, String> = emptyMap(),
+    /** The library's sort, by `BookSort` name. */
+    val librarySort: String = "Recent",
 ) {
     companion object {
         /** DeepL target languages offered in Settings. */
@@ -48,6 +50,7 @@ class SettingsStore(context: Context) {
             .putFloat("font_scale", next.fontScale)
             .putFloat("line_spacing", next.lineSpacing)
             .putString("theme", next.theme.name)
+            .putString("library_sort", next.librarySort)
             .putBoolean("wallpaper_colors", next.wallpaperColors)
             .putBoolean("anki_word_card", next.ankiWordCard)
             .putFloat("speech_rate", next.speechRate)
@@ -68,6 +71,7 @@ class SettingsStore(context: Context) {
                 ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
                 ?: defaults.theme,
             wallpaperColors = prefs.getBoolean("wallpaper_colors", defaults.wallpaperColors),
+            librarySort = prefs.getString("library_sort", null) ?: defaults.librarySort,
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),
             speechRate = prefs.getFloat("speech_rate", defaults.speechRate),
             speakOnTap = prefs.getBoolean("speak_on_tap", defaults.speakOnTap),
