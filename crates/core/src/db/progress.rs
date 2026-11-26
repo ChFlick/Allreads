@@ -39,6 +39,15 @@ impl Difficulty {
     }
 }
 
+/// A counted book's difficulty and the stamp it was counted with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CountedDifficulty {
+    pub book_id: i64,
+    pub language_code: String,
+    pub stamp: String,
+    pub difficulty: Difficulty,
+}
+
 /// Saved words in a language at the end of one day.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DayCount {
@@ -49,39 +58,39 @@ pub struct DayCount {
 }
 
 impl Database {
-    /// The parser version a book's words were counted with, or `None` if
-    /// they were not counted yet.
+    /// The stamp a book's words were counted with (see
+    /// [`crate::word_tally::count_stamp`]), or `None` if not counted.
     ///
     /// # Errors
     /// Returns `NotFound` if the book does not exist.
-    pub fn book_words_counted_with(&self, book_id: i64) -> Result<Option<i64>, DbError> {
+    pub fn book_count_stamp(&self, book_id: i64) -> Result<Option<String>, DbError> {
         use rusqlite::OptionalExtension;
-        let version: Option<i64> = self
+        let stamp: Option<String> = self
             .conn()
             .query_row(
-                "SELECT words_counted_with FROM book WHERE id = ?1",
+                "SELECT words_counted FROM book WHERE id = ?1",
                 [book_id],
                 |row| row.get(0),
             )
             .optional()?;
-        match version {
+        match stamp {
             None => Err(DbError::NotFound {
                 what: format!("book {book_id}"),
             }),
-            Some(0) => Ok(None),
-            Some(version) => Ok(Some(version)),
+            Some(stamp) if stamp.is_empty() => Ok(None),
+            Some(stamp) => Ok(Some(stamp)),
         }
     }
 
     /// Replaces a book's counted words (term key → count, form, name).
-    /// `version` says which parser and counting rules made them.
+    /// `stamp` says which rules and dictionary made them.
     ///
     /// # Errors
     /// Returns a database error if a statement fails.
     pub fn store_book_words(
         &self,
         book_id: i64,
-        version: i64,
+        stamp: &str,
         words: &HashMap<String, BookWord>,
     ) -> Result<(), DbError> {
         let transaction = self.conn().unchecked_transaction()?;
@@ -102,8 +111,8 @@ impl Database {
             }
         }
         transaction.execute(
-            "UPDATE book SET words_counted_with = ?2 WHERE id = ?1",
-            params![book_id, version],
+            "UPDATE book SET words_counted = ?2 WHERE id = ?1",
+            params![book_id, stamp],
         )?;
         transaction.commit()?;
         Ok(())
@@ -119,18 +128,41 @@ impl Database {
         Ok(found.get(&book_id).copied().unwrap_or_default())
     }
 
-    /// The difficulty of every book counted with `version`, by book id, in one
-    /// query. Books counted with another version (or not at all) are missing.
+    /// The difficulty of every counted book, by book id, in one query, with
+    /// the stamp it was counted with: the caller keeps those whose stamp is
+    /// still today's for their language.
     ///
     /// # Errors
     /// Returns a database error if the statement fails.
-    pub fn counted_difficulties(&self, version: i64) -> Result<HashMap<i64, Difficulty>, DbError> {
-        self.difficulties("b.words_counted_with = ?1", version)
+    pub fn counted_difficulties(&self) -> Result<Vec<CountedDifficulty>, DbError> {
+        let difficulties = self.difficulties("b.words_counted <> ?1", "")?;
+        let mut statement = self.conn().prepare(
+            "SELECT id, language_code, words_counted FROM book WHERE words_counted <> ''",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get(1)?, row.get(2)?))
+        })?;
+        let mut counted = Vec::new();
+        for row in rows {
+            let (book_id, language_code, stamp) = row?;
+            counted.push(CountedDifficulty {
+                book_id,
+                language_code,
+                stamp,
+                // A counted book without words has no row in the query above.
+                difficulty: difficulties.get(&book_id).copied().unwrap_or_default(),
+            });
+        }
+        Ok(counted)
     }
 
-    /// Difficulties per book for the books matching `filter` (an SQL condition
-    /// with one parameter).
-    fn difficulties(&self, filter: &str, value: i64) -> Result<HashMap<i64, Difficulty>, DbError> {
+    /// Difficulties per book for the books matching `filter`, an SQL condition
+    /// that may use `?1` for `value`.
+    fn difficulties(
+        &self,
+        filter: &str,
+        value: impl rusqlite::ToSql,
+    ) -> Result<HashMap<i64, Difficulty>, DbError> {
         // A word's status is its own, else its dictionary form's. Names are
         // left out unless saved on purpose.
         let sql = format!(
@@ -214,26 +246,6 @@ impl Database {
         )?;
         let rows = statement.query_map([book_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
         Ok(rows.collect::<Result<_, _>>()?)
-    }
-
-    /// Marks a language's books for counting again, e.g. after its dictionary
-    /// was installed or removed (names and forms come from it). Their counted
-    /// words are deleted, so the reader does not use stale names meanwhile.
-    ///
-    /// # Errors
-    /// Returns a database error if a statement fails.
-    pub fn recount_books(&self, language_code: &str) -> Result<(), DbError> {
-        let transaction = self.conn().unchecked_transaction()?;
-        transaction.execute(
-            "DELETE FROM book_word WHERE book_id IN (SELECT id FROM book WHERE language_code = ?1)",
-            [language_code],
-        )?;
-        transaction.execute(
-            "UPDATE book SET words_counted_with = 0 WHERE language_code = ?1",
-            [language_code],
-        )?;
-        transaction.commit()?;
-        Ok(())
     }
 
     /// Rewrites today's saved-word counts for one language, or for every
@@ -320,7 +332,7 @@ mod tests {
     fn difficulty_counts_running_and_unique_words() {
         let db = french_db();
         let id = book(&db);
-        assert_eq!(db.book_words_counted_with(id).unwrap(), None);
+        assert_eq!(db.book_count_stamp(id).unwrap(), None);
         let word = |count, lemma: Option<&str>, is_name| BookWord {
             count,
             lemma_key: lemma.map(str::to_string),
@@ -338,8 +350,8 @@ mod tests {
         .into_iter()
         .map(|(k, w)| (k.to_string(), w))
         .collect();
-        db.store_book_words(id, 1, &words).unwrap();
-        assert_eq!(db.book_words_counted_with(id).unwrap(), Some(1));
+        db.store_book_words(id, "1.3/", &words).unwrap();
+        assert_eq!(db.book_count_stamp(id).unwrap().as_deref(), Some("1.3/"));
         db.save_term(&term("le", Status::WellKnown)).unwrap();
         db.save_term(&term("chat", Status::Learning(2))).unwrap();
         let difficulty = db.book_difficulty(id).unwrap();
@@ -363,11 +375,12 @@ mod tests {
             HashSet::from(["gregor".to_string()])
         );
         assert_eq!(db.book_lemmas(id).unwrap()["dormait"], "dormir");
+        let counted = db.counted_difficulties().unwrap();
         assert_eq!(
-            db.counted_difficulties(1).unwrap()[&id],
-            db.book_difficulty(id).unwrap()
+            (counted[0].book_id, counted[0].stamp.as_str()),
+            (id, "1.3/")
         );
-        assert!(db.counted_difficulties(2).unwrap().is_empty());
+        assert_eq!(counted[0].difficulty, db.book_difficulty(id).unwrap());
         // A name saved on purpose counts again.
         db.save_term(&term("gregor", Status::Learning(1))).unwrap();
         assert_eq!(db.book_difficulty(id).unwrap().words, 15);
@@ -379,7 +392,7 @@ mod tests {
         let id = book(&db);
         assert_eq!(db.book_difficulty(id).unwrap(), Difficulty::default());
         assert!(matches!(
-            db.book_words_counted_with(99),
+            db.book_count_stamp(99),
             Err(DbError::NotFound { .. })
         ));
     }

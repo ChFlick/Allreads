@@ -54,6 +54,15 @@ pub enum AllreadsError {
     DictionaryInvalid { reason: String },
 }
 
+impl From<allreads_core::word_tally::CountError> for AllreadsError {
+    fn from(error: allreads_core::word_tally::CountError) -> Self {
+        match error {
+            allreads_core::word_tally::CountError::Book(e) => e.into(),
+            allreads_core::word_tally::CountError::Dictionary(e) => e.into(),
+        }
+    }
+}
+
 impl From<DictionaryError> for AllreadsError {
     fn from(error: DictionaryError) -> Self {
         match error {

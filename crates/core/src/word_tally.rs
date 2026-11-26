@@ -3,12 +3,57 @@
 
 use std::collections::HashMap;
 
-use crate::dictionary::WordKinds;
-use crate::reader::ParsedChapter;
-use crate::text::{capitalises_nouns, LanguageRules};
+use crate::book::BookError;
+use crate::dictionary::{DictionaryError, WordKinds};
+use crate::library::OpenedBook;
+use crate::reader::{parse_blocks, ParsedChapter};
+use crate::text::{capitalises_nouns, LanguageRules, PARSER_VERSION};
 
 /// Bumped when the counting rules change, so books are counted again.
 pub const TALLY_VERSION: i64 = 3;
+
+/// What a count depends on: the parser, the counting rules, and the offline
+/// dictionary (its pair and build date, or `None`). A book whose stored
+/// stamp differs is counted again, e.g. after a dictionary is installed.
+#[must_use]
+pub fn count_stamp(dictionary: Option<&str>) -> String {
+    format!(
+        "{PARSER_VERSION}.{TALLY_VERSION}/{}",
+        dictionary.unwrap_or("")
+    )
+}
+
+/// Why a book could not be counted.
+#[derive(Debug, thiserror::Error)]
+pub enum CountError {
+    #[error(transparent)]
+    Book(#[from] BookError),
+    #[error(transparent)]
+    Dictionary(#[from] DictionaryError),
+}
+
+/// Asks the offline dictionary about a word; `None` when none is installed.
+pub type Lookup<'a> = Option<&'a dyn Fn(&str) -> Result<WordKinds, DictionaryError>>;
+
+/// Counts every word of a book with its first `chapters` chapters: how often
+/// each occurs, which are names, which are forms of another word.
+///
+/// # Errors
+/// Returns `Book` if a chapter cannot be read, and `Dictionary` on the first
+/// failed lookup (the count is then incomplete and must not be stored).
+pub fn count_book(
+    book: &OpenedBook,
+    chapters: usize,
+    rules: &LanguageRules,
+    language_code: &str,
+    lookup: Lookup,
+) -> Result<HashMap<String, BookWord>, CountError> {
+    let mut tally = Tally::new(language_code);
+    for index in 0..chapters {
+        tally.add_chapter(&parse_blocks(&book.chapter_blocks(index)?, rules));
+    }
+    Ok(tally.finish(lookup, rules)?)
+}
 
 /// One word of a book, ready to store.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,16 +127,22 @@ impl Tally {
     /// - A **form** is a word without meanings of its own in the dictionary
     ///   that is a form of another ("lisait" → "lire"). Words with their own
     ///   meanings ("lit", bed) keep their own count.
+    ///
+    /// # Errors
+    /// Returns the first dictionary error; the result would be incomplete.
     pub fn finish(
         self,
-        lookup: &dyn Fn(&str) -> Option<WordKinds>,
+        lookup: Lookup,
         rules: &LanguageRules,
-    ) -> HashMap<String, BookWord> {
+    ) -> Result<HashMap<String, BookWord>, DictionaryError> {
         let capitals_mark_names = self.capitals_mark_names;
         self.words
             .into_iter()
             .map(|(key, evidence)| {
-                let kinds = lookup(&key).unwrap_or_default();
+                let kinds = match lookup {
+                    Some(lookup) => lookup(&key)?,
+                    None => WordKinds::default(),
+                };
                 // "I" in English, or one-letter abbreviations, are not names.
                 let always_capital = capitals_mark_names
                     && key.chars().count() > 1
@@ -110,7 +161,7 @@ impl Tally {
                     lemma_key,
                     is_name,
                 };
-                (key, word)
+                Ok((key, word))
             })
             .collect()
     }
@@ -121,6 +172,7 @@ mod tests {
     use super::*;
     use crate::reader::{ParsedBlock, ParsedToken};
     use crate::text::test_rules::builtin;
+    use std::path::Path;
 
     fn block(heading: bool, words: &[(&str, u32)]) -> ParsedBlock {
         ParsedBlock {
@@ -147,8 +199,8 @@ mod tests {
 
     /// A tiny dictionary: "paris" is a name, "coq" a noun, "lisait" a form of
     /// "lire", "suis" a form of both "être" and "suivre".
-    fn lookup(key: &str) -> Option<WordKinds> {
-        Some(match key {
+    fn lookup(key: &str) -> Result<WordKinds, DictionaryError> {
+        Ok(match key {
             "paris" => kinds(&["name"], &[]),
             "coq" => kinds(&["noun"], &[]),
             "lisait" => kinds(&[], &["lire"]),
@@ -160,7 +212,7 @@ mod tests {
     fn tally(blocks: Vec<ParsedBlock>) -> HashMap<String, BookWord> {
         let mut tally = Tally::new("fr");
         tally.add_chapter(&ParsedChapter { blocks });
-        tally.finish(&lookup, &builtin("fr"))
+        tally.finish(Some(&lookup), &builtin("fr")).unwrap()
     }
     #[test]
     fn capitals_inside_sentences_mark_unknown_names() {
@@ -229,7 +281,7 @@ mod tests {
                 ],
             )],
         });
-        let words = german.finish(&|_| None, &builtin("de"));
+        let words = german.finish(None, &builtin("de")).unwrap();
         assert!(!words["haus"].is_name);
         let words = tally(vec![block(false, &[("Alors", 0), ("A", 0), ("dit", 0)])]);
         assert!(!words["a"].is_name);
@@ -241,9 +293,30 @@ mod tests {
         tally.add_chapter(&ParsedChapter {
             blocks: vec![block(false, &[("Alors", 0), ("Nemo", 0), ("parla", 0)])],
         });
-        let words = tally.finish(&|_| None, &builtin("fr"));
+        let words = tally.finish(None, &builtin("fr")).unwrap();
         assert!(words["nemo"].is_name);
         assert!(!words["alors"].is_name);
         assert_eq!(words["parla"].lemma_key, None);
+    }
+
+    #[test]
+    fn a_whole_book_is_counted_and_a_lookup_error_stops_it() {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tiny.epub");
+        let book = OpenedBook::open(&fixture).unwrap();
+        let chapters = book.chapter_titles().unwrap().len();
+        let rules = builtin("fr");
+        let words = count_book(&book, chapters, &rules, "fr", None).unwrap();
+        assert!(!words.is_empty());
+        let failing = |_: &str| -> Result<WordKinds, DictionaryError> {
+            Err(DictionaryError::Invalid("broken".into()))
+        };
+        assert!(matches!(
+            count_book(&book, chapters, &rules, "fr", Some(&failing)),
+            Err(CountError::Dictionary(_))
+        ));
+        assert_eq!(
+            count_stamp(Some("fr-en 2026-11-26")),
+            format!("{PARSER_VERSION}.{TALLY_VERSION}/fr-en 2026-11-26")
+        );
     }
 }

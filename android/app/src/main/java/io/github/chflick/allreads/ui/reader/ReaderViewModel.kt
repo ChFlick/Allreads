@@ -138,6 +138,9 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             ttsLocale = language?.ttsLocale?.ifBlank { null } ?: book.languageCode
             _state.update { it.copy(book = book) }
             load(book.chapterIndex, startBlock = book.paragraphIndex.toInt())
+            // A book not counted yet (just imported, or a new dictionary) gets its
+            // names and word forms in the background; the marks follow once done.
+            if (runCatching { repository.ensureBookCounted(bookId) }.getOrDefault(false)) reloadStatuses()
         }
     }
 

@@ -1,17 +1,15 @@
 //! `App`: the library object Kotlin creates once, and the calls it offers.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use allreads_core::db::book::Book as BookRow;
 use allreads_core::db::term::NewTerm;
 use allreads_core::db::translation_cache::CacheKey;
 use allreads_core::db::Database;
-use allreads_core::dictionary::{self, common_form, Dictionary};
+use allreads_core::dictionary::{self, common_form, Dictionary, DictionaryError};
 use allreads_core::library::{self, OpenedBook};
 use allreads_core::presets::builtin_presets;
 use allreads_core::reader::{parse_blocks, ParsedChapter};
@@ -19,7 +17,7 @@ use allreads_core::text::phrases::{find_phrases, WordSlot};
 use allreads_core::text::{LanguageRules, PARSER_VERSION};
 use allreads_core::translate::deepl::DeepL;
 use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
-use allreads_core::word_tally::{Tally, TALLY_VERSION};
+use allreads_core::word_tally;
 
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
@@ -45,9 +43,6 @@ pub struct App {
     open_books: Mutex<Vec<(i64, Arc<OpenedBook>)>>,
     /// Installed dictionaries opened so far, by pair (e.g. `fr-en`).
     dictionaries: Mutex<HashMap<String, Dictionary>>,
-    /// Bumped whenever a dictionary is installed or removed, so a book counted
-    /// meanwhile (with the old dictionary) is not stored as up to date.
-    dictionary_changes: AtomicU64,
 }
 
 impl App {
@@ -152,15 +147,18 @@ impl App {
         LanguageRules::new(&language).map_err(|reason| AllreadsError::Database { reason })
     }
 
-    /// Marks the books in a dictionary's language ("fr" of "fr-en") for counting again.
-    fn recount_pair(&self, pair: &str) -> Result<(), AllreadsError> {
-        if let Some((language, _)) = pair.split_once('-') {
-            // Bumped under the database lock, which storing counts also holds.
-            let db = self.db()?;
-            self.dictionary_changes.fetch_add(1, Ordering::SeqCst);
-            db.recount_books(language)?;
-        }
-        Ok(())
+    /// Today's counting stamp for a language: the counting rules and the
+    /// installed dictionary's pair and build date, if any.
+    fn count_stamp(&self, language_code: &str) -> Result<String, AllreadsError> {
+        let dictionary = self.with_dictionary(language_code, |d| d.meta("built"))?;
+        let identity = dictionary.map(|built| {
+            format!(
+                "{}-en {}",
+                language_code.to_lowercase(),
+                built.unwrap_or_default()
+            )
+        });
+        Ok(word_tally::count_stamp(identity.as_deref()))
     }
 
     /// A chapter's tokens from the cache, or parsed and cached on a miss.
@@ -278,7 +276,6 @@ impl App {
             data_dir: folder,
             open_books: Mutex::new(Vec::new()),
             dictionaries: Mutex::new(HashMap::new()),
-            dictionary_changes: AtomicU64::new(0),
         }))
     }
 
@@ -376,56 +373,45 @@ impl App {
     /// Returns `Missing` for an unknown book, and a book or database error if
     /// a chapter cannot be read.
     pub fn book_difficulty(&self, book_id: i64) -> Result<BookDifficulty, AllreadsError> {
-        let row = self.book_row(book_id)?;
-        // The stored counts must come from today's parser and counting rules.
-        let version = PARSER_VERSION * 100 + TALLY_VERSION;
-        // A dictionary installed or removed while counting makes the count
-        // stale; count again with the new one (a few tries, then give up).
-        for _ in 0..3 {
-            if self.db()?.book_words_counted_with(book_id)? == Some(version) {
-                break;
-            }
-            let changes = self.dictionary_changes.load(Ordering::SeqCst);
-            let rules = self.rules(&row.language_code)?;
-            let book = self.opened_book(book_id)?;
-            let chapters = self.db()?.chapter_titles(book_id)?.len();
-            let mut tally = Tally::new(&row.language_code);
-            // Parsed directly, not through the chapter cache, so counting a
-            // whole book does not store every chapter.
-            for index in 0..chapters {
-                tally.add_chapter(&parse_blocks(&book.chapter_blocks(index)?, &rules));
-            }
-            // Names and forms come from the offline dictionary, when installed.
-            // Checked once, so a book is not stat'ed for the file per word, and
-            // a dictionary that fails to open is an error, not "no dictionary".
-            let has_dictionary = self
-                .with_dictionary(&row.language_code, |_| Ok(()))?
-                .is_some();
-            // The first lookup error, if any: the counts are then not stored,
-            // so the book is not left counted as if it had no dictionary.
-            let failed: RefCell<Option<AllreadsError>> = RefCell::new(None);
-            let lookup = |key: &str| {
-                if !has_dictionary || failed.borrow().is_some() {
-                    return None;
-                }
-                match self.with_dictionary(&row.language_code, |d| d.word_kinds(key)) {
-                    Ok(found) => found,
-                    Err(error) => {
-                        *failed.borrow_mut() = Some(error);
-                        None
-                    }
-                }
-            };
-            let words = tally.finish(&lookup, &rules);
-            if let Some(error) = failed.into_inner() {
-                return Err(error);
-            }
-            let db = self.db()?;
-            if self.dictionary_changes.load(Ordering::SeqCst) == changes {
-                db.store_book_words(book_id, version, &words)?;
-            }
-        }
+        self.ensure_book_counted(book_id)?;
         Ok(self.db()?.book_difficulty(book_id)?.into())
+    }
+
+    /// Counts a book's words if they are not counted yet, or were counted with
+    /// other rules or another dictionary. Returns `true` if it counted now (the
+    /// reader then reloads its marks for names). The first count of a long
+    /// book reads every chapter.
+    ///
+    /// # Errors
+    /// Returns `Missing` for an unknown book, and a book or dictionary error if
+    /// a chapter or a lookup fails (nothing is stored then).
+    pub fn ensure_book_counted(&self, book_id: i64) -> Result<bool, AllreadsError> {
+        let row = self.book_row(book_id)?;
+        let stamp = self.count_stamp(&row.language_code)?;
+        if self.db()?.book_count_stamp(book_id)?.as_deref() == Some(stamp.as_str()) {
+            return Ok(false);
+        }
+        let rules = self.rules(&row.language_code)?;
+        let book = self.opened_book(book_id)?;
+        let chapters = self.db()?.chapter_titles(book_id)?.len();
+        let has_dictionary = !stamp.ends_with('/');
+        // One lookup per word; the dictionary is locked only for each lookup.
+        let lookup = |key: &str| {
+            self.with_dictionary(&row.language_code, |d| d.word_kinds(key))
+                .map(Option::unwrap_or_default)
+                .map_err(|e| DictionaryError::Invalid(e.to_string()))
+        };
+        let words = word_tally::count_book(
+            &book,
+            chapters,
+            &rules,
+            &row.language_code,
+            has_dictionary.then_some(&lookup as &dyn Fn(&str) -> _),
+        )?;
+        // Stored with the stamp from before counting: if the dictionary
+        // changed meanwhile, the next call sees a new stamp and counts again.
+        self.db()?.store_book_words(book_id, &stamp, &words)?;
+        Ok(true)
     }
 
     /// The languages for the Words tab: those of the books and of the saved
@@ -444,16 +430,23 @@ impl App {
     /// # Errors
     /// Returns `Database` if the database cannot be read.
     pub fn counted_difficulties(&self) -> Result<Vec<BookDifficultyOf>, AllreadsError> {
-        let version = PARSER_VERSION * 100 + TALLY_VERSION;
-        Ok(self
-            .db()?
-            .counted_difficulties(version)?
-            .into_iter()
-            .map(|(book_id, difficulty)| BookDifficultyOf {
-                book_id,
-                difficulty: difficulty.into(),
-            })
-            .collect())
+        let counted = self.db()?.counted_difficulties()?;
+        // Today's stamp per language, worked out once per language.
+        let mut stamps: HashMap<String, String> = HashMap::new();
+        let mut current = Vec::new();
+        for book in counted {
+            if !stamps.contains_key(&book.language_code) {
+                let stamp = self.count_stamp(&book.language_code)?;
+                stamps.insert(book.language_code.clone(), stamp);
+            }
+            if stamps[&book.language_code] == book.stamp {
+                current.push(BookDifficultyOf {
+                    book_id: book.book_id,
+                    difficulty: book.difficulty.into(),
+                });
+            }
+        }
+        Ok(current)
     }
 
     /// Changes only a saved word's status, e.g. a double tap raising its level;
@@ -544,9 +537,16 @@ impl App {
         let parsed = self.parsed_chapter(&row, index)?;
         let statuses = self.db()?.term_statuses(&row.language_code)?;
         // From the book's counted words (empty until its difficulty was asked for).
+        // Only from a count that is still current: after a dictionary change,
+        // names and forms wait for the new count (the reader asks for one).
+        let stamp = self.count_stamp(&row.language_code)?;
         let (names, lemmas) = {
             let db = self.db()?;
-            (db.book_names(book_id)?, db.book_lemmas(book_id)?)
+            if db.book_count_stamp(book_id)?.as_deref() == Some(stamp.as_str()) {
+                (db.book_names(book_id)?, db.book_lemmas(book_id)?)
+            } else {
+                Default::default()
+            }
         };
         let status_of = |key: &str| {
             statuses
@@ -945,8 +945,6 @@ impl App {
             &pair,
             &self.dictionaries_dir(),
         )?;
-        // Names and word forms in the books' difficulty come from the dictionary.
-        self.recount_pair(&pair)?;
         Ok(info.into())
     }
 
@@ -959,9 +957,7 @@ impl App {
             .lock()
             .map_err(|_| poisoned())?
             .remove(&pair);
-        let removed = dictionary::remove(&self.dictionaries_dir(), &pair)?;
-        self.recount_pair(&pair)?;
-        Ok(removed)
+        Ok(dictionary::remove(&self.dictionaries_dir(), &pair)?)
     }
 
     /// Looks a word up in the language's `-en` dictionary. `None` if no

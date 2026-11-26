@@ -53,6 +53,9 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun bookDifficulty(bookId: Long): BookDifficulty = io { app.bookDifficulty(bookId) }
 
+    /** Counts a book's words if needed; true if it counted now. */
+    suspend fun ensureBookCounted(bookId: Long): Boolean = io { app.ensureBookCounted(bookId) }
+
     suspend fun wordLanguageCodes(): List<String> = io { app.wordLanguageCodes() }
 
     suspend fun countedDifficulties(): List<BookDifficultyOf> = io { app.countedDifficulties() }
