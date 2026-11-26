@@ -137,3 +137,4 @@ A second pass, looking at the app as a designer and a learner would rather than 
 4. **Learning features:** 58, 60, then 59, 64.
 
 2026-11-26: library search, filters and sort (not on the original list). The search icon opens a field for title or author, with chips for All / Reading / Not started and, when there are several, the books' languages. The sort menu offers recently read, recently added, title and author, and remembers the choice. The Continue card only shows with the default view.
+Redesigned the same day: a "Search your library" pill always at the top (in place of the title bar), and one row of chips under it: the sort chip with its menu, then Reading / Not started and the languages as on-off filters.
