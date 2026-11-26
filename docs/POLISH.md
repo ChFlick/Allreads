@@ -74,7 +74,7 @@ Paper cuts and polish ideas from a run through every screen (2026-11-25), done b
 
 ## Done
 
-2026-11-25, quick-fix batch: 1 (app icon), 2, 3, 4, 5, 8, 11, 14, 15, 31, 35, 36. Item 32 needed no change, because the enum names already read "System / Light / Dark". Item 24 is postponed: hiding the button needs a `<queries>` entry for browsers, and the Toast does the job.
+2026-11-25, quick-fix batch: 1 (app icon), 2, 3, 4, 5, 8, 11, 14, 15, 31, 35, 36. Item 32 needed no change, because the enum names already read "System / Light / Dark". Items 5, 6 and 21 are covered by chip-saves (see DECISIONS, 2026-11-26), and item 10 stays as it is. Item 24 is postponed: hiding the button needs a `<queries>` entry for browsers, and the Toast does the job.
 
 ## Suggested order
 

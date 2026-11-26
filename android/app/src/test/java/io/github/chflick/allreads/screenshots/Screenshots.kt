@@ -121,7 +121,7 @@ class Screenshots(private val dark: Boolean) {
                             onDownloadDictionary = {},
                             dictionaryDownload = null,
                             onChoosePhrase = {},
-                            onSave = { _, _, _, _ -> },
+                            onSave = {},
                         )
                     }
                 }

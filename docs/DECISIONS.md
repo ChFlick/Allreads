@@ -76,3 +76,7 @@
 | 2026-11-25 | Step 24 suggests phrases from the dictionary's multi-word entries when a word is tapped, alongside long-press and drag | Christoph's choice; selecting by dragging is fiddly on a phone, and the dictionary already knows common phrases |
 | 2026-11-25 | Backup (F27) leaves v1 and goes on a "Roadmap after v1" list with the book browser, stats, AI Explain and other deferred ideas; steps 21 and 22 are marked done and deferred | Christoph does not need backup; his cards live in AnkiDroid. v1 is now step 19's phone check, 26a and 27 |
 | 2026-11-25 | README screenshots are rendered on the JVM by Paparazzi 1.3.5 from sample data, with the layout engine of Android 14 (`compileSdkVersion = 34` in the test environment) | No emulator or phone needed, and they can be re-rendered after UI changes. Paparazzi 2.0 alphas clash with AGP 8.13, and 1.3.5's Android 14 engine lacks a drawing method Compose calls when it believes it runs on 15 |
+
+## 2026-11-26: a status chip saves the word
+
+In the word drawer, tapping a status chip saves the word at once and the drawer stays open; the Save button is gone. Text typed afterwards (translation, notes, lemma) is saved when the drawer closes. A word that only had text typed into it is saved at level 1 on close. Just opening a word to look at it saves nothing. Why: reading becomes "tap a word, tap a level, read on", and swiping the drawer away no longer loses what was typed. The AnkiDroid card is created on the chip tap and updated with later edits. The sentence buttons (read aloud, translate) stay as they are.

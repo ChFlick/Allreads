@@ -8,7 +8,6 @@ import io.github.chflick.allreads.ui.megabytes
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.PaddingValues
 import uniffi.allreads_ffi.DictionaryEntry
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.PlayArrow
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -52,6 +50,37 @@ import io.github.chflick.allreads.ui.theme.label
 import io.github.chflick.allreads.ui.theme.wordStatusChoices
 import uniffi.allreads_ffi.WordStatus
 
+/** What the drawer would save: the status and the three text fields. */
+data class WordFields(val status: WordStatus, val translation: String, val notes: String, val lemma: String)
+
+/**
+ * The drawer's editable state. A status chip saves at once; text typed after
+ * that is saved when the drawer closes, so nothing typed is lost.
+ */
+class WordDraft(word: SelectedWord) {
+    // A first tap on a new word suggests level 1, the usual choice.
+    var status by mutableStateOf(if (word.status == WordStatus.New) WordStatus.Learning(1u) else word.status)
+    var translation by mutableStateOf(word.saved?.translation ?: "")
+    var notes by mutableStateOf(word.saved?.notes ?: "")
+    var lemma by mutableStateOf(word.saved?.lemma ?: "")
+    /** What was last saved, or null while the word is unsaved. */
+    var lastSaved: WordFields? = word.saved?.let { WordFields(word.status, it.translation, it.notes, it.lemma ?: "") }
+    /** True once the user has typed in a field (not when DeepL or the dictionary filled it). */
+    var typed by mutableStateOf(false)
+
+    val fields get() = WordFields(status, translation, notes, lemma)
+
+    /** What to save when the drawer closes: changes to a saved word, or a word the user typed into. */
+    fun toSaveOnClose(): WordFields? {
+        val saved = lastSaved
+        return when {
+            saved != null -> fields.takeIf { it != saved && it.status != WordStatus.New }
+            typed -> fields.takeIf { it.status != WordStatus.New }
+            else -> null
+        }
+    }
+}
+
 /**
  * Step 13: the word drawer. It opens half-height with the essentials (word,
  * translation in context, status, save); pull it up for the sentence, notes
@@ -68,10 +97,12 @@ fun WordSheet(
     onDownloadDictionary: () -> Unit,
     dictionaryDownload: DownloadState?,
     onChoosePhrase: (PhraseChoice) -> Unit,
-    onSave: (WordStatus, String, String, String) -> Unit,
+    onSave: (WordFields, close: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+    val draft = remember(word.text) { WordDraft(word) }
+    val close = { draft.toSaveOnClose()?.let { onSave(it, true) } ?: onDismiss() }
+    ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState()) {
         WordSheetContent(
             word = word,
             onTranslate = onTranslate,
@@ -81,7 +112,8 @@ fun WordSheet(
             onDownloadDictionary = onDownloadDictionary,
             dictionaryDownload = dictionaryDownload,
             onChoosePhrase = onChoosePhrase,
-            onSave = onSave,
+            onSave = { onSave(it, false) },
+            draft = draft,
         )
     }
 }
@@ -98,26 +130,20 @@ fun WordSheetContent(
     onDownloadDictionary: () -> Unit,
     dictionaryDownload: DownloadState?,
     onChoosePhrase: (PhraseChoice) -> Unit,
-    onSave: (WordStatus, String, String, String) -> Unit,
+    onSave: (WordFields) -> Unit,
+    draft: WordDraft = remember(word.text) { WordDraft(word) },
 ) {
-    // A first tap on a new word suggests level 1, the usual choice. A WordStatus
-    // cannot go into Android's saved state, so this uses remember, not rememberSaveable.
-    var status by remember(word.text) {
-        mutableStateOf(if (word.status == WordStatus.New) WordStatus.Learning(1u) else word.status)
-    }
-    var translation by rememberSaveable(word.text) { mutableStateOf(word.saved?.translation ?: "") }
-    var notes by rememberSaveable(word.text) { mutableStateOf(word.saved?.notes ?: "") }
     // Prefilled from the dictionary's suggestion, once it arrives, unless the word already has one.
-    var lemma by rememberSaveable(word.text) { mutableStateOf(word.saved?.lemma ?: "") }
     LaunchedEffect(word.dictionary?.suggestedLemma) {
         val suggested = word.dictionary?.suggestedLemma
-        if (suggested != null && lemma.isBlank() && word.saved?.lemma == null) lemma = suggested
+        if (suggested != null && draft.lemma.isBlank() && word.saved?.lemma == null) draft.lemma = suggested
     }
     // Fill an empty translation field with DeepL's answer when it arrives.
     LaunchedEffect(word.machineTranslation) {
         val machine = word.machineTranslation
-        if (machine != null && translation.isBlank()) translation = machine
+        if (machine != null && draft.translation.isBlank()) draft.translation = machine
     }
+    val translation = draft.translation
     val context = LocalContext.current
 
         Column(
@@ -141,11 +167,21 @@ fun WordSheetContent(
                     tint = if (speakingWord) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Spacer(Modifier.weight(1f))
-            // "New" on a word that was never saved has nothing to forget.
-            val forget = status == WordStatus.New
-            Button(enabled = !forget || word.saved != null, onClick = { onSave(status, translation, notes, lemma) }) {
-                Text(if (forget && word.saved != null) "Forget" else "Save")
+        }
+        // A chip saves straight away; "New" forgets a saved word.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            wordStatusChoices.forEach { choice ->
+                FilterChip(
+                    selected = draft.lastSaved != null && draft.status == choice,
+                    onClick = {
+                        draft.status = choice
+                        if (choice != WordStatus.New || draft.lastSaved != null) {
+                            onSave(draft.fields)
+                            draft.lastSaved = draft.fields.takeIf { choice != WordStatus.New }
+                        }
+                    },
+                    label = { Text(choice.label()) },
+                )
             }
         }
         // Dictionary phrases around the word come first, so they show in the half-open drawer.
@@ -176,36 +212,36 @@ fun WordSheetContent(
         }
         OutlinedTextField(
             value = translation,
-            onValueChange = { translation = it },
+            onValueChange = {
+                draft.translation = it
+                draft.typed = true
+            },
             label = { Text("Translation") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
         OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            wordStatusChoices.forEach { choice ->
-                FilterChip(
-                    selected = status == choice,
-                    onClick = { status = choice },
-                    label = { Text(choice.label()) },
-                )
-            }
-        }
 
         // --- Pull the drawer up for more context ---
         HorizontalDivider(Modifier.padding(top = 8.dp))
         Text("In this sentence", style = MaterialTheme.typography.labelLarge)
         Text(word.sentence, style = MaterialTheme.typography.bodyLarge)
         OutlinedTextField(
-            value = notes,
-            onValueChange = { notes = it },
+            value = draft.notes,
+            onValueChange = {
+                draft.notes = it
+                draft.typed = true
+            },
             label = { Text("Notes") },
             minLines = 2,
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
-            value = lemma,
-            onValueChange = { lemma = it },
+            value = draft.lemma,
+            onValueChange = {
+                draft.lemma = it
+                draft.typed = true
+            },
             label = { Text("Dictionary form (lemma)") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),

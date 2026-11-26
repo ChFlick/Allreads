@@ -360,8 +360,12 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
 
     fun dismissWord() = _state.update { it.copy(selected = null) }
 
-    /** Saves the selected word (or forgets it for New), then recolours the chapter. */
-    fun saveWord(status: WordStatus, translation: String, notes: String, lemma: String) {
+    /**
+     * Saves the selected word (or forgets it for New), then recolours the chapter.
+     * A status chip saves with the drawer open; closing it saves late edits and closes.
+     */
+    fun saveWord(fields: WordFields, close: Boolean) {
+        val (status, translation, notes, lemma) = fields
         val selected = _state.value.selected ?: return
         val state = _state.value
         val book = state.book ?: return
@@ -389,7 +393,12 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
                     )
                 }
             }
-            _state.update { it.copy(selected = null, message = result.exceptionOrNull()?.let(::describe)) }
+            _state.update { state ->
+                state.copy(
+                    selected = if (close) null else state.selected,
+                    message = result.exceptionOrNull()?.let(::describe),
+                )
+            }
             reloadStatuses()
             if (result.isSuccess) services.syncAnki()
         }
