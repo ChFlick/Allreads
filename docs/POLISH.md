@@ -78,7 +78,54 @@ Paper cuts and polish ideas from a run through every screen (2026-11-25), done b
 
 ## Suggested order
 
-1. **Quick fixes (one sitting):** 1, 2, 3, 4, 5, 8, 11, 14, 15, 24, 31, 32, 35, 36.
-2. **Reading flow:** 6, 21, 7, 10, 12, 16, 17.
+1. ~~Quick fixes~~ (done).
+2. **Reading flow:** 7, 12, 16, 17.
 3. **Before announcing v1.0:** 9, 34, 38.
 4. **Later:** 13, 26–30, 37, 39, 40.
+
+---
+
+# Round 2: design and improvements (2026-11-26)
+
+A second pass, looking at the app as a designer and a learner would rather than hunting bugs. Based on the current screenshots and code. Numbers continue from the first list.
+
+## Look and feel
+
+| # | Where | Observation | Suggestion | Size |
+|---|---|---|---|---|
+| 41 | App | The app's colours don't match the icon. The screenshots show Material's default purple, while the icon is navy and amber. With wallpaper colours on, the app looks different on every phone. | Give the app its own colour scheme from the icon (navy primary, amber accent; light and dark). Keep wallpaper colours as an opt-in in Appearance. | S–M |
+| 42 | Reader | Nearly every word has an underline (new words), so a page of a new book looks like a page of links. The underlines draw the eye more than the coloured learning words do. | Lighter by default: a dotted line or a very faint blue tint. Or a setting "Mark new words: underline / tint / nothing". LingQ uses a pale blue fill. | S |
+| 43 | Reader | Learning levels 2–4 are hard to tell apart (three similar yellows), and 4–5 nearly disappear on the light background. | One hue that gets fainter as you learn the word: level 1 strong, level 5 barely there. The page then shows "how much is left" at a glance. Check contrast in both themes. | S |
+| 44 | Reader | ▶ is a bare icon, but 文A is a filled circle, so the two sentence buttons look unrelated, and the filled circles make a strong column down the right side. | Same style for both: bare icons, or one small tonal pill holding both. (The buttons themselves stay, as decided.) | S |
+| 45 | Reader | A sentence's translation is grey serif text, almost as big as the original, so it blends into the next sentence. | Show it in a sans-serif font, smaller, with a thin coloured line on its left, like a quote. | S |
+| 46 | Reader | Each sentence is its own row, so paragraphs read as a stack of separate sentences. The gap between paragraphs (14 dp) and the gap between sentences (2 dp) are close to each other. | Make paragraph gaps clearly bigger (24 dp) and sentence gaps 0, so paragraphs read as blocks again. | S |
+| 47 | Reader | The reading font is the phone's default serif. | Bundle **Literata** (OFL, made for long reading in Google Play Books) and add a font choice (Literata / system serif / sans). | S–M |
+| 48 | Reader | Only light and dark. | Add a **sepia** reading theme and a true-black option for OLED. These are standard in readers and easy to do with the reader's own colours. | M |
+| 49 | Library | Books without a cover show an empty grey box. | A generated cover: the title on a colour picked from the title, like Apple Books does. | S |
+| 50 | Library | Progress is only "chapter 4 of 12". | A thin progress bar on each card, and the last-read book first. | S |
+| 51 | Library | The most common action, "carry on reading", is as small as everything else. | A "Continue reading" card at the top with the last book, its chapter and a big Continue button. | S–M |
+| 52 | Words | The trailing "2", "4", "1" are cryptic, and in dark mode the coloured dots are muddy and hard to tell apart. | A small pill in the status colour with "Level 2" or "Known", the same colours as in the reader. | S |
+| 53 | Words | Words saved at the start of a sentence keep their capital letter ("Coq", "Perle", "Pierre précieuse"). The cards in Anki get it too. | Save the display form in lower case when the capital only comes from the sentence start, using the same rule as the DeepL lowercasing. Proper nouns stay as they are. | S–M |
+| 54 | Words | The header (language chip, counts, search, filters) takes a third of the screen. The language chip shows even when there's only one language. | Hide the language row for a single language. Turn the counts into the screen's subtitle. Use a compact search field. | S |
+| 55 | Drawer | The status chips are plain grey, so nothing teaches you which colour means which level. | Fill each chip with its status colour (the selected one gets an outline or a tick). | S |
+| 56 | Drawer | After tapping a chip, the only sign that the word was saved is the highlight. | A brief "Saved · in AnkiDroid" line under the chips, or a check mark on the chip. | S |
+| 57 | Settings | No screenshot exists yet, so this screen hasn't had a visual review. It's the longest screen. | Add Settings to the Paparazzi screenshots, then review it like the others (ties in with #30). | S |
+
+## Features that would make the app better for learning
+
+| # | Idea | Why | Size |
+|---|---|---|---|
+| 58 | **Difficulty of a chapter or book**: "18 % new words" on the library card and the chapter start. | Helps you pick a book at the right level (the 95–98 % known-words rule). The core already knows every word's status. | M |
+| 59 | **Statistics**: known words over time, words saved this week, pages read. A small card at the top of Words. | Motivation; LingQ's "known words" count is its main progress signal. Needs a daily snapshot table in the core. | M |
+| 60 | **More dictionaries**: German, Spanish, Italian. | dictgen already handles any kaikki.org language; it's a run of the Dictionaries workflow plus language presets. Big value for little code. | S–M |
+| 61 | **Import from clipboard or a web page** as a book. | News and blog articles are good reading material, often better than books for beginners. | M |
+| 62 | **Text settings in the reader**: an "Aa" button in the top bar with size, spacing, font and theme. | Changing these in Settings means leaving the book. | M |
+| 63 | **Search in the book** and a **table of contents** (#13). | Finding a passage again. | M |
+| 64 | **Tap-to-level-up while reading**: a second tap on a learning word raises its level by one without opening the drawer. | Revisiting words as you meet them again is how levels are meant to move. Needs a clear gesture so it doesn't happen by accident. | S–M |
+
+## Suggested order (round 2)
+
+1. **Design quick wins:** 41, 42, 43, 44, 45, 46, 52, 55. Together these change the whole look, and each is small.
+2. **Library:** 49, 50, 51.
+3. **Reading comfort:** 47, 48, 62.
+4. **Learning features:** 58, 60, then 59, 64.
