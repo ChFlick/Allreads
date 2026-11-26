@@ -12,6 +12,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -256,16 +262,36 @@ fun WordSheetContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (revealed) OutlinedTextField(
-            value = translation,
-            onValueChange = {
-                draft.translation = it
-                draft.typed = true
-            },
-            label = { Text("Translation") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // The translation reads as text; ✎ opens the field for the rare correction.
+        var editing by rememberSaveable(word.text) { mutableStateOf(false) }
+        if (revealed && editing) {
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focus.requestFocus() }
+            OutlinedTextField(
+                value = translation,
+                onValueChange = {
+                    draft.translation = it
+                    draft.typed = true
+                },
+                label = { Text("Translation") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { editing = false }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+        } else if (revealed) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    translation.ifBlank { "No translation yet" },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (translation.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { editing = true }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit the translation")
+                }
+            }
+        }
         OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary, revealed)
         if (!revealed) {
             FilledTonalButton(onClick = { revealed = true }, modifier = Modifier.fillMaxWidth()) {
