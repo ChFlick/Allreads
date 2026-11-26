@@ -56,6 +56,7 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 - **Stats** (F25, from step 26): known words per language, new words per day, % known per chapter.
 - **AI "Explain"** (step 22): grammar and idioms explained by an OpenAI-compatible or Anthropic model with the user's own key.
 - **More dictionaries:** German and Spanish → English through the same Dictionaries workflow.
+- **Monolingual definitions:** real definitions in the book's language (e.g. French → French from the French Wiktionary, which kaikki.org also extracts). Needs a second reader in dictgen for that edition's format and a second download. Builds on the "meanings in the book's language" setting (2026-11-26), which today shows synonyms from the English Wiktionary.
 - **Cloud voices and audio on cards** (from step 25): a second `Speech` implementation, and audio files saved into Anki cards.
 - **Whole-chapter read-aloud** (dropped from step 25 in v1).
 - **CSV export** (step 20 was dropped): only if someone asks.

@@ -84,3 +84,7 @@ In the word drawer, tapping a status chip saves the word at once and the drawer 
 ## 2026-11-26: the app's own colours
 
 The app uses its own navy and amber colours, taken from the icon, instead of the wallpaper's colours. Wallpaper colours (Android 12+) are an opt-in switch in Settings → Appearance. Learning levels are one amber hue that fades from level 1 to level 5, and new words get a dotted underline. Why: the app looks the same on every phone and matches its icon, and the reader's colours stay easy to tell apart.
+
+## 2026-11-26: meanings in the book's language, translations on reveal
+
+A setting (Settings → Dictionaries, off by default) makes the word drawer show synonyms in the book's language and the dictionary forms, and hide the DeepL translation, the English definitions and the translation field behind "Reveal translation". DeepL is still asked in the background, so revealing is instant and saved cards still get the translation. Synonyms come from the English Wiktionary (kaikki.org), stored in a new optional `synonym` table in dictionary files. The table is additive, so the format stays 1: old files work without synonyms, and old apps ignore the table. Real monolingual definitions (from the French Wiktionary) are on the roadmap.

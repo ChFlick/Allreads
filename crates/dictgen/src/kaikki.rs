@@ -20,6 +20,9 @@ pub struct KaikkiEntry {
     pub sounds: Vec<KaikkiSound>,
     #[serde(default)]
     pub forms: Vec<KaikkiForm>,
+    /// Synonyms of the whole entry; senses can have their own too.
+    #[serde(default)]
+    pub synonyms: Vec<KaikkiWord>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +34,8 @@ pub struct KaikkiSense {
     pub form_of: Vec<KaikkiWord>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub synonyms: Vec<KaikkiWord>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -58,7 +63,12 @@ pub struct Headword {
     pub pos: String,
     pub ipa: String,
     pub glosses: Vec<String>,
+    /// Synonyms in the word's own language, entry-wide first, without repeats.
+    pub synonyms: Vec<String>,
 }
+
+/// At most this many synonyms are kept per headword; the drawer has little room.
+const MAX_SYNONYMS: usize = 8;
 
 /// A form and the dictionary form it belongs to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,12 +148,28 @@ pub fn convert(entry: &KaikkiEntry, rules: &LanguageRules) -> (Option<Headword>,
         .iter()
         .find_map(|s| s.ipa.clone())
         .unwrap_or_default();
+    let mut synonyms: Vec<String> = Vec::new();
+    let candidates = entry
+        .synonyms
+        .iter()
+        .chain(entry.senses.iter().flat_map(|s| s.synonyms.iter()));
+    for synonym in candidates {
+        let word = synonym.word.trim();
+        // Wiktionary also lists "Thesaurus:…" pages among synonyms.
+        if word.is_empty() || word == entry.word || word.contains(':') {
+            continue;
+        }
+        if synonyms.len() < MAX_SYNONYMS && !synonyms.iter().any(|s| s == word) {
+            synonyms.push(word.to_string());
+        }
+    }
     let headword = (!glosses.is_empty() && !only_forms).then(|| Headword {
         key,
         word: entry.word.clone(),
         pos: entry.pos.clone(),
         ipa,
         glosses,
+        synonyms,
     });
     (headword, links)
 }

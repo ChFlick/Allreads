@@ -166,6 +166,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             dictionaryDownload = word.dictionaryOffer?.let { downloads[it.pair] },
             onSave = viewModel::saveWord,
             onDismiss = viewModel::dismissWord,
+            hideTranslations = settings.hideTranslations,
         )
     }
 }

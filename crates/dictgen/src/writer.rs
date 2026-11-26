@@ -73,6 +73,12 @@ impl<'conn> Writer<'conn> {
             insert.execute(params![id, position, gloss])?;
             self.counts.senses += 1;
         }
+        let mut insert = self
+            .tx
+            .prepare_cached("INSERT INTO synonym (entry_id, position, word) VALUES (?1, ?2, ?3)")?;
+        for (position, word) in (0_i64..).zip(&headword.synonyms) {
+            insert.execute(params![id, position, word])?;
+        }
         self.counts.entries += 1;
         Ok(())
     }

@@ -356,6 +356,8 @@ pub struct DictionaryEntry {
     pub part_of_speech: String,
     pub ipa: String,
     pub senses: Vec<String>,
+    /// Words in the book's language with the same meaning.
+    pub synonyms: Vec<String>,
 }
 
 /// The word is a form of `lemma`, e.g. "lisait" of "lire".
@@ -388,6 +390,7 @@ impl From<allreads_core::dictionary::Lookup> for DictionaryLookup {
                     part_of_speech: e.pos,
                     ipa: e.ipa,
                     senses: e.senses,
+                    synonyms: e.synonyms,
                 })
                 .collect(),
             forms: lookup

@@ -26,6 +26,16 @@ CREATE TABLE sense (
     PRIMARY KEY (entry_id, position)
 ) WITHOUT ROWID;
 
+-- Words in the dictionary's language with the same meaning, e.g. "lit" ->
+-- "couche". Added after format 1 was published, without a format bump: the
+-- table is optional, older files simply have none, and older apps ignore it.
+CREATE TABLE synonym (
+    entry_id INTEGER NOT NULL REFERENCES entry (id),
+    position INTEGER NOT NULL,
+    word     TEXT NOT NULL,
+    PRIMARY KEY (entry_id, position)
+) WITHOUT ROWID;
+
 -- An inflected or alternative form and its dictionary form, e.g.
 -- "lisait" -> "lire" (verb; "imperfect indicative singular third-person").
 -- One row per form, lemma and part of speech; a form with several readings

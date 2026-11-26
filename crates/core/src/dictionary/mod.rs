@@ -56,6 +56,8 @@ pub(crate) mod test_support {
                  (3, 'pierre précieuse', 'pierre précieuse', 'noun', '');
              INSERT INTO sense (entry_id, position, gloss) VALUES
                  (1, 0, 'bed'), (1, 1, 'layer'), (2, 0, 'to read'), (3, 0, 'gemstone');
+             INSERT INTO synonym (entry_id, position, word) VALUES
+                 (1, 0, 'couche'), (1, 1, 'couchette');
              INSERT INTO form (key, lemma, pos, tags) VALUES
                  ('lit', 'lire', 'verb', 'indicative present singular third-person'),
                  ('lisait', 'lire', 'verb', 'imperfect indicative singular third-person');",

@@ -114,6 +114,21 @@ fun SettingsScreen(services: Services) {
             HorizontalDivider()
             Section("Dictionaries")
             DictionarySection(services.dictionaries)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Meanings in the book's language", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "The word drawer shows synonyms and dictionary forms first. Translations stay hidden " +
+                            "until you tap Reveal; they still load in the background, so revealing is instant.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = settings.hideTranslations,
+                    onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
+                )
+            }
 
             HorizontalDivider()
             Section("Read aloud")

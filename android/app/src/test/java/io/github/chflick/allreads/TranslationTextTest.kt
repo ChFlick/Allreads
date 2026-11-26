@@ -8,7 +8,7 @@ import uniffi.allreads_ffi.DictionaryForm
 import uniffi.allreads_ffi.DictionaryLookup
 
 class TranslationTextTest {
-    private fun entry(word: String, pos: String) = DictionaryEntry(word, pos, "", listOf("x"))
+    private fun entry(word: String, pos: String) = DictionaryEntry(word, pos, "", listOf("x"), emptyList())
     private fun lookup(vararg entries: DictionaryEntry, forms: List<DictionaryForm> = emptyList()) =
         DictionaryLookup(entries.toList(), forms, null)
 

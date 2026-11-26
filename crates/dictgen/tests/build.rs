@@ -49,6 +49,17 @@ fn headwords_keep_their_meanings_and_pronunciation() {
 }
 
 #[test]
+fn synonyms_are_kept_once_without_thesaurus_links() {
+    let (_dir, conn) = built();
+    let synonyms = rows(
+        &conn,
+        "SELECT y.word FROM entry e JOIN synonym y ON y.entry_id = e.id WHERE e.key = ?1 ORDER BY y.position",
+        "lit",
+    );
+    assert_eq!(synonyms, ["couche", "couchette"]);
+}
+
+#[test]
 fn forms_point_to_their_lemma_once_with_their_tags() {
     let (_dir, conn) = built();
     let lit = rows(

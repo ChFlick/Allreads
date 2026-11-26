@@ -43,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontStyle
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -99,6 +100,7 @@ fun WordSheet(
     onChoosePhrase: (PhraseChoice) -> Unit,
     onSave: (WordFields, close: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    hideTranslations: Boolean = false,
 ) {
     val draft = remember(word.text) { WordDraft(word) }
     val close = { draft.toSaveOnClose()?.let { onSave(it, true) } ?: onDismiss() }
@@ -114,6 +116,7 @@ fun WordSheet(
             onChoosePhrase = onChoosePhrase,
             onSave = { onSave(it, false) },
             draft = draft,
+            hideTranslations = hideTranslations,
         )
     }
 }
@@ -132,7 +135,10 @@ fun WordSheetContent(
     onChoosePhrase: (PhraseChoice) -> Unit,
     onSave: (WordFields) -> Unit,
     draft: WordDraft = remember(word.text) { WordDraft(word) },
+    hideTranslations: Boolean = false,
 ) {
+    // With "meanings in the book's language" on, translations wait for a tap on Reveal.
+    var revealed by rememberSaveable(word.text) { mutableStateOf(!hideTranslations) }
     // Prefilled from the dictionary's suggestion, once it arrives, unless the word already has one.
     LaunchedEffect(word.dictionary?.suggestedLemma) {
         val suggested = word.dictionary?.suggestedLemma
@@ -189,12 +195,12 @@ fun WordSheetContent(
             FilledTonalButton(onClick = { onChoosePhrase(choice) }, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "Phrase: ${choice.suggestion.text}" +
-                        if (choice.suggestion.gloss.isBlank()) "" else " · ${choice.suggestion.gloss}",
+                        if (choice.suggestion.gloss.isBlank() || !revealed) "" else " · ${choice.suggestion.gloss}",
                     maxLines = 2,
                 )
             }
         }
-        when {
+        if (revealed) when {
             word.translating -> Text("Translating…", color = MaterialTheme.colorScheme.onSurfaceVariant)
             word.translationError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -210,7 +216,7 @@ fun WordSheetContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        OutlinedTextField(
+        if (revealed) OutlinedTextField(
             value = translation,
             onValueChange = {
                 draft.translation = it
@@ -220,7 +226,12 @@ fun WordSheetContent(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary)
+        OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary, revealed)
+        if (!revealed) {
+            FilledTonalButton(onClick = { revealed = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Reveal translation")
+            }
+        }
 
         // --- Pull the drawer up for more context ---
         HorizontalDivider(Modifier.padding(top = 8.dp))
@@ -268,6 +279,7 @@ private fun OfflineDictionary(
     download: DownloadState?,
     onShowLemma: (String) -> Unit,
     onDownload: () -> Unit,
+    revealed: Boolean,
 ) {
     val lookup = word.dictionary
     if (lookup == null) {
@@ -320,27 +332,40 @@ private fun OfflineDictionary(
                 )
             }
         }
-        lookup.entries.forEach { DictionaryEntryText(it) }
+        lookup.entries.forEach { DictionaryEntryText(it, revealed) }
         word.lemmaEntry?.let { (lemma, entry) ->
             HorizontalDivider()
             Text(lemma, style = MaterialTheme.typography.titleMedium)
-            entry.entries.forEach { DictionaryEntryText(it) }
+            entry.entries.forEach { DictionaryEntryText(it, revealed) }
         }
         if (lookup.entries.isEmpty() && lookup.forms.isEmpty()) {
             Text("Not in the offline dictionary.", style = MaterialTheme.typography.bodySmall)
+        } else if (!revealed && (lookup.entries + word.lemmaEntry?.second?.entries.orEmpty()).all { it.synonyms.isEmpty() }) {
+            Text("No synonyms in the dictionary.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
-/** "noun · /li/" and up to three numbered meanings; tap "more" for the rest. */
+/**
+ * "noun · /li/", its synonyms, and up to three numbered meanings (tap "more"
+ * for the rest). The meanings are English, so they wait for [revealed].
+ */
 @Composable
-private fun DictionaryEntryText(entry: DictionaryEntry) {
+private fun DictionaryEntryText(entry: DictionaryEntry, revealed: Boolean) {
     var all by remember(entry) { mutableStateOf(false) }
     Text(
         listOf(entry.partOfSpeech, entry.ipa).filter { it.isNotBlank() }.joinToString(" · "),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    if (entry.synonyms.isNotEmpty()) {
+        Text(
+            "≈ ${entry.synonyms.joinToString(", ")}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontStyle = FontStyle.Italic,
+        )
+    }
+    if (!revealed) return
     val shown = if (all) entry.senses else entry.senses.take(3)
     shown.forEachIndexed { index, sense ->
         Text("${index + 1}. $sense", style = MaterialTheme.typography.bodyMedium)

@@ -219,7 +219,7 @@ private object Samples {
         machineTranslation = "pearl",
         dictionary = DictionaryLookup(
             entries = listOf(
-                DictionaryEntry("perle", "noun", "/pɛʁl/", listOf("pearl", "bead", "gem, treasure (a person or thing of great value)")),
+                DictionaryEntry("perle", "noun", "/pɛʁl/", listOf("pearl", "bead", "gem, treasure (a person or thing of great value)"), listOf("joyau", "gemme")),
             ),
             forms = emptyList(),
             suggestedLemma = null,

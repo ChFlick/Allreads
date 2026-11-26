@@ -23,6 +23,8 @@ data class AppSettings(
     val speechRate: Float = 1.0f,
     /** Say a word as soon as it is tapped. */
     val speakOnTap: Boolean = false,
+    /** The word drawer shows synonyms in the book's language and hides translations until revealed. */
+    val hideTranslations: Boolean = false,
     /** The voice chosen per language code; a missing language uses the best installed voice. */
     val voices: Map<String, String> = emptyMap(),
     /** The library's sort, by `BookSort` name. */
@@ -55,6 +57,7 @@ class SettingsStore(context: Context) {
             .putBoolean("anki_word_card", next.ankiWordCard)
             .putFloat("speech_rate", next.speechRate)
             .putBoolean("speak_on_tap", next.speakOnTap)
+            .putBoolean("hide_translations", next.hideTranslations)
             // Voice names hold letters, digits, '-' and '_', so "fr=name;de=name" is safe.
             .putString("voices", next.voices.entries.joinToString(";") { "${it.key}=${it.value}" })
             .apply()
@@ -75,6 +78,7 @@ class SettingsStore(context: Context) {
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),
             speechRate = prefs.getFloat("speech_rate", defaults.speechRate),
             speakOnTap = prefs.getBoolean("speak_on_tap", defaults.speakOnTap),
+            hideTranslations = prefs.getBoolean("hide_translations", defaults.hideTranslations),
             voices = prefs.getString("voices", null).orEmpty().split(';')
                 .mapNotNull { entry -> entry.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }
                 .toMap(),

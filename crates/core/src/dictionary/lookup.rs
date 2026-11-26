@@ -9,6 +9,8 @@ use super::{DictionaryError, FORMAT_VERSION};
 /// An installed dictionary, opened read-only.
 pub struct Dictionary {
     conn: Connection,
+    /// Files built before synonyms were added have no `synonym` table.
+    has_synonyms: bool,
 }
 
 /// A headword: "lit" (noun), /li/, "bed; layer".
@@ -18,6 +20,8 @@ pub struct DictionaryEntry {
     pub pos: String,
     pub ipa: String,
     pub senses: Vec<String>,
+    /// Words in the dictionary's own language with the same meaning.
+    pub synonyms: Vec<String>,
 }
 
 /// The word is a form of `lemma`, e.g. "lisait" of "lire" (imperfect ...).
@@ -75,7 +79,14 @@ impl Dictionary {
             path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        let dictionary = Dictionary { conn };
+        let has_synonyms = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'synonym'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count > 0)?;
+        let dictionary = Dictionary { conn, has_synonyms };
         let format = dictionary.meta("format")?;
         if format.as_deref() != Some(FORMAT_VERSION.to_string().as_str()) {
             return Err(DictionaryError::Invalid(format!(
@@ -168,6 +179,7 @@ impl Dictionary {
                         pos: row.get(2)?,
                         ipa: row.get(3)?,
                         senses: Vec::new(),
+                        synonyms: Vec::new(),
                     },
                 ))
             })?;
@@ -182,6 +194,16 @@ impl Dictionary {
             entry.senses = senses
                 .query_map([*id], |row| row.get(0))?
                 .collect::<Result<_, _>>()?;
+        }
+        if self.has_synonyms {
+            let mut synonyms = self
+                .conn
+                .prepare_cached("SELECT word FROM synonym WHERE entry_id = ?1 ORDER BY position")?;
+            for (id, entry) in &mut entries {
+                entry.synonyms = synonyms
+                    .query_map([*id], |row| row.get(0))?
+                    .collect::<Result<_, _>>()?;
+            }
         }
         let mut forms = self.conn.prepare_cached(
             "SELECT lemma, pos, tags FROM form WHERE key = ?1 ORDER BY lemma, pos",
@@ -222,6 +244,7 @@ mod tests {
         assert_eq!(lit.entries.len(), 1);
         assert_eq!(lit.entries[0].senses, ["bed", "layer"]);
         assert_eq!(lit.entries[0].ipa, "/li/");
+        assert_eq!(lit.entries[0].synonyms, ["couche", "couchette"]);
         assert_eq!(lit.suggested_lemma(), Some("lire"));
     }
 
@@ -259,6 +282,20 @@ mod tests {
         let nothing = dictionary.lookup("xyz").unwrap();
         assert!(nothing.is_empty());
         assert_eq!(nothing.suggested_lemma(), None);
+    }
+
+    #[test]
+    fn a_file_without_synonyms_still_works() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fr-en.sqlite");
+        write_tiny(&path, "fr-en", FORMAT_VERSION);
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("DROP TABLE synonym")
+            .unwrap();
+        let lit = Dictionary::open(&path).unwrap().lookup("lit").unwrap();
+        assert_eq!(lit.entries[0].senses, ["bed", "layer"]);
+        assert!(lit.entries[0].synonyms.is_empty());
     }
 
     #[test]
