@@ -15,6 +15,8 @@ data class AppSettings(
     val fontScale: Float = 1.0f,
     val lineSpacing: Float = 1.4f,
     val theme: ThemeMode = ThemeMode.System,
+    /** Android 12+: use the wallpaper's colours instead of the app's own. */
+    val wallpaperColors: Boolean = false,
     /** Adds a word → meaning card next to the sentence card in new note types. */
     val ankiWordCard: Boolean = false,
     /** Read-aloud speed, 1.0 is normal. */
@@ -46,6 +48,7 @@ class SettingsStore(context: Context) {
             .putFloat("font_scale", next.fontScale)
             .putFloat("line_spacing", next.lineSpacing)
             .putString("theme", next.theme.name)
+            .putBoolean("wallpaper_colors", next.wallpaperColors)
             .putBoolean("anki_word_card", next.ankiWordCard)
             .putFloat("speech_rate", next.speechRate)
             .putBoolean("speak_on_tap", next.speakOnTap)
@@ -64,6 +67,7 @@ class SettingsStore(context: Context) {
             theme = prefs.getString("theme", null)
                 ?.let { name -> ThemeMode.entries.firstOrNull { it.name == name } }
                 ?: defaults.theme,
+            wallpaperColors = prefs.getBoolean("wallpaper_colors", defaults.wallpaperColors),
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),
             speechRate = prefs.getFloat("speech_rate", defaults.speechRate),
             speakOnTap = prefs.getBoolean("speak_on_tap", defaults.speakOnTap),

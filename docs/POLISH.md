@@ -123,6 +123,10 @@ A second pass, looking at the app as a designer and a learner would rather than 
 | 63 | **Search in the book** and a **table of contents** (#13). | Finding a passage again. | M |
 | 64 | **Tap-to-level-up while reading**: a second tap on a learning word raises its level by one without opening the drawer. | Revisiting words as you meet them again is how levels are meant to move. Needs a clear gesture so it doesn't happen by accident. | S–M |
 
+## Done (round 2)
+
+2026-11-26: 41 (own navy/amber colours; wallpaper colours are an opt-in switch in Appearance), 42 (dotted underline), 43 (one amber hue fading by level), 44, 45, 46, 52, 55 (chips, also in the Words editor). More dictionaries (60) are on hold for now.
+
 ## Suggested order (round 2)
 
 1. **Design quick wins:** 41, 42, 43, 44, 45, 46, 52, 55. Together these change the whole look, and each is small.

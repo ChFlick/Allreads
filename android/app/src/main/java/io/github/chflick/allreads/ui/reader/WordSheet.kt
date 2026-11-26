@@ -46,7 +46,7 @@ import androidx.compose.ui.Modifier
 import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import io.github.chflick.allreads.ui.theme.label
+import io.github.chflick.allreads.ui.theme.StatusChip
 import io.github.chflick.allreads.ui.theme.wordStatusChoices
 import uniffi.allreads_ffi.WordStatus
 
@@ -171,7 +171,8 @@ fun WordSheetContent(
         // A chip saves straight away; "New" forgets a saved word.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             wordStatusChoices.forEach { choice ->
-                FilterChip(
+                StatusChip(
+                    status = choice,
                     selected = draft.lastSaved != null && draft.status == choice,
                     onClick = {
                         draft.status = choice
@@ -180,7 +181,6 @@ fun WordSheetContent(
                             draft.lastSaved = draft.fields.takeIf { choice != WordStatus.New }
                         }
                     },
-                    label = { Text(choice.label()) },
                 )
             }
         }

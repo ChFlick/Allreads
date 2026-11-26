@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             val settings by services.settings.settings.collectAsStateWithLifecycle()
-            AllreadsTheme(settings.theme) {
+            AllreadsTheme(settings.theme, settings.wallpaperColors) {
                 AllreadsNavigation(services)
             }
         }

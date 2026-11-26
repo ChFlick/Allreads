@@ -4,22 +4,30 @@ import androidx.compose.ui.graphics.Color
 import uniffi.allreads_ffi.WordStatus
 
 /**
- * The background a word gets. Words being learned fade from orange (level 1)
- * to green (level 5); dark mode uses deep tones so light text stays readable.
+ * The background a word gets. Words being learned are amber, strongest at
+ * level 1 and fading towards level 5, so a page shows at a glance how much is
+ * left to learn. Dark mode uses deep tones so light text stays readable.
  * Known and ignored words stay plain. In the reader, new words get no fill,
- * only a faint underline, so a fresh book is not a wall of colour; the Words
- * tab uses the blue for its status dots.
+ * only a dotted underline; the blue is for chips and the Words tab.
  */
 fun WordStatus.highlight(dark: Boolean): Color? = when (this) {
-    WordStatus.New -> if (dark) Color(0xFF27496D) else Color(0xFFBBDEFB)
+    WordStatus.New -> if (dark) Color(0xFF27496D) else Color(0xFFD6E3FF)
     is WordStatus.Learning -> when (level.toInt()) {
-        1 -> if (dark) Color(0xFF7A4512) else Color(0xFFFFCC80)
-        2 -> if (dark) Color(0xFF6E5514) else Color(0xFFFFE082)
-        3 -> if (dark) Color(0xFF5F5A1C) else Color(0xFFFFF59D)
-        4 -> if (dark) Color(0xFF4B5523) else Color(0xFFF0F4C3)
-        else -> if (dark) Color(0xFF3B4F2C) else Color(0xFFDCEDC8)
+        1 -> if (dark) Color(0xFF8A5A10) else Color(0xFFFFB74D)
+        2 -> if (dark) Color(0xFF725018) else Color(0xFFFFC978)
+        3 -> if (dark) Color(0xFF5C451D) else Color(0xFFFFD9A1)
+        4 -> if (dark) Color(0xFF483B20) else Color(0xFFFFE7C6)
+        else -> if (dark) Color(0xFF383124) else Color(0xFFFFF1DE)
     }
     WordStatus.WellKnown, WordStatus.Ignored -> null
+}
+
+/** A longer label for lists, e.g. "Level 2". */
+fun WordStatus.longLabel(): String = when (this) {
+    WordStatus.New -> "New"
+    is WordStatus.Learning -> "Level $level"
+    WordStatus.WellKnown -> "Known"
+    WordStatus.Ignored -> "Ignored"
 }
 
 /** A short label for status chips. */

@@ -1,6 +1,8 @@
 package io.github.chflick.allreads.ui.words
 
 import io.github.chflick.allreads.ui.languageName
+import io.github.chflick.allreads.ui.theme.StatusChip
+import io.github.chflick.allreads.ui.theme.StatusPill
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -84,16 +86,11 @@ fun WordsScreen(viewModel: WordsViewModel) {
 
 @Composable
 private fun TermRow(term: SavedTerm, onClick: () -> Unit) {
-    val dark = LocalDarkTheme.current
     ListItem(
         modifier = Modifier.clickable(onClick = onClick),
-        leadingContent = {
-            val color = term.status.highlight(dark) ?: MaterialTheme.colorScheme.outlineVariant
-            Box(Modifier.size(12.dp).background(color, CircleShape))
-        },
         headlineContent = { Text(term.displayText) },
         supportingContent = term.translation.takeIf { it.isNotBlank() }?.let { { Text(it) } },
-        trailingContent = { Text(term.status.label(), style = MaterialTheme.typography.labelMedium) },
+        trailingContent = { StatusPill(term.status) },
     )
 }
 
@@ -123,7 +120,7 @@ private fun TermEditor(
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 wordStatusChoices.forEach { choice ->
-                    FilterChip(selected = status == choice, onClick = { status = choice }, label = { Text(choice.label()) })
+                    StatusChip(choice, selected = status == choice, onClick = { status = choice })
                 }
             }
             OutlinedTextField(

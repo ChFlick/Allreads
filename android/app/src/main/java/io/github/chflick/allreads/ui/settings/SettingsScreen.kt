@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.ui.settings
 
+import android.os.Build
+import androidx.compose.material3.Switch
+
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.platform.LocalUriHandler
@@ -124,6 +127,15 @@ fun SettingsScreen(services: Services) {
                         selected = settings.theme == mode,
                         onClick = { services.settings.update { it.copy(theme = mode) } },
                         label = { Text(mode.name) },
+                    )
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Use the wallpaper's colours", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = settings.wallpaperColors,
+                        onCheckedChange = { on -> services.settings.update { it.copy(wallpaperColors = on) } },
                     )
                 }
             }

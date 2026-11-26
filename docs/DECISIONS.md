@@ -80,3 +80,7 @@
 ## 2026-11-26: a status chip saves the word
 
 In the word drawer, tapping a status chip saves the word at once and the drawer stays open; the Save button is gone. Text typed afterwards (translation, notes, lemma) is saved when the drawer closes. A word that only had text typed into it is saved at level 1 on close. Just opening a word to look at it saves nothing. Why: reading becomes "tap a word, tap a level, read on", and swiping the drawer away no longer loses what was typed. The AnkiDroid card is created on the chip tap and updated with later edits. The sentence buttons (read aloud, translate) stay as they are.
+
+## 2026-11-26: the app's own colours
+
+The app uses its own navy and amber colours, taken from the icon, instead of the wallpaper's colours. Wallpaper colours (Android 12+) are an opt-in switch in Settings → Appearance. Learning levels are one amber hue that fades from level 1 to level 5, and new words get a dotted underline. Why: the app looks the same on every phone and matches its icon, and the reader's colours stay easy to tell apart.

@@ -56,8 +56,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -196,7 +200,7 @@ private fun SentenceRow(
     // The words being selected by a long-press and drag, as token indexes.
     var selection by remember(row) { mutableStateOf<IntRange?>(null) }
     val selectionColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-    val underline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+    val underline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val rowStyle = when (row.headingLevel) {
         null -> style
@@ -209,7 +213,7 @@ private fun SentenceRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = if (row.startsBlock) 14.dp else 2.dp)
+            .padding(top = if (row.startsBlock) 22.dp else 0.dp)
             .background(tint, MaterialTheme.shapes.small),
         verticalAlignment = Alignment.Top,
     ) {
@@ -266,12 +270,22 @@ private fun SentenceRow(
             when (translation) {
                 null -> Unit
                 SentenceTranslation.Loading -> CircularProgressIndicator(Modifier.padding(6.dp).size(18.dp), strokeWidth = 2.dp)
-                is SentenceTranslation.Shown -> Text(
-                    translation.text,
-                    style = style.copy(fontSize = style.fontSize * 0.9f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
-                )
+                is SentenceTranslation.Shown -> {
+                    // Sans-serif, smaller, with a line on its left like a quote, so it
+                    // doesn't blend into the next sentence.
+                    val bar = MaterialTheme.colorScheme.secondary
+                    Text(
+                        translation.text,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = style.fontSize * 0.8f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(top = 4.dp, bottom = 6.dp)
+                            .drawBehind {
+                                drawLine(bar, Offset(0f, 0f), Offset(0f, size.height), strokeWidth = 2.dp.toPx())
+                            }
+                            .padding(start = 10.dp),
+                    )
+                }
                 is SentenceTranslation.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         translation.message,
@@ -297,16 +311,22 @@ private fun SentenceRow(
 @Composable
 private fun TranslateButton(shown: Boolean, onClick: () -> Unit) {
     if (shown) {
-        IconButton(onClick = onClick) {
-            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Hide the translation")
+        IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Default.KeyboardArrowUp,
+                contentDescription = "Hide the translation",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     } else {
-        FilledTonalIconButton(
-            onClick = onClick,
-            modifier = Modifier.padding(4.dp).size(36.dp),
-            colors = IconButtonDefaults.filledTonalIconButtonColors(),
-        ) {
-            Text("文A", style = MaterialTheme.typography.labelSmall)
+        // A bare button, like the read-aloud one next to it.
+        IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+            Text(
+                "文A",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { contentDescription = "Translate the sentence" },
+            )
         }
     }
 }
@@ -330,13 +350,15 @@ private fun styledText(row: ReaderRow, dark: Boolean): AnnotatedString = buildAn
 }
 
 /**
- * A thin, faint line under each range, one segment per text line. Compose's
- * own underline always has the text's colour and weight, which is too loud
- * when most words on a page are new.
+ * A dotted line under each range, one segment per text line. Compose's own
+ * underline is solid and has the text's colour, which is too loud when most
+ * words on a page are new.
  */
 private fun DrawScope.drawFaintUnderlines(layout: TextLayoutResult, ranges: List<IntRange>, color: Color) {
-    val stroke = 1.dp.toPx()
-    val gap = 2.dp.toPx()
+    val stroke = 1.5.dp.toPx()
+    val gap = 2.5.dp.toPx()
+    // Round caps on near-zero dashes draw dots, 3 dp apart.
+    val dots = PathEffect.dashPathEffect(floatArrayOf(0.01f, 3.dp.toPx()))
     for (range in ranges) {
         val firstLine = layout.getLineForOffset(range.first)
         val lastLine = layout.getLineForOffset(range.last)
@@ -344,7 +366,10 @@ private fun DrawScope.drawFaintUnderlines(layout: TextLayoutResult, ranges: List
             val start = if (line == firstLine) layout.getBoundingBox(range.first).left else layout.getLineLeft(line)
             val end = if (line == lastLine) layout.getBoundingBox(range.last).right else layout.getLineRight(line)
             val y = layout.getLineBaseline(line) + gap
-            drawLine(color, Offset(minOf(start, end), y), Offset(maxOf(start, end), y), strokeWidth = stroke)
+            drawLine(
+                color, Offset(minOf(start, end), y), Offset(maxOf(start, end), y),
+                strokeWidth = stroke, cap = StrokeCap.Round, pathEffect = dots,
+            )
         }
     }
 }
