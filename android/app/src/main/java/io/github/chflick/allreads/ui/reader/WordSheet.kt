@@ -181,7 +181,9 @@ fun WordSheetContent(
                 )
             }
         }
-        // A chip saves straight away; "New" forgets a saved word.
+        // A chip saves straight away; "New" forgets a saved word. The line under
+        // the chips confirms what a tap just did.
+        var justSaved by remember(word.text) { mutableStateOf<WordStatus?>(null) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             wordStatusChoices.forEach { choice ->
                 StatusChip(
@@ -190,12 +192,25 @@ fun WordSheetContent(
                     onClick = {
                         draft.status = choice
                         if (choice != WordStatus.New || draft.lastSaved != null) {
+                            justSaved = choice
                             onSave(draft.fields)
                             draft.lastSaved = draft.fields.takeIf { choice != WordStatus.New }
                         }
                     },
                 )
             }
+        }
+        justSaved?.let { saved ->
+            Text(
+                when (saved) {
+                    WordStatus.New -> "Forgotten"
+                    WordStatus.WellKnown -> "✓ Saved as known"
+                    WordStatus.Ignored -> "✓ Saved as ignored"
+                    is WordStatus.Learning -> "✓ Saved at level ${saved.level}"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
         // Shown until dismissed, or until a phrase is selected by dragging.
         if (showPhraseHint) {

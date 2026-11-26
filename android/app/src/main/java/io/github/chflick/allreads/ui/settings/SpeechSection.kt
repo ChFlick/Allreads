@@ -56,6 +56,7 @@ fun SpeechSection(services: Services) {
         onValueChangeFinished = { services.settings.update { it.copy(speechRate = rate) } },
         valueRange = AppSettings.speechRates,
         steps = 9,
+        colors = calmSliderColors(),
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {

@@ -1,6 +1,10 @@
 package io.github.chflick.allreads.ui.words
 
 import io.github.chflick.allreads.ui.languageName
+import io.github.chflick.allreads.ui.SearchPill
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.VerticalDivider
 import io.github.chflick.allreads.ui.theme.StatusChip
 import io.github.chflick.allreads.ui.theme.StatusPill
 
@@ -139,7 +143,6 @@ private fun TermEditor(
 }
 
 /** The word list without its view model, so it can be shown in previews and screenshots. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WordsContent(
     state: WordsState,
@@ -150,61 +153,51 @@ fun WordsContent(
     onEdit: (SavedTerm) -> Unit,
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Words") }) },
+        // A slim header like the library's: the search, then one row of chips
+        // whose labels carry the counts.
+        topBar = {
+            Column(Modifier.statusBarsPadding().padding(top = 8.dp, bottom = 8.dp)) {
+                SearchPill(state.query, "Search words or translations", onQuery = onSearch)
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Only worth a choice with books in several languages.
+                    if (state.languages.size > 1) {
+                        state.languages.forEach { code ->
+                            FilterChip(
+                                selected = code == state.language,
+                                onClick = { onLanguage(code) },
+                                label = { Text(languageName(code)) },
+                            )
+                        }
+                        VerticalDivider(Modifier.height(32.dp).align(Alignment.CenterVertically))
+                    }
+                    WordFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = filter == state.filter,
+                            onClick = { onFilter(filter) },
+                            label = { Text("${filter.label} ${state.count(filter)}") },
+                        )
+                    }
+                }
+            }
+        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                state.languages.forEach { code ->
-                    FilterChip(
-                        selected = code == state.language,
-                        onClick = { onLanguage(code) },
-                        label = { Text(languageName(code)) },
-                    )
-                }
+        val visible = state.visible
+        if (visible.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text(
+                    if (state.terms.isEmpty()) "No saved words yet. Tap a word while reading to save it."
+                    else "No words match.",
+                    modifier = Modifier.padding(24.dp),
+                )
             }
-            Text(
-                "${state.knownCount} known · ${state.learningCount} learning",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = onSearch,
-                label = { Text("Search words or translations") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            )
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                WordFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = filter == state.filter,
-                        onClick = { onFilter(filter) },
-                        label = { Text(filter.label) },
-                    )
-                }
-            }
-            HorizontalDivider()
-            val visible = state.visible
-            if (visible.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (state.terms.isEmpty()) "No saved words yet. Tap a word while reading to save it."
-                        else "No words match.",
-                        modifier = Modifier.padding(24.dp),
-                    )
-                }
-            } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(visible, key = { it.id }) { term ->
-                        TermRow(term, onClick = { onEdit(term) })
-                    }
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+                items(visible, key = { it.id }) { term ->
+                    TermRow(term, onClick = { onEdit(term) })
                 }
             }
         }

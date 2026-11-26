@@ -13,6 +13,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import io.github.chflick.allreads.data.ThemeMode
+import io.github.chflick.allreads.data.ReaderPage
+import android.app.Activity
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
 /** True when the dark theme is showing; the reader uses it for status colours. */
 val LocalDarkTheme = staticCompositionLocalOf { false }
@@ -74,6 +79,45 @@ private val DarkColors = darkColorScheme(
     outline = Color(0xFF8E9099),
     outlineVariant = Color(0xFF44474E),
 )
+
+/** Warm paper for the reader's Sepia page; the app's light colours otherwise. */
+private val SepiaColors = LightColors.copy(
+    background = Color(0xFFF4ECD8),
+    onBackground = Color(0xFF3B3024),
+    surface = Color(0xFFF4ECD8),
+    onSurface = Color(0xFF3B3024),
+    onSurfaceVariant = Color(0xFF65563F),
+    surfaceContainerLowest = Color(0xFFFAF4E6),
+    surfaceContainerLow = Color(0xFFEFE5CD),
+    surfaceContainer = Color(0xFFE9DEC3),
+    surfaceContainerHigh = Color(0xFFE3D7BA),
+    surfaceContainerHighest = Color(0xFFDDD0B1),
+    outline = Color(0xFF8C7B63),
+    outlineVariant = Color(0xFFD4C5A6),
+)
+
+/**
+ * The reader's colours: the app theme as it is, or Sepia, which is a light
+ * page in either app theme. Sepia also asks for dark status-bar icons.
+ */
+@Composable
+fun ReaderPageTheme(page: ReaderPage, content: @Composable () -> Unit) {
+    if (page != ReaderPage.Sepia) {
+        content()
+        return
+    }
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.context as? Activity)?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
+        val wasLight = controller?.isAppearanceLightStatusBars
+        controller?.isAppearanceLightStatusBars = true
+        onDispose { if (wasLight != null) controller.isAppearanceLightStatusBars = wasLight }
+    }
+    CompositionLocalProvider(LocalDarkTheme provides false) {
+        MaterialTheme(colorScheme = SepiaColors, typography = MaterialTheme.typography, content = content)
+    }
+}
 
 /**
  * The app theme: Allreads' own navy and amber, or the phone's wallpaper

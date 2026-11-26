@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import io.github.chflick.allreads.ui.SortIcon
+import io.github.chflick.allreads.ui.SearchPill
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -255,7 +256,7 @@ fun LibraryContent(
         topBar = {
             if (state.books.isNotEmpty()) {
                 Column(Modifier.statusBarsPadding().padding(top = 8.dp, bottom = 4.dp)) {
-                    SearchPill(view.query, onQuery = { onView(view.copy(query = it)) })
+                    SearchPill(view.query, "Search your library", onQuery = { onView(view.copy(query = it)) })
                     FilterRow(state, onView)
                 }
             } else {
@@ -303,39 +304,6 @@ fun LibraryContent(
             }
         }
     }
-}
-
-/** A rounded search field, always at the top, with a clear button once something is typed. */
-@Composable
-private fun SearchPill(query: String, onQuery: (String) -> Unit) {
-    val focus = LocalFocusManager.current
-    TextField(
-        value = query,
-        onValueChange = onQuery,
-        placeholder = { Text("Search your library") },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-        trailingIcon = if (query.isNotEmpty()) {
-            {
-                IconButton(onClick = {
-                    onQuery("")
-                    focus.clearFocus()
-                }) { Icon(Icons.Default.Close, contentDescription = "Clear the search") }
-            }
-        } else {
-            null
-        },
-        singleLine = true,
-        shape = CircleShape,
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-        ),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-    )
 }
 
 /** The sort chip with its menu, then filters that switch on and off: progress and (with several) languages. */

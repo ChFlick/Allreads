@@ -71,6 +71,7 @@ cd android && ./gradlew assembleDebug
 
 - Language rules adapted from [Lukaisu](https://github.com/HugoFara/lukaisu) (MIT/Unlicense); see [NOTICE](NOTICE).
 - Dictionary data from [Wiktionary](https://www.wiktionary.org), extracted by [kaikki.org](https://kaikki.org), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- The reading font is [Literata](https://github.com/googlefonts/literata), under the [SIL Open Font License](android/app/src/main/assets/licences/Literata-OFL.txt).
 - Translations by [DeepL](https://www.deepl.com), with your own key.
 - Flashcards through [AnkiDroid](https://github.com/ankidroid/Anki-Android)'s API.
 - Sample text in the screenshots: Jean de La Fontaine, *Le Coq et la Perle* (public domain).

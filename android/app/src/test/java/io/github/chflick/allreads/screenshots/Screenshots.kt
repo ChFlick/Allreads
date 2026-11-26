@@ -215,7 +215,7 @@ private object Samples {
         sentence = rows[1].sentence,
         rowKey = rows[1].key,
         status = WordStatus.Learning(3u),
-        saved = SavedTerm(1, "fr", "perle", "Perle", WordStatus.Learning(3u), "pearl", "", null),
+        saved = SavedTerm(1, "fr", "perle", "perle", WordStatus.Learning(3u), "pearl", "", null),
         machineTranslation = "pearl",
         dictionary = DictionaryLookup(
             entries = listOf(
@@ -230,12 +230,12 @@ private object Samples {
     )
 
     val terms = listOf(
-        SavedTerm(1, "fr", "coq", "Coq", WordStatus.Learning(2u), "rooster", "", null),
+        SavedTerm(1, "fr", "coq", "coq", WordStatus.Learning(2u), "rooster", "", null),
         SavedTerm(2, "fr", "crois", "crois", WordStatus.Learning(4u), "believe", "", "croire"),
         SavedTerm(3, "fr", "lapidaire", "lapidaire", WordStatus.Learning(1u), "jeweller, gem cutter", "", null),
         SavedTerm(4, "fr", "moindre", "moindre", WordStatus.Learning(5u), "least, smallest", "", null),
-        SavedTerm(5, "fr", "perle", "Perle", WordStatus.Learning(3u), "pearl", "", null),
-        SavedTerm(6, "fr", "pierre précieuse", "Pierre précieuse", WordStatus.Learning(2u), "gemstone", "", null),
+        SavedTerm(5, "fr", "perle", "perle", WordStatus.Learning(3u), "pearl", "", null),
+        SavedTerm(6, "fr", "pierre précieuse", "pierre précieuse", WordStatus.Learning(2u), "gemstone", "", null),
         SavedTerm(7, "fr", "trouva", "trouva", WordStatus.Learning(1u), "found", "", "trouver"),
         SavedTerm(8, "fr", "un", "un", WordStatus.WellKnown, "a, one", "", null),
     )

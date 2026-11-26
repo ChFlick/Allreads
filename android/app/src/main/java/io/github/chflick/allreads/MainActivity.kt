@@ -39,6 +39,7 @@ import io.github.chflick.allreads.ui.reader.ReaderScreen
 import io.github.chflick.allreads.ui.reader.ReaderViewModel
 import io.github.chflick.allreads.ui.settings.SettingsScreen
 import io.github.chflick.allreads.ui.theme.AllreadsTheme
+import io.github.chflick.allreads.ui.theme.ReaderPageTheme
 import io.github.chflick.allreads.ui.words.WordsScreen
 import io.github.chflick.allreads.ui.words.WordsViewModel
 
@@ -83,7 +84,9 @@ private fun AllreadsNavigation(services: Services) {
         // Reset before the first frame, so the previous book never flashes.
         // open() ignores repeat calls for the same opening (e.g. on rotation).
         remember(bookId, opens) { reader.open(bookId, opens) }
-        ReaderScreen(reader, settings, onBack = { openBookId = null })
+        ReaderPageTheme(settings.readerPage) {
+            ReaderScreen(reader, settings, onBack = { openBookId = null })
+        }
         return
     }
 

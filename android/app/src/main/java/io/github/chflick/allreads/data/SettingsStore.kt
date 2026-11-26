@@ -8,6 +8,12 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class ThemeMode { System, Light, Dark }
 
+/** The reader's font. */
+enum class ReadingFont(val label: String) { Literata("Literata"), Serif("Serif"), Sans("Sans-serif") }
+
+/** The reader's page colours: the app's light or dark theme, or warm sepia. */
+enum class ReaderPage(val label: String) { App("Same as the app"), Sepia("Sepia") }
+
 /** Reading and app preferences. API keys are kept apart, in [ApiKeyStore]. */
 data class AppSettings(
     /** The language DeepL translates into, e.g. `en`. */
@@ -15,6 +21,8 @@ data class AppSettings(
     val fontScale: Float = 1.0f,
     val lineSpacing: Float = 1.4f,
     val theme: ThemeMode = ThemeMode.System,
+    val readingFont: ReadingFont = ReadingFont.Literata,
+    val readerPage: ReaderPage = ReaderPage.App,
     /** Android 12+: use the wallpaper's colours instead of the app's own. */
     val wallpaperColors: Boolean = false,
     /** Adds a word → meaning card next to the sentence card in new note types. */
@@ -54,6 +62,8 @@ class SettingsStore(context: Context) {
             .putFloat("font_scale", next.fontScale)
             .putFloat("line_spacing", next.lineSpacing)
             .putString("theme", next.theme.name)
+            .putString("reading_font", next.readingFont.name)
+            .putString("reader_page", next.readerPage.name)
             .putString("library_sort", next.librarySort)
             .putBoolean("wallpaper_colors", next.wallpaperColors)
             .putBoolean("anki_word_card", next.ankiWordCard)
@@ -78,6 +88,10 @@ class SettingsStore(context: Context) {
                 ?: defaults.theme,
             wallpaperColors = prefs.getBoolean("wallpaper_colors", defaults.wallpaperColors),
             librarySort = prefs.getString("library_sort", null) ?: defaults.librarySort,
+            readingFont = prefs.getString("reading_font", null)
+                ?.let { name -> ReadingFont.entries.firstOrNull { it.name == name } } ?: defaults.readingFont,
+            readerPage = prefs.getString("reader_page", null)
+                ?.let { name -> ReaderPage.entries.firstOrNull { it.name == name } } ?: defaults.readerPage,
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),
             speechRate = prefs.getFloat("speech_rate", defaults.speechRate),
             speakOnTap = prefs.getBoolean("speak_on_tap", defaults.speakOnTap),

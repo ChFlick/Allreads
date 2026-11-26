@@ -1,5 +1,14 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import io.github.chflick.allreads.data.ReaderPage
+import io.github.chflick.allreads.data.ReadingFont
+import io.github.chflick.allreads.ui.languageName
+import io.github.chflick.allreads.ui.theme.ReaderPageTheme
+import io.github.chflick.allreads.ui.theme.family
+
 import android.os.Build
 import androidx.compose.material3.Switch
 
@@ -70,16 +79,12 @@ fun SettingsScreen(services: Services) {
         ) {
             Section("Translation")
             DeeplKeyField(services, hasKey)
-            Text("Translate into", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppSettings.nativeLanguages.forEach { code ->
-                    FilterChip(
-                        selected = settings.nativeLanguage == code,
-                        onClick = { services.settings.update { it.copy(nativeLanguage = code) } },
-                        label = { Text(Locale.forLanguageTag(code).displayLanguage) },
-                    )
-                }
-            }
+            SettingsDropdown(
+                label = "Translate into",
+                selected = languageName(settings.nativeLanguage),
+                options = AppSettings.nativeLanguages.map { languageName(it) to it },
+                onSelect = { code -> services.settings.update { it.copy(nativeLanguage = code) } },
+            )
 
             HorizontalDivider()
             Section("AnkiDroid")
@@ -96,6 +101,7 @@ fun SettingsScreen(services: Services) {
                 onValueChange = { fontScale = it },
                 onValueChangeFinished = { services.settings.update { it.copy(fontScale = fontScale) } },
                 valueRange = AppSettings.fontScales,
+                colors = calmSliderColors(),
             )
             Text("Line spacing: ${"%.1f".format(lineSpacing)}", style = MaterialTheme.typography.labelLarge)
             Slider(
@@ -103,13 +109,46 @@ fun SettingsScreen(services: Services) {
                 onValueChange = { lineSpacing = it },
                 onValueChangeFinished = { services.settings.update { it.copy(lineSpacing = lineSpacing) } },
                 valueRange = AppSettings.lineSpacings,
+                colors = calmSliderColors(),
             )
-            Text(
-                "Il était une fois un renard qui errait dans la forêt la nuit.",
-                fontFamily = FontFamily.Serif,
-                fontSize = 19.sp * fontScale,
-                lineHeight = lineSpacing.em,
-            )
+            Text("Font", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReadingFont.entries.forEach { font ->
+                    FilterChip(
+                        selected = settings.readingFont == font,
+                        onClick = { services.settings.update { it.copy(readingFont = font) } },
+                        label = { Text(font.label, fontFamily = font.family()) },
+                    )
+                }
+            }
+            Text("Page", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ReaderPage.entries.forEach { page ->
+                    FilterChip(
+                        selected = settings.readerPage == page,
+                        onClick = { services.settings.update { it.copy(readerPage = page) } },
+                        label = { Text(page.label) },
+                    )
+                }
+            }
+            // The preview shows the page as the reader will: its font, size, spacing and colours.
+            ReaderPageTheme(settings.readerPage) {
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    shape = MaterialTheme.shapes.medium,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "Il était une fois un renard qui errait dans la forêt la nuit.",
+                        fontFamily = settings.readingFont.family(),
+                        fontSize = 19.sp * fontScale,
+                        lineHeight = lineSpacing.em,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
 
             HorizontalDivider()
             Section("Dictionaries")
@@ -157,14 +196,33 @@ fun SettingsScreen(services: Services) {
 
             HorizontalDivider()
             Section("About")
+            // Short lines instead of one dense paragraph.
+            val uri = LocalUriHandler.current
+            Text("Allreads ${BuildConfig.VERSION_NAME} · MIT licence", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Allreads ${BuildConfig.VERSION_NAME} · MIT licence. Language rules adapted from Lukaisu. Dictionaries from Wiktionary via kaikki.org (CC BY-SA 4.0). " +
-                    "Translations by DeepL with your own key; cards go to AnkiDroid on this phone. Nothing else leaves it.",
+                "Privacy: translations go to DeepL with your own key, and cards go to AnkiDroid on this phone. " +
+                    "Nothing else leaves it.",
                 style = MaterialTheme.typography.bodySmall,
             )
+            Text(
+                "Thanks to Lukaisu (language rules), Wiktionary via kaikki.org (dictionaries, CC BY-SA 4.0) " +
+                    "and Literata (reading font, SIL Open Font License).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { uri.openUri("https://github.com/ChFlick/Allreads") }) {
+                Text("Source code and issues on GitHub")
+            }
         }
     }
 }
+
+/** Sliders with a quiet grey track, not the theme's amber. */
+@Composable
+internal fun calmSliderColors() = SliderDefaults.colors(
+    inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    inactiveTickColor = MaterialTheme.colorScheme.onSurfaceVariant,
+)
 
 @Composable
 private fun Section(title: String) {

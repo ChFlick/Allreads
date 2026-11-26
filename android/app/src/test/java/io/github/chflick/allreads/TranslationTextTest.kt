@@ -1,6 +1,6 @@
 package io.github.chflick.allreads
 
-import io.github.chflick.allreads.reader.textForTranslation
+import io.github.chflick.allreads.reader.commonForm
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import uniffi.allreads_ffi.DictionaryEntry
@@ -15,24 +15,24 @@ class TranslationTextTest {
     @Test
     fun aCapitalisedCommonNounIsLowercased() = assertEquals(
         "pierre",
-        textForTranslation("Pierre", lookup(entry("pierre", "noun"), entry("Pierre", "name"))),
+        commonForm("Pierre", lookup(entry("pierre", "noun"), entry("Pierre", "name"))),
     )
 
     @Test
-    fun aNameStaysAName() = assertEquals("Paris", textForTranslation("Paris", lookup(entry("Paris", "name"))))
+    fun aNameStaysAName() = assertEquals("Paris", commonForm("Paris", lookup(entry("Paris", "name"))))
 
     @Test
     fun aCapitalisedFormOfACommonWordIsLowercased() = assertEquals(
         "lisait",
-        textForTranslation("Lisait", lookup(forms = listOf(DictionaryForm("lire", "verb", "imperfect")))),
+        commonForm("Lisait", lookup(forms = listOf(DictionaryForm("lire", "verb", "imperfect")))),
     )
 
     @Test
-    fun withoutADictionaryNothingChanges() = assertEquals("Pierre", textForTranslation("Pierre", null))
+    fun withoutADictionaryNothingChanges() = assertEquals("Pierre", commonForm("Pierre", null))
 
     @Test
-    fun anUnknownWordIsSentAsItIs() = assertEquals("Zorglub", textForTranslation("Zorglub", lookup()))
+    fun anUnknownWordIsSentAsItIs() = assertEquals("Zorglub", commonForm("Zorglub", lookup()))
 
     @Test
-    fun lowercaseWordsAreUntouched() = assertEquals("pierre", textForTranslation("pierre", lookup()))
+    fun lowercaseWordsAreUntouched() = assertEquals("pierre", commonForm("pierre", lookup()))
 }

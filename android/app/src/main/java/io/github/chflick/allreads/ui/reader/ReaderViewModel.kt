@@ -2,7 +2,7 @@ package io.github.chflick.allreads.ui.reader
 
 import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.PhraseSuggestion
-import io.github.chflick.allreads.reader.textForTranslation
+import io.github.chflick.allreads.reader.commonForm
 import io.github.chflick.allreads.data.DownloadState
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.AvailableDictionary
@@ -338,7 +338,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         _state.update { it.copy(selected = word.copy(translating = true, translationError = null)) }
         viewModelScope.launch {
             // The dictionary's entry was added before this runs, when one is installed.
-            val text = textForTranslation(word.text, _state.value.selected?.dictionary)
+            val text = commonForm(word.text, _state.value.selected?.dictionary)
             val result = translate(text, context = word.sentence)
             _state.update { state ->
                 val current = state.selected?.takeIf { it.text == word.text } ?: return@update state
@@ -385,7 +385,8 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
                     repository.saveTerm(
                         TermInput(
                             languageCode = language,
-                            text = selected.text,
+                            // "Coq" at a sentence start is saved as "coq", if the dictionary knows it as a common word.
+                            text = commonForm(selected.text, selected.dictionary),
                             status = status,
                             translation = translation.trim(),
                             notes = notes.trim(),

@@ -85,6 +85,7 @@ import io.github.chflick.allreads.reader.ReaderRow
 import io.github.chflick.allreads.reader.firstRowOf
 import io.github.chflick.allreads.ui.theme.LocalDarkTheme
 import io.github.chflick.allreads.ui.theme.highlight
+import io.github.chflick.allreads.ui.theme.family
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -192,7 +193,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
 private fun readerTextStyle(settings: AppSettings): TextStyle {
     val size = 19.sp * settings.fontScale
     return MaterialTheme.typography.bodyLarge.copy(
-        fontFamily = FontFamily.Serif,
+        fontFamily = settings.readingFont.family(),
         fontSize = size,
         lineHeight = (settings.lineSpacing).em,
     )

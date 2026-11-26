@@ -27,6 +27,15 @@ data class WordsState(
 ) {
     val learningCount: Int get() = terms.count { it.status is WordStatus.Learning }
     val knownCount: Int get() = terms.count { it.status == WordStatus.WellKnown }
+    val ignoredCount: Int get() = terms.count { it.status == WordStatus.Ignored }
+
+    /** How many words a filter chip would show, for its label. */
+    fun count(filter: WordFilter): Int = when (filter) {
+        WordFilter.All -> terms.size
+        WordFilter.Learning -> learningCount
+        WordFilter.Known -> knownCount
+        WordFilter.Ignored -> ignoredCount
+    }
 
     /** The terms matching the filter and search, by key or translation. */
     val visible: List<SavedTerm>
@@ -53,9 +62,12 @@ class WordsViewModel(
 
     init {
         viewModelScope.launch {
-            val languages = runCatching { repository.languageCodes() }.getOrDefault(emptyList())
-            // Start with the language of the most recently added book, if any.
-            val recent = runCatching { repository.library().lastOrNull()?.languageCode }.getOrNull()
+            // The languages of the books (not every preset the app knows), the
+            // most recently read first; all languages before any book is imported.
+            val books = runCatching { repository.library() }.getOrDefault(emptyList())
+            val languages = books.map { it.languageCode }.distinct().sorted()
+                .ifEmpty { runCatching { repository.languageCodes() }.getOrDefault(emptyList()) }
+            val recent = books.firstOrNull()?.languageCode
             _state.update { it.copy(languages = languages, language = recent ?: languages.firstOrNull()) }
             refresh()
         }
