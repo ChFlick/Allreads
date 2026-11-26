@@ -23,8 +23,8 @@ use crate::error::{poisoned, AllreadsError};
 use crate::records::{
     saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookDifficulty, BookDifficultyOf,
     BookMeta, BookSummary, Chapter, ChapterBlock, DayCount, DeepLKeyStatus, DictionaryLookup,
-    InstalledDictionary, LanguageInfo, MarkedKnown, PhraseMark, PhraseSuggestion, SavedTerm,
-    TermInput, Token, Translation, WebArticle, WordStatus,
+    InstalledDictionary, LanguageInfo, MarkedKnown, PhraseMark, PhraseSuggestion, PreparedText,
+    SavedTerm, TermInput, Token, Translation, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -82,6 +82,34 @@ impl App {
 
     fn dictionaries_dir(&self) -> PathBuf {
         self.data_dir.join("dictionaries")
+    }
+
+    fn books_dir(&self) -> PathBuf {
+        self.data_dir.join("books")
+    }
+
+    /// Writes paragraphs as a TXT book in the books folder.
+    fn write_text(
+        &self,
+        title: String,
+        language: Option<String>,
+        paragraphs: &[String],
+    ) -> Result<PreparedText, AllreadsError> {
+        let path =
+            library::write_text_book(&self.books_dir(), &title, paragraphs).map_err(|e| {
+                AllreadsError::Storage {
+                    reason: e.to_string(),
+                }
+            })?;
+        // The title as the file name keeps it (reserved characters removed).
+        let title = path
+            .file_stem()
+            .map_or(title, |stem| stem.to_string_lossy().into_owned());
+        Ok(PreparedText {
+            path: path.display().to_string(),
+            title,
+            language,
+        })
     }
 
     fn covers_dir(&self) -> PathBuf {
@@ -343,17 +371,9 @@ impl App {
         &self,
         path: String,
         language_code: String,
-        title: Option<String>,
     ) -> Result<BookSummary, AllreadsError> {
         // The slow part (parsing) happens before the database lock is taken.
-        let mut prepared = library::prepare_import(Path::new(&path))?;
-        // A TXT copy is named by a random id; the caller knows the real title.
-        if let Some(title) = title
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty())
-        {
-            prepared.title = title;
-        }
+        let prepared = library::prepare_import(Path::new(&path))?;
         let db = self.db()?;
         let id = library::store_import(&db, &self.covers_dir(), &prepared, &language_code)?;
         let row = db.book(id)?.ok_or_else(|| AllreadsError::Missing {
@@ -363,6 +383,59 @@ impl App {
         drop(db);
         self.remember_open_book(id, Arc::new(prepared.book))?;
         Ok(summary)
+    }
+
+    /// A free path in the books folder for a file the user picked, named after
+    /// it (`name`, e.g. "Notes.txt", without its extension), so a TXT book's
+    /// title is its file name. Kotlin copies the picked file there.
+    pub fn new_book_path(&self, name: Option<String>, extension: String) -> String {
+        let title = name
+            .as_deref()
+            .map_or("", |n| n.rsplit_once('.').map_or(n, |(stem, _)| stem));
+        let dir = self.books_dir();
+        let _ = fs::create_dir_all(&dir);
+        library::book_file_path(&dir, title, &extension)
+            .display()
+            .to_string()
+    }
+
+    /// Writes pasted or shared text as a TXT book, ready to import. Without a
+    /// title, its first words become one.
+    ///
+    /// # Errors
+    /// Returns `InvalidInput` for empty text, and `Storage` if it cannot be written.
+    pub fn prepare_text(
+        &self,
+        title: Option<String>,
+        text: String,
+    ) -> Result<PreparedText, AllreadsError> {
+        let paragraphs = allreads_core::txt::split_paragraphs(&text);
+        if paragraphs.is_empty() {
+            return Err(AllreadsError::InvalidInput {
+                reason: "there is no text to import".into(),
+            });
+        }
+        let title = title
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(|| library::title_from_text(&text));
+        self.write_text(title, None, &paragraphs)
+    }
+
+    /// Picks the article out of a web page's HTML and writes it as a TXT book,
+    /// titled with its headline, ready to import.
+    ///
+    /// # Errors
+    /// Returns `InvalidInput` if the page has no readable text, and `Storage`
+    /// if it cannot be written.
+    pub fn prepare_article(&self, html: String) -> Result<PreparedText, AllreadsError> {
+        let article = allreads_core::article::extract(&html);
+        if article.paragraphs.is_empty() {
+            return Err(AllreadsError::InvalidInput {
+                reason: "no readable text was found on that page".into(),
+            });
+        }
+        self.write_text(article.title, article.language, &article.paragraphs)
     }
 
     /// How hard a book is: its words against the saved ones. The first call
@@ -1066,20 +1139,6 @@ fn check_with(deepl: &DeepL) -> Result<DeepLKeyStatus, AllreadsError> {
     }
 }
 
-/// The readable text of a web page's HTML: title, language and paragraphs.
-// UniFFI exported functions must take owned arguments, so `String` stays by value.
-#[uniffi::export]
-#[must_use]
-#[allow(clippy::needless_pass_by_value)]
-pub fn article_from_html(html: String) -> WebArticle {
-    let article = allreads_core::article::extract(&html);
-    WebArticle {
-        title: article.title,
-        language: article.language,
-        paragraphs: article.paragraphs,
-    }
-}
-
 /// Reads a book file's title, author, language and chapter count without
 /// importing it, e.g. to suggest the language on the import screen.
 ///
@@ -1143,11 +1202,11 @@ mod tests {
         {
             let app = new_app(&dir);
             let summary = app
-                .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+                .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
                 .unwrap();
             assert_eq!(summary.title, "Le Petit Test");
             assert_eq!(summary.chapter_count, 2);
-            app.import_book(copy_in(&dir, "sample.txt"), "fr".into(), None)
+            app.import_book(copy_in(&dir, "sample.txt"), "fr".into())
                 .unwrap();
             app.save_position(summary.id, 1, 3).unwrap();
         }
@@ -1166,7 +1225,7 @@ mod tests {
     fn chapters_are_read_by_book_id_after_a_restart() {
         let dir = tempfile::tempdir().unwrap();
         let id = new_app(&dir)
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         let app = new_app(&dir);
@@ -1220,7 +1279,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         save_word(&app, "Homme", Status::Learning(2));
@@ -1244,7 +1303,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         let chapter = app.open_chapter(id, 0).unwrap();
@@ -1265,7 +1324,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         let first = app.open_chapter(id, 0).unwrap();
@@ -1286,7 +1345,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         let good = app.open_chapter(id, 0).unwrap();
@@ -1302,7 +1361,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "sample.txt"), "fr".into(), None)
+            .import_book(copy_in(&dir, "sample.txt"), "fr".into())
             .unwrap()
             .id;
         let chapter = app.open_chapter(id, 0).unwrap();
@@ -1492,7 +1551,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let book = app
-            .import_book(copy_in(&dir, "sample.txt"), "fr".into(), None)
+            .import_book(copy_in(&dir, "sample.txt"), "fr".into())
             .unwrap();
         let saved = app
             .save_term(input(
@@ -1577,7 +1636,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         let before = app.open_chapter(id, 0).unwrap();
@@ -1637,25 +1696,11 @@ mod tests {
     }
 
     #[test]
-    fn a_title_given_on_import_replaces_the_file_name() {
-        let dir = tempfile::tempdir().unwrap();
-        let app = new_app(&dir);
-        let summary = app
-            .import_book(
-                copy_in(&dir, "sample.txt"),
-                "fr".into(),
-                Some(" Mon article ".into()),
-            )
-            .unwrap();
-        assert_eq!(summary.title, "Mon article");
-    }
-
-    #[test]
     fn book_difficulty_follows_saved_words() {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         let before = app.book_difficulty(id).unwrap();
@@ -1680,14 +1725,38 @@ mod tests {
     }
 
     #[test]
-    fn an_article_is_read_from_html() {
-        let article = article_from_html(
-            "<html lang=fr><head><title>Titre</title></head><body><article><p>Bonjour tout le monde.</p></article></body></html>"
-                .into(),
+    fn pasted_text_and_articles_become_txt_books_with_their_titles() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let article = app
+            .prepare_article(
+                "<html lang=fr><head><title>Le titre</title></head><body><article><p>Bonjour tout le monde.</p></article></body></html>"
+                    .into(),
+            )
+            .unwrap();
+        assert_eq!(
+            (article.title.as_str(), article.language.as_deref()),
+            ("Le titre", Some("fr"))
         );
-        assert_eq!(article.title, "Titre");
-        assert_eq!(article.language.as_deref(), Some("fr"));
-        assert_eq!(article.paragraphs, ["Bonjour tout le monde."]);
+        let book = app.import_book(article.path, "fr".into()).unwrap();
+        assert_eq!(book.title, "Le titre");
+        let text = app
+            .prepare_text(
+                None,
+                "Il était une fois un renard qui errait.\n\nFin.".into(),
+            )
+            .unwrap();
+        assert_eq!(text.title, "Il était une fois un renard");
+        assert!(matches!(
+            app.prepare_text(None, "  ".into()),
+            Err(AllreadsError::InvalidInput { .. })
+        ));
+        assert!(matches!(
+            app.prepare_article("<html></html>".into()),
+            Err(AllreadsError::InvalidInput { .. })
+        ));
+        let picked = app.new_book_path(Some("Notes.txt".into()), "txt".into());
+        assert!(picked.ends_with("books/Notes.txt"));
     }
 
     #[test]
@@ -1695,7 +1764,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         app.save_term(input("homme", WordStatus::Learning { level: 3 }))
@@ -1871,7 +1940,7 @@ mod tests {
                 let name = format!("tiny-{i}.epub");
                 let path = dir.path().join(&name);
                 fs::copy(fixture("tiny.epub"), &path).unwrap();
-                app.import_book(path.display().to_string(), "fr".into(), None)
+                app.import_book(path.display().to_string(), "fr".into())
                     .unwrap()
                     .id
             })
@@ -1901,7 +1970,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let id = app
-            .import_book(copy_in(&dir, "tiny.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "tiny.epub"), "fr".into())
             .unwrap()
             .id;
         assert_eq!(
@@ -1915,7 +1984,7 @@ mod tests {
     fn a_stale_chapter_list_is_repaired_when_the_book_opens() {
         let dir = tempfile::tempdir().unwrap();
         let id = new_app(&dir)
-            .import_book(copy_in(&dir, "layout.epub"), "fr".into(), None)
+            .import_book(copy_in(&dir, "layout.epub"), "fr".into())
             .unwrap()
             .id;
         // Simulate an import from before empty chapters were skipped.
@@ -2005,7 +2074,7 @@ mod tests {
     #[test]
     fn importing_in_an_unknown_language_is_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let result = new_app(&dir).import_book(copy_in(&dir, "tiny.epub"), "zz".into(), None);
+        let result = new_app(&dir).import_book(copy_in(&dir, "tiny.epub"), "zz".into());
         assert!(matches!(
             result,
             Err(AllreadsError::Missing { what }) if what == "language zz"
@@ -2017,7 +2086,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let path = copy_in(&dir, "layout.epub");
-        let summary = app.import_book(path.clone(), "fr".into(), None).unwrap();
+        let summary = app.import_book(path.clone(), "fr".into()).unwrap();
         let cover = summary.cover_path.clone().expect("layout has a cover");
         assert!(Path::new(&cover).is_file());
         app.delete_book(summary.id).unwrap();
@@ -2031,10 +2100,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         let outside = fixture("tiny.epub");
-        let id = app
-            .import_book(outside.clone(), "fr".into(), None)
-            .unwrap()
-            .id;
+        let id = app.import_book(outside.clone(), "fr".into()).unwrap().id;
         app.delete_book(id).unwrap();
         assert!(Path::new(&outside).is_file());
     }
@@ -2044,17 +2110,17 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let app = new_app(&dir);
         assert!(matches!(
-            app.import_book(fixture("broken.epub"), "fr".into(), None),
+            app.import_book(fixture("broken.epub"), "fr".into()),
             Err(AllreadsError::InvalidBook { .. })
         ));
         assert!(matches!(
-            app.import_book("/no/such/book.epub".into(), "fr".into(), None),
+            app.import_book("/no/such/book.epub".into(), "fr".into()),
             Err(AllreadsError::NotFound { .. })
         ));
         let pdf = dir.path().join("book.pdf");
         fs::write(&pdf, b"%PDF").unwrap();
         assert!(matches!(
-            app.import_book(pdf.display().to_string(), "fr".into(), None),
+            app.import_book(pdf.display().to_string(), "fr".into()),
             Err(AllreadsError::UnsupportedFile { .. })
         ));
     }

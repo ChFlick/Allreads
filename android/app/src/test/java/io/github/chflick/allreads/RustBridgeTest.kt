@@ -47,7 +47,7 @@ class RustBridgeTest {
         val book = File(temporaryFolder.root, "tiny.epub")
         File(fixtures, "tiny.epub").copyTo(book)
         App(temporaryFolder.root.absolutePath).use { app ->
-            val summary = app.importBook(book.absolutePath, "fr", null)
+            val summary = app.importBook(book.absolutePath, "fr")
             assertEquals("Le Petit Test", summary.title)
             assertEquals(2u, summary.chapterCount)
 

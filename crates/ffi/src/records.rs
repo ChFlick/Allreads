@@ -56,13 +56,15 @@ impl From<allreads_core::db::progress::DayCount> for DayCount {
     }
 }
 
-/// The readable part of a web page, to import as a book.
+/// Text written as a TXT book in app storage, ready for `import_book` once
+/// the user has picked its language.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct WebArticle {
+pub struct PreparedText {
+    pub path: String,
+    /// The book's title (its file name), e.g. the article's headline.
     pub title: String,
-    /// The page's language, e.g. `fr-FR`, if it says.
+    /// The language the source says it is in, e.g. a web page's `fr-FR`.
     pub language: Option<String>,
-    pub paragraphs: Vec<String>,
 }
 
 /// Facts read from a book file before it is imported, e.g. to suggest its language.

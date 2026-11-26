@@ -6,7 +6,7 @@ import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.BookDifficulty
 import uniffi.allreads_ffi.BookDifficultyOf
 import uniffi.allreads_ffi.DayCount
-import uniffi.allreads_ffi.WebArticle
+import uniffi.allreads_ffi.PreparedText
 import uniffi.allreads_ffi.WordStatus
 import uniffi.allreads_ffi.AnkiNote
 import uniffi.allreads_ffi.AvailableDictionary
@@ -47,9 +47,17 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun readMeta(path: String): BookMeta = io { readBookMeta(path) }
 
-    /** `title` replaces the file's own title (a TXT copy is named by a random id). */
-    suspend fun importBook(path: String, languageCode: String, title: String? = null): BookSummary =
-        io { app.importBook(path, languageCode, title) }
+    suspend fun importBook(path: String, languageCode: String): BookSummary =
+        io { app.importBook(path, languageCode) }
+
+    /** A free path in the books folder named after a picked file (`name`), for its copy. */
+    suspend fun newBookPath(name: String?, extension: String): String = io { app.newBookPath(name, extension) }
+
+    /** Writes pasted or shared text as a TXT book; its first words title it if `title` is null. */
+    suspend fun prepareText(title: String?, text: String): PreparedText = io { app.prepareText(title, text) }
+
+    /** Picks the article out of a page's HTML and writes it as a TXT book. */
+    suspend fun prepareArticle(html: String): PreparedText = io { app.prepareArticle(html) }
 
     suspend fun bookDifficulty(bookId: Long): BookDifficulty = io { app.bookDifficulty(bookId) }
 
@@ -66,7 +74,7 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun wordProgress(languageCode: String): List<DayCount> = io { app.wordProgress(languageCode) }
 
-    suspend fun articleFromHtml(html: String): WebArticle = io { uniffi.allreads_ffi.articleFromHtml(html) }
+
 
     suspend fun deleteBook(bookId: Long) = io { app.deleteBook(bookId) }
 

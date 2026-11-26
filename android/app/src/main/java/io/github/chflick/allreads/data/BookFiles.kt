@@ -1,7 +1,6 @@
 package io.github.chflick.allreads.data
 
 import java.util.Locale
-import java.util.UUID
 
 /** Naming and language rules for importing a picked file. Plain Kotlin, unit-tested. */
 object BookFiles {
@@ -17,9 +16,6 @@ object BookFiles {
             else -> null
         }
     }
-
-    /** A unique file name for the copy in app storage, keeping the extension. */
-    fun copyName(extension: String, id: UUID = UUID.randomUUID()): String = "$id.$extension"
 
     /**
      * The language to preselect: the EPUB's language (`fr`, `fr-FR`, `fr_CA`)

@@ -1,7 +1,6 @@
 package io.github.chflick.allreads
 
 import io.github.chflick.allreads.data.BookFiles
-import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -18,12 +17,6 @@ class BookFilesTest {
         assertEquals("epub", BookFiles.extensionFor("book", "application/epub+zip"))
         assertEquals("txt", BookFiles.extensionFor(null, "text/plain"))
         assertNull(BookFiles.extensionFor("scan.pdf", "application/pdf"))
-    }
-
-    @Test
-    fun copiesGetAUniqueNameWithTheirExtension() {
-        val id = UUID.fromString("00000000-0000-0000-0000-000000000001")
-        assertEquals("00000000-0000-0000-0000-000000000001.epub", BookFiles.copyName("epub", id))
     }
 
     @Test

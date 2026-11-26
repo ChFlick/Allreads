@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.allreads_ffi.BookSummary
+import uniffi.allreads_ffi.PreparedText
 import uniffi.allreads_ffi.BookDifficulty
 
 /** A picked file, copied into app storage and waiting for its language. */
@@ -31,8 +32,6 @@ data class PendingImport(
     val title: String,
     val languages: List<String>,
     val suggested: String?,
-    /** Stored as the book's title; for TXT files and web articles, whose copies have random names. */
-    val titleOverride: String? = null,
 )
 
 data class LibraryState(
@@ -116,7 +115,8 @@ class LibraryViewModel(
                 val (name, mime) = withContext(Dispatchers.IO) { describeUri(resolver, uri) }
                 val extension = BookFiles.extensionFor(name, mime)
                     ?: error("Only EPUB and TXT books can be imported")
-                val file = File(repository.booksDir, BookFiles.copyName(extension))
+                // Named after the picked file, so a TXT book's title is its file name.
+                val file = File(repository.newBookPath(name, extension))
                 withContext(Dispatchers.IO) {
                     resolver.openInputStream(uri).use { input ->
                         requireNotNull(input) { "The file could not be opened" }
@@ -126,14 +126,11 @@ class LibraryViewModel(
                 try {
                     val meta = repository.readMeta(file.absolutePath)
                     val languages = repository.languageCodes()
-                    // A TXT file has no title inside; its copy is named by a random id.
-                    val fileTitle = name?.substringBeforeLast('.')?.takeIf { extension == "txt" && it.isNotBlank() }
                     PendingImport(
                         file = file,
-                        title = fileTitle ?: meta.title ?: name ?: file.name,
+                        title = meta.title ?: file.nameWithoutExtension,
                         languages = languages,
                         suggested = BookFiles.suggestLanguage(meta.language, languages),
-                        titleOverride = fileTitle,
                     )
                 } catch (e: Exception) {
                     file.delete()
@@ -159,9 +156,7 @@ class LibraryViewModel(
         viewModelScope.launch {
             val result = runCatching {
                 val html = withContext(Dispatchers.IO) { fetcher.text(url) }
-                val article = repository.articleFromHtml(html)
-                if (article.paragraphs.isEmpty()) error("No readable text was found on that page")
-                pendingText(article.title, article.paragraphs.joinToString("\n\n"), article.language)
+                pending(repository.prepareArticle(html))
             }
             _state.update {
                 it.copy(
@@ -173,27 +168,22 @@ class LibraryViewModel(
         }
     }
 
-    /** Offers pasted or shared text for import. Without a title, its first words become one. */
+    /** Offers pasted or shared text for import. Without a title, the core takes its first words. */
     fun importText(title: String?, text: String) {
         viewModelScope.launch {
-            val name = title?.trim()?.takeIf { it.isNotEmpty() }
-                ?: text.trim().split(Regex("\\s+")).take(6).joinToString(" ").let { if (it.length > 60) it.take(60) + "…" else it }
-            val result = runCatching { pendingText(name, text, null) }
+            val result = runCatching { pending(repository.prepareText(title, text)) }
             _state.update { it.copy(pending = result.getOrNull(), message = result.exceptionOrNull()?.let(::describe)) }
         }
     }
 
-    /** Writes text as a TXT copy in app storage, ready for the language dialog. */
-    private suspend fun pendingText(title: String, text: String, language: String?): PendingImport {
-        val file = File(repository.booksDir, BookFiles.copyName("txt"))
-        withContext(Dispatchers.IO) { file.writeText(text) }
+    /** Text the core has written as a TXT book, waiting for the language dialog. */
+    private suspend fun pending(prepared: PreparedText): PendingImport {
         val languages = repository.languageCodes()
         return PendingImport(
-            file = file,
-            title = title,
+            file = File(prepared.path),
+            title = prepared.title,
             languages = languages,
-            suggested = BookFiles.suggestLanguage(language, languages),
-            titleOverride = title,
+            suggested = BookFiles.suggestLanguage(prepared.language, languages),
         )
     }
 
@@ -202,7 +192,7 @@ class LibraryViewModel(
         val pending = _state.value.pending ?: return
         _state.update { it.copy(pending = null) }
         viewModelScope.launch {
-            val result = runCatching { repository.importBook(pending.file.absolutePath, languageCode, pending.titleOverride) }
+            val result = runCatching { repository.importBook(pending.file.absolutePath, languageCode) }
             if (result.isFailure) withContext(Dispatchers.IO) { pending.file.delete() }
             _state.update { it.copy(message = result.exceptionOrNull()?.let(::describe)) }
             refresh()

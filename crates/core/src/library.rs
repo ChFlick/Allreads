@@ -5,7 +5,8 @@
 //! writes the book, its chapter titles and its cover (fast).
 
 use std::fs;
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -15,6 +16,68 @@ use crate::db::{Database, DbError};
 use crate::epub;
 use crate::text::blocks::{Block, BlockKind, Span, Style};
 use crate::txt::{self, TextBook};
+
+/// A free path in `dir` for a book file named after `title`, e.g.
+/// `Le Coq et la Perle.txt`, or `… (2).txt` if that is taken. A TXT book's
+/// title comes from its file name, so the name is the title, made safe for
+/// a file system: no slashes or other reserved characters, at most 80 characters.
+#[must_use]
+pub fn book_file_path(dir: &Path, title: &str, extension: &str) -> PathBuf {
+    let safe: String = title
+        .chars()
+        .map(|c| {
+            if c.is_control() || "/\\:*?\"<>|".contains(c) {
+                ' '
+            } else {
+                c
+            }
+        })
+        .collect();
+    let mut name = crate::text::normalize_whitespace(&safe);
+    name = name
+        .trim_matches('.')
+        .trim()
+        .chars()
+        .take(80)
+        .collect::<String>()
+        .trim()
+        .to_string();
+    if name.is_empty() {
+        name = "Untitled".to_string();
+    }
+    let mut path = dir.join(format!("{name}.{extension}"));
+    let mut number = 2;
+    while path.exists() {
+        path = dir.join(format!("{name} ({number}).{extension}"));
+        number += 1;
+    }
+    path
+}
+
+/// A title for pasted text without one: its first six words, at most 60 characters.
+#[must_use]
+pub fn title_from_text(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().take(6).collect();
+    let title = words.join(" ");
+    if title.chars().count() > 60 {
+        format!("{}…", title.chars().take(60).collect::<String>().trim_end())
+    } else {
+        title
+    }
+}
+
+/// Writes text to read (pasted, shared or from a web article) as a TXT book
+/// in `dir`, one paragraph per block, and returns its path. The file is
+/// named after `title`, which becomes the book's title on import.
+///
+/// # Errors
+/// Returns an error if the folder or the file cannot be written.
+pub fn write_text_book(dir: &Path, title: &str, paragraphs: &[String]) -> io::Result<PathBuf> {
+    fs::create_dir_all(dir)?;
+    let path = book_file_path(dir, title, "txt");
+    fs::write(&path, paragraphs.join("\n\n"))?;
+    Ok(path)
+}
 
 /// A book file opened for reading, in either supported format.
 pub enum OpenedBook {
@@ -191,6 +254,43 @@ fn finish_import(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn book_files_are_named_after_their_title() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = write_text_book(
+            dir.path(),
+            "Le Coq / la Perle?",
+            &["Un.".into(), "Deux.".into()],
+        )
+        .unwrap();
+        assert_eq!(first.file_name().unwrap(), "Le Coq la Perle.txt");
+        assert_eq!(fs::read_to_string(&first).unwrap(), "Un.\n\nDeux.");
+        let second = write_text_book(dir.path(), "Le Coq / la Perle?", &["Trois.".into()]).unwrap();
+        assert_eq!(second.file_name().unwrap(), "Le Coq la Perle (2).txt");
+        assert_eq!(
+            book_file_path(dir.path(), " ... ", "epub")
+                .file_name()
+                .unwrap(),
+            "Untitled.epub"
+        );
+        // The title read back on import is the one given.
+        assert_eq!(prepare_import(&first).unwrap().title, "Le Coq la Perle");
+    }
+
+    #[test]
+    fn pasted_text_is_titled_by_its_first_words() {
+        assert_eq!(
+            title_from_text("Il était une fois un renard qui errait."),
+            "Il était une fois un renard"
+        );
+        assert_eq!(
+            title_from_text(&"Anticonstitutionnellement ".repeat(4))
+                .chars()
+                .count(),
+            61
+        );
+    }
+
     use super::*;
     use crate::presets::builtin_presets;
     use std::path::PathBuf;
