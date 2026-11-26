@@ -274,14 +274,15 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
   - **follow Anki's review progress:** new or still in learning → level 1, interval under 3 days → 2, under 7 → 3, under 14 → 4, under 21 → 5, 21 days or more (mature) → Known; suspended cards are skipped.
   - (More configuration later, not now.)
 - **Conflicts:** the more known status wins (Known > 5 > … > 1), so an import never downgrades a word. Ignored words stay ignored.
-- **No duplicates:** imported words are marked as having a card in Anki already; Allreads never sends them to AnkiDroid. (With sentence cards, a sentence card can still be added on purpose.)
+- **Imported words are regular words** (decided after the interview): they can be edited, re-levelled and forgotten like any other, and appear everywhere as usual. They carry a **badge with where they came from**, e.g. "Anki · French vocabulary" or "CSV · words.csv", in the Words list and the word drawer.
+- **No duplicates:** a word imported from Anki (AnkiDroid or `.apkg`) already has a card there, so Allreads never sends it to AnkiDroid. Words from a text/CSV export (maybe from another app) get cards as usual. (With sentence cards, a sentence card can still be added on purpose.)
 - **Running it again:** adds new words and upgrades earlier ones under the same rule; never removes anything.
 - **Entry point:** the Words tab's ⋮ menu → "Import from Anki…".
 
 **Steps**, each with its check:
 1. **Core: cleaning and status rules.** `import::clean_word(raw, rules)` with the article lists from the presets, and `import::status_for(review)` for the review-progress rule.
    - **Done when** tests cover HTML, media tags, cloze, brackets, separators, French/German/Spanish/Italian/English articles, and every interval boundary.
-2. **Core: storing.** `import_words(language, items, mode) -> ImportSummary` in one transaction, with "more known wins", meaning only into empty translations, and a new `term.anki_external` flag (migration) that keeps the word out of the Anki queue. FFI: `import_anki_words`, and `clean_import_word` for the previews.
+2. **Core: storing.** `import_words(language, items, mode) -> ImportSummary` in one transaction, with "more known wins", meaning only into empty translations, and a new `term.imported_from` column (migration, e.g. "Anki · French vocabulary") for the badge; a word imported from Anki is kept out of the Anki queue. FFI: `import_anki_words`, and `clean_import_word` for the previews.
    - **Done when** tests show the counts (added, upgraded, unchanged, skipped), that a downgrade never happens, and that an imported word saved again is not queued for AnkiDroid.
 3. **Phone spike: reading AnkiDroid.** Through AnkiDroid's content provider (`FlashCardsContract.Note`), with Anki search syntax:
    - list the notes of a deck (`deck:"French"`, subdecks included) with their note type and fields;
@@ -291,7 +292,8 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
    - choose the deck (subdecks included) and the language;
    - per note type, pick the word field and an optional meaning field, with three cleaned samples;
    - choose the status: one level, or review progress;
-   - import with a progress bar, then a summary ("412 added · 37 upgraded · 9 skipped").
+   - import with a progress bar, then a summary ("412 added · 37 upgraded · 9 skipped");
+   - the source badge on imported words in Words (row and editor) and in the word drawer.
    - **Done when** importing a real deck on the phone colours its words in the reader, and saving one of them sends nothing to AnkiDroid.
 5. **Text/CSV import.** Anki's "Notes in Plain Text" (tab-separated, with its `#separator`/`#html` header lines) and plain CSV: column pickers instead of field pickers; one level for all (no review data).
    - **Done when** a core test imports an Anki text export and a CSV.
