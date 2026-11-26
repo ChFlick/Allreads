@@ -12,3 +12,5 @@ split_each_char = false
 tts_locale = "es-ES"
 dictionary_url = "https://es.wiktionary.org/wiki/{term}"
 translator_url = "https://translate.google.com/?ie=UTF-8&sl=es&tl=en&text={term}"
+# Articles stripped from the start of imported words ("le chat" → "chat").
+articles = "el|la|los|las|un|una|unos|unas|lo"

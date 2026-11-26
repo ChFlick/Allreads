@@ -13,3 +13,5 @@ dictionary_url = "http://www.wordreference.com/fren/{term}"
 translator_url = "https://translate.google.com/?ie=UTF-8&sl=fr&tl=en&text={term}"
 # Split before an apostrophe: l'homme, jusqu'à. Not aujourd'hui.
 elision_prefixes = "l|d|j|m|n|s|t|c|qu|jusqu|lorsqu|puisqu|quoiqu"
+# Articles stripped from the start of imported words ("le chat" → "chat").
+articles = "le|la|les|l'|un|une|des|du|de la"

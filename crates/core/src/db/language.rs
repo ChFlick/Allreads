@@ -7,7 +7,7 @@ use crate::presets::LanguagePreset;
 
 const COLUMNS: &str = "code, name, word_characters, sentence_end_chars, sentence_exceptions, \
      character_substitutions, rtl, remove_spaces, split_each_char, tts_locale, \
-     dictionary_url, translator_url, elision_prefixes";
+     dictionary_url, translator_url, elision_prefixes, articles";
 
 impl Database {
     /// Inserts a language, or replaces the settings of one with the same code.
@@ -19,8 +19,9 @@ impl Database {
         self.conn().execute(
             "INSERT INTO language (code, name, word_characters, sentence_end_chars,
                  sentence_exceptions, character_substitutions, rtl, remove_spaces,
-                 split_each_char, tts_locale, dictionary_url, translator_url, elision_prefixes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                 split_each_char, tts_locale, dictionary_url, translator_url, elision_prefixes,
+                 articles)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
              ON CONFLICT (code) DO UPDATE SET
                  name = excluded.name,
                  word_characters = excluded.word_characters,
@@ -33,7 +34,8 @@ impl Database {
                  tts_locale = excluded.tts_locale,
                  dictionary_url = excluded.dictionary_url,
                  translator_url = excluded.translator_url,
-                 elision_prefixes = excluded.elision_prefixes",
+                 elision_prefixes = excluded.elision_prefixes,
+                 articles = excluded.articles",
             params![
                 language.code,
                 language.name,
@@ -48,6 +50,7 @@ impl Database {
                 language.dictionary_url,
                 language.translator_url,
                 language.elision_prefixes,
+                language.articles,
             ],
         )?;
         Ok(())
@@ -123,6 +126,7 @@ fn language_from_row(row: &Row) -> rusqlite::Result<LanguagePreset> {
         dictionary_url: row.get(10)?,
         translator_url: row.get(11)?,
         elision_prefixes: row.get(12)?,
+        articles: row.get(13)?,
     })
 }
 

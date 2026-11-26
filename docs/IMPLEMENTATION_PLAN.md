@@ -281,7 +281,8 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 
 **Steps**, each with its check:
 1. **Core: cleaning and status rules.** `import::clean_word(raw, rules)` with the article lists from the presets, and `import::status_for(review)` for the review-progress rule.
-   - **Done when** tests cover HTML, media tags, cloze, brackets, separators, French/German/Spanish/Italian/English articles, and every interval boundary.
+   - **Done when** tests cover HTML, media tags, cloze, brackets, separators, French/German/Spanish/English articles, and every interval boundary.
+   - *Done 2026-11-26:* `crates/core/src/import.rs` (`clean_word`, `status_for`); articles in the presets and the `language` table (migration V14). Italian has no preset yet, so no articles.
 2. **Core: storing.** `import_words(language, items, mode) -> ImportSummary` in one transaction, with "more known wins", meaning only into empty translations, and a new `term.imported_from` column (migration, e.g. "Anki · French vocabulary") for the badge; a word imported from Anki is kept out of the Anki queue. FFI: `import_anki_words`, and `clean_import_word` for the previews.
    - **Done when** tests show the counts (added, upgraded, unchanged, skipped), that a downgrade never happens, and that an imported word saved again is not queued for AnkiDroid.
 3. **Phone spike: reading AnkiDroid.** Through AnkiDroid's content provider (`FlashCardsContract.Note`), with Anki search syntax:

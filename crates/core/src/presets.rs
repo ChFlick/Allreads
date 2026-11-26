@@ -32,6 +32,10 @@ pub struct LanguagePreset {
     /// that `l'homme` is two words. Empty for most languages.
     #[serde(default)]
     pub elision_prefixes: String,
+    /// Pipe-separated articles that may open a word in an imported deck, e.g.
+    /// `le|la|les|l'` so that "le chat" is imported as "chat". May be empty.
+    #[serde(default)]
+    pub articles: String,
 }
 
 /// Errors from reading, parsing or checking presets.

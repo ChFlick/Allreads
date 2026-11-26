@@ -12,3 +12,5 @@ split_each_char = false
 tts_locale = "de-DE"
 dictionary_url = "http://de-en.syn.dict.cc/?s={term}"
 translator_url = "https://translate.google.com/?ie=UTF-8&sl=de&tl=en&text={term}"
+# Articles stripped from the start of imported words ("le chat" → "chat").
+articles = "der|die|das|den|dem|des|ein|eine|einen|einem|einer|eines"
