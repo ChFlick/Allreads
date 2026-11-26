@@ -71,7 +71,8 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 ImportSourceSection(state, onDeck = viewModel::readDeck, onFile = {
-                    picker.launch(arrayOf("application/octet-stream", "application/zip", "text/*", "application/apkg"))
+                    // Phones report .apkg files under many types (or none): offer every file; the core refuses what it cannot read.
+                    picker.launch(arrayOf("*/*"))
                 })
                 if (state.reading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
