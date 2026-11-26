@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.PhraseSuggestion
 import io.github.chflick.allreads.reader.textForTranslation
 import io.github.chflick.allreads.data.DownloadState
@@ -73,6 +74,8 @@ data class ReaderState(
     val translations: Map<String, SentenceTranslation> = emptyMap(),
     val selected: SelectedWord? = null,
     val message: String? = null,
+    /** Words just marked known, offered for undo in a snackbar. */
+    val markedKnown: MarkedKnown? = null,
     /** Set when read-aloud found no voice for the book's language; the screen offers the TTS settings. */
     val noVoice: Boolean = false,
 )
@@ -218,6 +221,8 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             words.firstOrNull()?.let { select(row, it) }
             return
         }
+        // They found the gesture; the drawer's tip about it can go.
+        phraseHintSeen()
         val status = row.content.tokens[tokens.first].phrase?.status ?: WordStatus.New
         open(row, row.content.textOf(tokens), status, isPhrase = true) {}
     }
@@ -408,9 +413,31 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     fun markRestKnown(fromBlock: Int) {
         viewModelScope.launch {
             val result = runCatching { repository.markRestKnown(bookId, _state.value.chapterIndex, fromBlock.toUInt()) }
-            _state.update { it.copy(message = result.fold({ n -> "Marked $n words as known" }, ::describe)) }
+            _state.update { state ->
+                result.fold(
+                    // Nothing to undo when no word was new.
+                    { marked -> if (marked.count == 0u) state.copy(message = "No new words left in this chapter") else state.copy(markedKnown = marked) },
+                    { state.copy(message = describe(it)) },
+                )
+            }
             reloadStatuses()
         }
+    }
+
+    fun markedKnownShown() = _state.update { it.copy(markedKnown = null) }
+
+    /** Puts the words from the last "mark the rest as known" back to new. */
+    fun undoMarkKnown(marked: MarkedKnown) {
+        viewModelScope.launch {
+            val result = runCatching { repository.undoMarkKnown(marked.termIds) }
+            result.exceptionOrNull()?.let { error -> _state.update { it.copy(message = describe(error)) } }
+            reloadStatuses()
+        }
+    }
+
+    /** The drawer's long-press tip was dismissed, or a phrase was selected: don't show it again. */
+    fun phraseHintSeen() {
+        if (!services.settings.settings.value.phraseHintSeen) services.settings.update { it.copy(phraseHintSeen = true) }
     }
 
     fun messageShown() = _state.update { it.copy(message = null) }

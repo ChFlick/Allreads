@@ -40,6 +40,14 @@ pub struct BookSummary {
     pub last_read_at: Option<i64>,
 }
 
+/// The result of "mark the rest of this chapter as known": how many words
+/// were added, and their ids so the marking can be undone.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct MarkedKnown {
+    pub count: u32,
+    pub term_ids: Vec<i64>,
+}
+
 /// How well a word is known, for colouring it in the reader.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum WordStatus {

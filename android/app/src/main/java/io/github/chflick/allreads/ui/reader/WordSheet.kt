@@ -32,6 +32,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -101,6 +102,8 @@ fun WordSheet(
     onSave: (WordFields, close: Boolean) -> Unit,
     onDismiss: () -> Unit,
     hideTranslations: Boolean = false,
+    showPhraseHint: Boolean = false,
+    onPhraseHintSeen: () -> Unit = {},
 ) {
     val draft = remember(word.text) { WordDraft(word) }
     val close = { draft.toSaveOnClose()?.let { onSave(it, true) } ?: onDismiss() }
@@ -117,6 +120,8 @@ fun WordSheet(
             onSave = { onSave(it, false) },
             draft = draft,
             hideTranslations = hideTranslations,
+            showPhraseHint = showPhraseHint,
+            onPhraseHintSeen = onPhraseHintSeen,
         )
     }
 }
@@ -136,6 +141,8 @@ fun WordSheetContent(
     onSave: (WordFields) -> Unit,
     draft: WordDraft = remember(word.text) { WordDraft(word) },
     hideTranslations: Boolean = false,
+    showPhraseHint: Boolean = false,
+    onPhraseHintSeen: () -> Unit = {},
 ) {
     // With "meanings in the book's language" on, translations wait for a tap on Reveal.
     var revealed by rememberSaveable(word.text) { mutableStateOf(!hideTranslations) }
@@ -188,6 +195,24 @@ fun WordSheetContent(
                         }
                     },
                 )
+            }
+        }
+        // Shown until dismissed, or until a phrase is selected by dragging.
+        if (showPhraseHint) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
+                    Text(
+                        "Tip: to save a phrase, long-press its first word and drag to its last.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onPhraseHintSeen) { Text("Got it") }
+                }
             }
         }
         // Dictionary phrases around the word come first, so they show in the half-open drawer.

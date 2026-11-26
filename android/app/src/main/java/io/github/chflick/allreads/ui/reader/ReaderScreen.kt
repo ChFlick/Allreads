@@ -6,6 +6,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.background
 import android.provider.Settings
@@ -115,6 +119,16 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             viewModel.messageShown()
         }
     }
+    LaunchedEffect(state.markedKnown) {
+        val marked = state.markedKnown ?: return@LaunchedEffect
+        viewModel.markedKnownShown()
+        val result = snackbar.showSnackbar(
+            "Marked ${marked.count} words as known",
+            actionLabel = "Undo",
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) viewModel.undoMarkKnown(marked)
+    }
     LaunchedEffect(state.noVoice) {
         if (!state.noVoice) return@LaunchedEffect
         viewModel.noVoiceShown()
@@ -167,6 +181,8 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
             onSave = viewModel::saveWord,
             onDismiss = viewModel::dismissWord,
             hideTranslations = settings.hideTranslations,
+            showPhraseHint = !settings.phraseHintSeen && !word.isPhrase,
+            onPhraseHintSeen = viewModel::phraseHintSeen,
         )
     }
 }
@@ -424,37 +440,54 @@ fun ReaderContent(
     val textStyle = readerTextStyle(settings)
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        val number = state.chapterIndex.toInt() + 1
-                        Text(state.chapterTitle ?: "Chapter $number", maxLines = 1)
-                        state.book?.let {
-                            Text(it.title, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            val number = state.chapterIndex.toInt() + 1
+                            Text(state.chapterTitle ?: "Chapter $number", maxLines = 1)
+                            state.book?.let {
+                                Text(it.title, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                            }
                         }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = actions.onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the library")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Mark the rest of this chapter as known") },
+                                onClick = {
+                                    menuOpen = false
+                                    val block = state.rows.getOrNull(listState.firstVisibleItemIndex)?.blockIndex ?: 0
+                                    actions.onMarkRestKnown(block)
+                                },
+                            )
+                        }
+                    },
+                )
+                // How much of the chapter has been on screen: the last visible sentence's
+                // place, so the bar fills up when the end of the chapter comes into view.
+                val progress by remember(state.rows) {
+                    derivedStateOf {
+                        val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                        if (state.rows.isEmpty()) 0f else ((last + 1).toFloat() / state.rows.size).coerceIn(0f, 1f)
                     }
-                },
-                navigationIcon = {
-                    IconButton(onClick = actions.onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the library")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Mark the rest of this chapter as known") },
-                            onClick = {
-                                menuOpen = false
-                                val block = state.rows.getOrNull(listState.firstVisibleItemIndex)?.blockIndex ?: 0
-                                actions.onMarkRestKnown(block)
-                            },
-                        )
-                    }
-                },
-            )
+                }
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    drawStopIndicator = {},
+                    gapSize = 0.dp,
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->

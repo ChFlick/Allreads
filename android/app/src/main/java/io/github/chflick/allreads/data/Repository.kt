@@ -2,6 +2,7 @@ package io.github.chflick.allreads.data
 
 import io.github.chflick.allreads.anki.NoteTypeStore
 import io.github.chflick.allreads.anki.SyncStore
+import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.AnkiNote
 import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.DictionaryLookup
@@ -77,8 +78,10 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
     /** Checks a DeepL key by reading its usage, which costs no quota. */
     suspend fun checkDeeplKey(key: String): DeepLKeyStatus = io { uniffi.allreads_ffi.checkDeeplKey(key) }
 
-    suspend fun markRestKnown(bookId: Long, chapter: UInt, fromBlock: UInt): UInt =
+    suspend fun markRestKnown(bookId: Long, chapter: UInt, fromBlock: UInt): MarkedKnown =
         io { app.markRestKnown(bookId, chapter, fromBlock) }
+
+    suspend fun undoMarkKnown(termIds: List<Long>): UInt = io { app.undoMarkKnown(termIds) }
 
     /** The AnkiDroid deck chosen in Settings, if any. */
     suspend fun ankiDeckId(): Long? = io { app.ankiDeckId() }

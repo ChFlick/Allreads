@@ -251,7 +251,8 @@ impl Database {
     }
 
     /// Saves every word in `words` that is not saved yet as well known (99), in
-    /// one transaction, and returns how many were added. Words already saved
+    /// one transaction, and returns the ids of the terms it added, so the
+    /// marking can be undone with [`Database::undo_mark_known`]. Words already saved
     /// keep their status, so a word being learned is never marked known by accident.
     ///
     /// `words` are `(term key, form as seen)` pairs, e.g. from a parsed chapter.
@@ -263,34 +264,59 @@ impl Database {
         &self,
         language_code: &str,
         words: &[(String, String)],
-    ) -> Result<usize, DbError> {
+    ) -> Result<Vec<i64>, DbError> {
         if self.language(language_code)?.is_none() {
             return Err(DbError::NotFound {
                 what: format!("language {language_code}"),
             });
         }
         let transaction = self.conn().unchecked_transaction()?;
-        let mut added = 0;
+        let mut added = Vec::new();
         {
+            // A word that is already saved hits the conflict, so RETURNING gives no row for it.
             let mut insert = transaction.prepare(
                 "INSERT INTO term (language_code, text, status, display_text)
                  VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT (language_code, text) DO NOTHING",
+                 ON CONFLICT (language_code, text) DO NOTHING
+                 RETURNING id",
             )?;
             for (key, display_text) in words {
                 if key.trim().is_empty() {
                     continue;
                 }
-                added += insert.execute(params![
+                let mut rows = insert.query(params![
                     language_code,
                     key,
                     Status::WellKnown.code(),
                     display_text
                 ])?;
+                if let Some(row) = rows.next()? {
+                    added.push(row.get(0)?);
+                }
             }
         }
         transaction.commit()?;
         Ok(added)
+    }
+
+    /// Undoes [`Database::mark_known`]: deletes the terms it added, except any
+    /// whose status was changed since (those were saved on purpose). Returns
+    /// how many were deleted.
+    ///
+    /// # Errors
+    /// Returns a database error if a statement fails.
+    pub fn undo_mark_known(&self, term_ids: &[i64]) -> Result<usize, DbError> {
+        let transaction = self.conn().unchecked_transaction()?;
+        let mut deleted = 0;
+        {
+            let mut delete =
+                transaction.prepare("DELETE FROM term WHERE id = ?1 AND status = ?2")?;
+            for id in term_ids {
+                deleted += delete.execute(params![id, Status::WellKnown.code()])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(deleted)
     }
 
     /// Deletes a term. Its `AnkiDroid` link and queue entry go with it; the card
@@ -677,7 +703,7 @@ mod tests {
         let added = db
             .mark_known("fr", &pairs(&["chat", "Chien", "chien", "oiseau"]))
             .unwrap();
-        assert_eq!(added, 2);
+        assert_eq!(added.len(), 2);
         assert_eq!(
             db.term(learning).unwrap().unwrap().status,
             Status::Learning(2)
@@ -686,6 +712,25 @@ mod tests {
         assert_eq!(
             (chien.status, chien.display_text.as_str()),
             (Status::WellKnown, "Chien")
+        );
+    }
+
+    #[test]
+    fn undoing_mark_known_keeps_words_changed_since_and_older_ones() {
+        let db = french_db();
+        db.save_term(&new_term("chat", Status::WellKnown)).unwrap();
+        let added = db
+            .mark_known("fr", &pairs(&["chat", "chien", "oiseau"]))
+            .unwrap();
+        // "oiseau" was saved at a level after the marking: it stays.
+        db.save_term(&new_term("oiseau", Status::Learning(2)))
+            .unwrap();
+        assert_eq!(db.undo_mark_known(&added).unwrap(), 1);
+        assert!(db.find_term("fr", "chien").unwrap().is_none());
+        assert!(db.find_term("fr", "chat").unwrap().is_some());
+        assert_eq!(
+            db.find_term("fr", "oiseau").unwrap().unwrap().status,
+            Status::Learning(2)
         );
     }
 

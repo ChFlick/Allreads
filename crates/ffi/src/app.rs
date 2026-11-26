@@ -21,8 +21,8 @@ use allreads_core::translate::{TranslateError, TranslationRequest, Translator};
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
     saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookMeta, BookSummary, Chapter,
-    ChapterBlock, DeepLKeyStatus, DictionaryLookup, InstalledDictionary, LanguageInfo, PhraseMark,
-    PhraseSuggestion, SavedTerm, TermInput, Token, Translation, WordStatus,
+    ChapterBlock, DeepLKeyStatus, DictionaryLookup, InstalledDictionary, LanguageInfo, MarkedKnown,
+    PhraseMark, PhraseSuggestion, SavedTerm, TermInput, Token, Translation, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -551,7 +551,7 @@ impl App {
 
     /// Marks every new word in a chapter, from block `from_block` to the end,
     /// as well known (PRD F8). Saved words keep their status. Returns how many
-    /// words were added.
+    /// words were added and their term ids, for [`App::undo_mark_known`].
     ///
     /// # Errors
     /// Returns `Missing` for an unknown book, and `ChapterOutOfRange` for a bad index.
@@ -560,7 +560,7 @@ impl App {
         book_id: i64,
         chapter_index: u32,
         from_block: u32,
-    ) -> Result<u32, AllreadsError> {
+    ) -> Result<MarkedKnown, AllreadsError> {
         let row = self.book_row(book_id)?;
         let parsed = self.parsed_chapter(&row, chapter_index)?;
         let words: Vec<(String, String)> = parsed
@@ -570,8 +570,20 @@ impl App {
             .flat_map(|block| &block.tokens)
             .filter_map(|token| Some((token.key.clone()?, token.text.clone())))
             .collect();
-        let added = self.db()?.mark_known(&row.language_code, &words)?;
-        Ok(saturate_u32(added))
+        let term_ids = self.db()?.mark_known(&row.language_code, &words)?;
+        Ok(MarkedKnown {
+            count: saturate_u32(term_ids.len()),
+            term_ids,
+        })
+    }
+
+    /// Undoes [`App::mark_rest_known`], keeping any word whose status was
+    /// changed since. Returns how many words went back to new.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be written.
+    pub fn undo_mark_known(&self, term_ids: Vec<i64>) -> Result<u32, AllreadsError> {
+        Ok(saturate_u32(self.db()?.undo_mark_known(&term_ids)?))
     }
 
     /// Translates a word or sentence with DeepL. Repeats come from the cache.
@@ -1416,8 +1428,9 @@ mod tests {
         app.save_term(input("homme", WordStatus::Learning { level: 3 }))
             .unwrap();
         // Block 0 is the heading "Chapitre un"; start at block 1.
-        let added = app.mark_rest_known(id, 0, 1).unwrap();
-        assert!(added > 0);
+        let marked = app.mark_rest_known(id, 0, 1).unwrap();
+        assert!(marked.count > 0);
+        assert_eq!(marked.count as usize, marked.term_ids.len());
         let chapter = app.open_chapter(id, 0).unwrap();
         assert_eq!(statuses_of(&chapter, "chapitre"), [WordStatus::New]);
         assert_eq!(statuses_of(&chapter, "lisait"), [WordStatus::WellKnown]);
@@ -1428,7 +1441,11 @@ mod tests {
                 WordStatus::Learning { level: 3 }
             ]
         );
-        assert_eq!(app.mark_rest_known(id, 0, 1).unwrap(), 0);
+        assert_eq!(app.mark_rest_known(id, 0, 1).unwrap().count, 0);
+        // Undo puts the words back to new.
+        assert_eq!(app.undo_mark_known(marked.term_ids).unwrap(), marked.count);
+        let chapter = app.open_chapter(id, 0).unwrap();
+        assert_eq!(statuses_of(&chapter, "lisait"), [WordStatus::New]);
     }
 
     /// A DeepL client pointed at a local server that answers one request.
