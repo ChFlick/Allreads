@@ -424,15 +424,30 @@ impl App {
         path: String,
         name: String,
     ) -> Result<Vec<ImportGroup>, AllreadsError> {
+        let storage = |e: std::io::Error| AllreadsError::Storage {
+            reason: e.to_string(),
+        };
         let lower = name.to_lowercase();
-        if lower.ends_with(".apkg") || lower.ends_with(".colpkg") {
+        // A deck by its name, or by its content (a zip) when the name lacks
+        // the extension, as files shared from some apps do.
+        if lower.ends_with(".apkg") || lower.ends_with(".colpkg") || is_zip(Path::new(&path))? {
             let sources =
                 allreads_core::apkg::read_apkg(Path::new(&path), &self.data_dir.join("cache"))?;
             return Ok(sources.into_iter().map(ImportGroup::from).collect());
         }
-        let bytes = fs::read(&path).map_err(|e| AllreadsError::Storage {
-            reason: e.to_string(),
-        })?;
+        let size = fs::metadata(&path).map_err(storage)?.len();
+        if size > MAX_TEXT_IMPORT_BYTES {
+            return Err(AllreadsError::InvalidInput {
+                reason: "the file is too large for a text export".into(),
+            });
+        }
+        let bytes = fs::read(&path).map_err(storage)?;
+        // Text never holds NUL bytes; images, PDFs and other binaries do.
+        if bytes.contains(&0) {
+            return Err(AllreadsError::InvalidInput {
+                reason: "the file is neither an Anki deck nor a text export".into(),
+            });
+        }
         // Text exports are UTF-8; anything else is read with replacement characters.
         let text = String::from_utf8_lossy(&bytes);
         let source = allreads_core::import::read_text_export(&text, &name);
@@ -1272,6 +1287,26 @@ pub fn read_book_meta(path: String) -> Result<BookMeta, AllreadsError> {
     Ok(OpenedBook::open(Path::new(&path))?.meta().into())
 }
 
+/// The largest text export read for import: far beyond any word list, small
+/// enough to read into memory on a phone.
+const MAX_TEXT_IMPORT_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Whether the file starts like a zip archive (an `.apkg`), whatever its name.
+///
+/// # Errors
+/// Returns `Storage` if the file cannot be opened.
+pub(crate) fn is_zip(path: &Path) -> Result<bool, AllreadsError> {
+    use std::io::Read;
+    let mut start = [0u8; 4];
+    let mut file = fs::File::open(path).map_err(|e| AllreadsError::Storage {
+        reason: e.to_string(),
+    })?;
+    let read = file.read(&mut start).map_err(|e| AllreadsError::Storage {
+        reason: e.to_string(),
+    })?;
+    Ok(read == 4 && start == *b"PK\x03\x04")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1807,6 +1842,17 @@ mod tests {
             .is_err());
         assert!(app
             .read_import_file(file.display().to_string(), "x.apkg".into())
+            .is_err());
+        // Binary files are refused, not read as rows of noise.
+        fs::write(&file, b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR").unwrap();
+        assert!(app
+            .read_import_file(file.display().to_string(), "photo.png".into())
+            .is_err());
+        // A zip without the deck's extension is read as a deck (and refused
+        // here, since it holds no collection), not as text.
+        fs::write(&file, b"PK\x03\x04rest").unwrap();
+        assert!(app
+            .read_import_file(file.display().to_string(), "shared-file".into())
             .is_err());
     }
 
