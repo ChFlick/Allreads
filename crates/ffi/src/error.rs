@@ -63,6 +63,19 @@ impl From<allreads_core::word_tally::CountError> for AllreadsError {
     }
 }
 
+impl From<allreads_core::apkg::ApkgError> for AllreadsError {
+    fn from(error: allreads_core::apkg::ApkgError) -> Self {
+        match error {
+            allreads_core::apkg::ApkgError::Io(e) => AllreadsError::Storage {
+                reason: e.to_string(),
+            },
+            other => AllreadsError::InvalidInput {
+                reason: other.to_string(),
+            },
+        }
+    }
+}
+
 impl From<DictionaryError> for AllreadsError {
     fn from(error: DictionaryError) -> Self {
         match error {

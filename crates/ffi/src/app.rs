@@ -22,10 +22,10 @@ use allreads_core::word_tally;
 use crate::error::{poisoned, AllreadsError};
 use crate::records::{
     saturate_u32, AnkiNote, AnkiNoteType, AvailableDictionary, BookDifficulty, BookDifficultyOf,
-    BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, DictionaryLookup, ImportRow,
-    ImportStatus, ImportSummary, InstalledDictionary, LanguageInfo, MarkedKnown, PhraseMark,
-    PhraseSuggestion, PreparedText, SavedTerm, TermInput, Token, Translation, WordProgress,
-    WordStatus,
+    BookMeta, BookSummary, Chapter, ChapterBlock, DeepLKeyStatus, DictionaryLookup, ImportGroup,
+    ImportRow, ImportStatus, ImportSummary, InstalledDictionary, LanguageInfo, MarkedKnown,
+    PhraseMark, PhraseSuggestion, PreparedText, SavedTerm, TermInput, Token, Translation,
+    WordProgress, WordStatus,
 };
 
 /// How many opened books `App` keeps in memory.
@@ -409,6 +409,39 @@ impl App {
     ) -> Result<Option<String>, AllreadsError> {
         let articles = self.articles(&language_code)?;
         Ok(allreads_core::import::clean_word(&raw, &articles))
+    }
+
+    /// Reads a file to import words from: an Anki deck (`.apkg`, `.colpkg`),
+    /// one group per note type with review progress; or a text export (Anki's
+    /// "Notes in Plain Text", CSV, TSV), one group named after the file.
+    /// `name` is the file's name as the user picked it.
+    ///
+    /// # Errors
+    /// Returns `InvalidInput` for a file that cannot be read as either, and
+    /// `Storage` if it cannot be opened.
+    pub fn read_import_file(
+        &self,
+        path: String,
+        name: String,
+    ) -> Result<Vec<ImportGroup>, AllreadsError> {
+        let lower = name.to_lowercase();
+        if lower.ends_with(".apkg") || lower.ends_with(".colpkg") {
+            let sources =
+                allreads_core::apkg::read_apkg(Path::new(&path), &self.data_dir.join("cache"))?;
+            return Ok(sources.into_iter().map(ImportGroup::from).collect());
+        }
+        let bytes = fs::read(&path).map_err(|e| AllreadsError::Storage {
+            reason: e.to_string(),
+        })?;
+        // Text exports are UTF-8; anything else is read with replacement characters.
+        let text = String::from_utf8_lossy(&bytes);
+        let source = allreads_core::import::read_text_export(&text, &name);
+        if source.notes.is_empty() {
+            return Err(AllreadsError::InvalidInput {
+                reason: "the file holds no rows to import".into(),
+            });
+        }
+        Ok(vec![source.into()])
     }
 
     /// Imports words picked from notes: each row's word is cleaned, its status
@@ -1746,6 +1779,34 @@ mod tests {
                     status: WordStatus::New
                 }
             )
+            .is_err());
+    }
+
+    #[test]
+    fn a_text_export_is_read_as_one_group() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = new_app(&dir);
+        let file = dir.path().join("upload");
+        fs::write(
+            &file,
+            "#separator:tab\n#columns:Front\tBack\nle chat\tcat\n",
+        )
+        .unwrap();
+        let groups = app
+            .read_import_file(file.display().to_string(), "Vocab.txt".into())
+            .unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            (groups[0].name.as_str(), groups[0].fields.len()),
+            ("Vocab.txt", 2)
+        );
+        assert_eq!(groups[0].notes[0].fields, ["le chat", "cat"]);
+        fs::write(&file, "").unwrap();
+        assert!(app
+            .read_import_file(file.display().to_string(), "x.csv".into())
+            .is_err());
+        assert!(app
+            .read_import_file(file.display().to_string(), "x.apkg".into())
             .is_err());
     }
 

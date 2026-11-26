@@ -273,6 +273,33 @@ pub struct ImportGroup {
     pub notes: Vec<ImportNote>,
 }
 
+impl From<allreads_core::import::ImportSource> for ImportGroup {
+    fn from(source: allreads_core::import::ImportSource) -> Self {
+        ImportGroup {
+            name: source.name,
+            fields: source.fields,
+            notes: source
+                .notes
+                .into_iter()
+                .map(|note| ImportNote {
+                    fields: note.fields,
+                    progress: note.progress.map(CardProgress::from),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<allreads_core::import::CardProgress> for CardProgress {
+    fn from(progress: allreads_core::import::CardProgress) -> Self {
+        match progress {
+            allreads_core::import::CardProgress::New => Self::New,
+            allreads_core::import::CardProgress::Interval(days) => Self::Interval { days },
+            allreads_core::import::CardProgress::Suspended => Self::Suspended,
+        }
+    }
+}
+
 /// A word to import, as picked from a note: the raw word and meaning fields.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ImportRow {

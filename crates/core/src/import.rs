@@ -110,6 +110,185 @@ fn strip_article<'a>(word: &'a str, articles: &str) -> &'a str {
     word
 }
 
+/// Notes of one kind from an import source: an Anki note type, or the rows
+/// of a text file. The user picks which field holds the word and the meaning.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportSource {
+    /// The note type's name, or the file's.
+    pub name: String,
+    /// Field (or column) names, in the order of each note's fields.
+    pub fields: Vec<String>,
+    pub notes: Vec<SourceNote>,
+}
+
+/// One note or row: its fields, and its review progress when the source has it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceNote {
+    pub fields: Vec<String>,
+    pub progress: Option<CardProgress>,
+}
+
+/// Column names that mark a first row as a header in a plain CSV file.
+const HEADER_WORDS: [&str; 16] = [
+    "word",
+    "front",
+    "back",
+    "meaning",
+    "translation",
+    "term",
+    "definition",
+    "expression",
+    "vocabulary",
+    "vocab",
+    "english",
+    "french",
+    "german",
+    "spanish",
+    "sentence",
+    "notes",
+];
+
+/// Reads a text export: Anki's "Notes in Plain Text" (with its `#separator:`,
+/// `#html:` and `#columns:` header lines) or a plain CSV/TSV file. The
+/// separator is the header's, else a tab, semicolon or comma, whichever the
+/// first row has most of. Fields may be quoted with `"`, holding separators,
+/// line breaks and `""` for a quote. Columns are named by `#columns:`, by a
+/// first row that looks like a header ("Word,Meaning"), or "Column 1", "Column 2"…
+#[must_use]
+pub fn read_text_export(text: &str, name: &str) -> ImportSource {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let mut separator = None;
+    let mut columns: Option<Vec<String>> = None;
+    let mut body_start = 0;
+    // Anki's header lines come first, each starting with '#'.
+    for line in text.split_inclusive('\n') {
+        let Some(setting) = line.trim_end().strip_prefix('#') else {
+            break;
+        };
+        body_start += line.len();
+        if let Some((key, value)) = setting.split_once(':') {
+            match key.trim().to_lowercase().as_str() {
+                "separator" => separator = separator_named(value.trim()),
+                "columns" => {
+                    columns = Some(
+                        value
+                            .trim_end_matches(['\r', '\n'])
+                            .split(['\t', ',', ';'])
+                            .map(|c| c.trim().to_string())
+                            .collect(),
+                    )
+                }
+                _ => {}
+            }
+        }
+    }
+    let body = &text[body_start..];
+    let separator = separator.unwrap_or_else(|| guess_separator(body));
+    let mut rows = split_rows(body, separator);
+    let width = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let fields = match columns {
+        Some(columns) => columns,
+        None => {
+            let looks_like_header = rows.first().is_some_and(|first| {
+                first
+                    .iter()
+                    .any(|cell| HEADER_WORDS.contains(&cell.trim().to_lowercase().as_str()))
+            });
+            if looks_like_header {
+                rows.remove(0)
+            } else {
+                (1..=width).map(|n| format!("Column {n}")).collect()
+            }
+        }
+    };
+    ImportSource {
+        name: name.to_string(),
+        notes: rows
+            .into_iter()
+            .map(|mut cells| {
+                cells.resize(fields.len().max(cells.len()), String::new());
+                SourceNote {
+                    fields: cells,
+                    progress: None,
+                }
+            })
+            .collect(),
+        fields,
+    }
+}
+
+/// The separator an Anki header names: `tab`, `comma`, `semicolon`, `space`,
+/// `pipe`, `colon`, or the character itself.
+fn separator_named(name: &str) -> Option<char> {
+    match name.to_lowercase().as_str() {
+        "tab" => Some('\t'),
+        "comma" => Some(','),
+        "semicolon" => Some(';'),
+        "space" => Some(' '),
+        "pipe" => Some('|'),
+        "colon" => Some(':'),
+        other => other.chars().next(),
+    }
+}
+
+/// Tab, semicolon or comma: whichever the first line has most of (tab on a tie).
+fn guess_separator(body: &str) -> char {
+    let first = body.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let count = |c| first.matches(c).count();
+    let (tabs, semicolons, commas) = (count('\t'), count(';'), count(','));
+    if tabs >= semicolons && tabs >= commas && tabs > 0 {
+        '\t'
+    } else if semicolons > commas {
+        ';'
+    } else {
+        ','
+    }
+}
+
+/// Splits CSV-style text into rows of cells, honouring quotes. Empty lines are skipped.
+fn split_rows(body: &str, separator: char) -> Vec<Vec<String>> {
+    let mut rows = Vec::new();
+    let mut row = Vec::new();
+    let mut cell = String::new();
+    let mut quoted = false;
+    let mut chars = body.chars().peekable();
+    while let Some(c) = chars.next() {
+        if quoted {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    cell.push('"');
+                    chars.next();
+                } else {
+                    quoted = false;
+                }
+            } else {
+                cell.push(c);
+            }
+        } else if c == '"' && cell.is_empty() {
+            quoted = true;
+        } else if c == separator {
+            row.push(std::mem::take(&mut cell));
+        } else if c == '\n' || c == '\r' {
+            if c == '\r' && chars.peek() == Some(&'\n') {
+                chars.next();
+            }
+            row.push(std::mem::take(&mut cell));
+            if row.iter().any(|c| !c.trim().is_empty()) {
+                rows.push(std::mem::take(&mut row));
+            } else {
+                row.clear();
+            }
+        } else {
+            cell.push(c);
+        }
+    }
+    row.push(cell);
+    if row.iter().any(|c| !c.trim().is_empty()) {
+        rows.push(row);
+    }
+    rows
+}
+
 /// Where a card stands in Anki's reviews.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CardProgress {
@@ -229,6 +408,32 @@ mod tests {
             Some("bed; layer")
         );
         assert_eq!(clean_meaning(" [sound:x.mp3] "), None);
+    }
+
+    #[test]
+    fn an_anki_plain_text_export_is_read_with_its_header() {
+        let export = "#separator:tab\n#html:true\n#columns:Front\tBack\tTags\nle chat\t\"cat\nkitty\"\tanimals\nchien\tdog\t\n";
+        let source = read_text_export(export, "deck.txt");
+        assert_eq!(source.fields, ["Front", "Back", "Tags"]);
+        assert_eq!(source.notes.len(), 2);
+        assert_eq!(source.notes[0].fields, ["le chat", "cat\nkitty", "animals"]);
+        assert_eq!(source.notes[1].fields, ["chien", "dog", ""]);
+        assert_eq!(source.notes[0].progress, None);
+    }
+
+    #[test]
+    fn a_plain_csv_with_or_without_a_header_row() {
+        let with_header = read_text_export(
+            "Word,Meaning\r\n\"maison, la\",house\r\n\r\n\"dit \"\"oui\"\"\",said\r\n",
+            "words.csv",
+        );
+        assert_eq!(with_header.fields, ["Word", "Meaning"]);
+        assert_eq!(with_header.notes[0].fields, ["maison, la", "house"]);
+        assert_eq!(with_header.notes[1].fields, ["dit \"oui\"", "said"]);
+        let bare = read_text_export("\u{feff}chat;cat\nchien;dog;extra\n", "mots.csv");
+        assert_eq!(bare.fields, ["Column 1", "Column 2", "Column 3"]);
+        assert_eq!(bare.notes[0].fields, ["chat", "cat", ""]);
+        assert_eq!(bare.notes[1].fields, ["chien", "dog", "extra"]);
     }
 
     #[test]

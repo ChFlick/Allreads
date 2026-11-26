@@ -1,6 +1,7 @@
 //! Domain logic for Allreads. Books, text, vocabulary and storage live here.
 
 pub mod anki;
+pub mod apkg;
 pub mod article;
 pub mod book;
 pub mod db;
