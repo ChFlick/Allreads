@@ -64,7 +64,7 @@ impl App {
 
     /// Runs `f` on the language's `-en` dictionary, opening it on first use.
     /// `None` if no dictionary is installed for the language.
-    fn with_dictionary<T>(
+    pub(crate) fn with_dictionary<T>(
         &self,
         language_code: &str,
         f: impl FnOnce(&Dictionary) -> Result<T, dictionary::DictionaryError>,

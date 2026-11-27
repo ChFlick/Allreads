@@ -14,6 +14,7 @@ pub mod setting;
 pub mod stats;
 pub mod term;
 pub mod translation_cache;
+pub mod vocab_check;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

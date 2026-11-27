@@ -323,3 +323,27 @@ fn single_letters_and_elided_bits_are_not_asked() {
     }
     assert!(!asked.iter().any(|w| w == "l" || w == "d" || w == "l'un"));
 }
+
+#[test]
+fn marking_includes_every_form_of_each_marked_word() {
+    let words: Vec<String> = ["être", "avoir", "lire"]
+        .iter()
+        .map(|w| (*w).to_string())
+        .chain(ranked())
+        .collect();
+    let mut forms: Vec<Vec<String>> = vec![Vec::new(); words.len()];
+    forms[0] = vec!["est".into(), "était".into(), "être".into(), "été".into()];
+    forms[2] = vec!["lire".into(), "lisait".into()];
+    // "été" is also its own word further down: listed once.
+    forms[3] = vec!["été".into()];
+    let check = VocabCheck::new(words, &|_| false, 6);
+    let choice = MarkChoice {
+        up_to_rank: 4,
+        words: 0,
+        expected_accuracy: 1.0,
+    };
+    assert_eq!(
+        check.forms_to_mark(&choice, &forms),
+        ["est", "était", "être", "été", "avoir", "lire", "lisait"]
+    );
+}

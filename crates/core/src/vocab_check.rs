@@ -196,6 +196,37 @@ impl VocabCheck {
     /// mostly does not know).
     #[must_use]
     pub fn words_to_mark(&self, choice: &MarkChoice) -> Vec<String> {
+        self.marked_ranks(choice)
+            .into_iter()
+            .map(|rank| self.ranked[rank].clone())
+            .collect()
+    }
+
+    /// The word forms a choice marks known: every form of each dictionary
+    /// form [`VocabCheck::words_to_mark`] gives (`forms` by rank, as the
+    /// dictionary lists them), so the reader stops underlining "lisait" once
+    /// "lire" is known. A dictionary form without listed forms stands alone.
+    #[must_use]
+    pub fn forms_to_mark(&self, choice: &MarkChoice, forms: &[Vec<String>]) -> Vec<String> {
+        let mut marked = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for rank in self.marked_ranks(choice) {
+            let own = std::slice::from_ref(&self.ranked[rank]);
+            let words = forms
+                .get(rank)
+                .filter(|f| !f.is_empty())
+                .map_or(own, Vec::as_slice);
+            for word in words {
+                if seen.insert(word.as_str()) {
+                    marked.push(word.clone());
+                }
+            }
+        }
+        marked
+    }
+
+    /// The ranks a choice marks, most common first.
+    fn marked_ranks(&self, choice: &MarkChoice) -> Vec<usize> {
         let curve = self.curve(self.false_yes());
         let mut marked: Vec<bool> = (0..self.ranked.len())
             .map(|rank| rank < choice.up_to_rank)
@@ -205,11 +236,11 @@ impl VocabCheck {
                 *slot = yes && (*slot || self.yes_is_real(&curve, rank) >= YES_TRUSTED);
             }
         }
-        self.ranked
-            .iter()
-            .zip(marked)
+        marked
+            .into_iter()
+            .enumerate()
             .filter(|(_, mark)| *mark)
-            .map(|(word, _)| word.clone())
+            .map(|(rank, _)| rank)
             .collect()
     }
 

@@ -5,11 +5,13 @@
 //! - `error`: `AllreadsError`, the exception type Kotlin sees.
 //! - `app`: `App`, the object with every call.
 //! - `catalog`: `App`'s calls for downloaded book catalogs ("Find a book").
+//! - `vocab_check`: the vocabulary check session and its calls.
 
 mod app;
 mod catalog;
 mod error;
 mod records;
+mod vocab_check;
 
 pub use app::{check_deepl_key, parse_dictionary_manifest, read_book_meta, App};
 pub use catalog::parse_catalog_manifest;
