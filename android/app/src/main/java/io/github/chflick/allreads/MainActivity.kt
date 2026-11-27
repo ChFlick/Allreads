@@ -152,7 +152,7 @@ private fun AllreadsNavigation(services: Services) {
                     LibraryScreen(library, onOpen = {
                         opens += 1
                         openBookId = it.id
-                    })
+                    }, onOpenSettings = { tab = Tab.Settings })
                 }
                 Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki) }, services)
                 Tab.Settings -> SettingsScreen(services)

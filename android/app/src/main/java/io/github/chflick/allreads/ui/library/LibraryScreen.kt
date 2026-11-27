@@ -1,5 +1,14 @@
 package io.github.chflick.allreads.ui.library
 
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import io.github.chflick.allreads.ui.SourceBadge
+import io.github.chflick.allreads.ui.theme.Literata
 import io.github.chflick.allreads.data.BookSort
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextField
@@ -80,7 +89,7 @@ import kotlin.math.roundToInt
 /** Step 9: the list of books, with import and delete. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit) {
+fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit, onOpenSettings: () -> Unit = {}) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val resolver = LocalContext.current.contentResolver
     val snackbar = remember { SnackbarHostState() }
@@ -105,6 +114,7 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit) {
         onView = viewModel::changeView,
         onImportArticle = viewModel::importArticle,
         onImportText = viewModel::importText,
+        onOpenSettings = onOpenSettings,
     )
 
     state.pending?.let { pending ->
@@ -171,6 +181,49 @@ internal fun newPercentText(percent: Double): String = when {
 }
 
 private enum class ImportKind { Article, Text }
+
+/** The empty library: three steps to get going, each opening its place. */
+@Composable
+private fun FirstSteps(onImport: () -> Unit, onPaste: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier.padding(horizontal = 24.dp, vertical = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        Text("Start reading", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "Allreads colours every word by how well you know it. Three steps to begin:",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FirstStep(1, "Add something to read", "An EPUB or TXT book, a web article, or pasted text.") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onImport) { Text("Import a book") }
+                OutlinedButton(onClick = onPaste) { Text("Paste text") }
+            }
+        }
+        FirstStep(2, "Add a DeepL key", "For translations of words and sentences. DeepL's free plan is enough.") {
+            OutlinedButton(onClick = onSettings) { Text("Open Settings") }
+        }
+        FirstStep(3, "Choose an AnkiDroid deck", "Optional: words you save become flashcards there.") {
+            OutlinedButton(onClick = onSettings) { Text("Open Settings") }
+        }
+    }
+}
+
+@Composable
+private fun FirstStep(number: Int, title: String, text: String, actions: @Composable () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(
+            Modifier.size(30.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Text("$number", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            actions()
+        }
+    }
+}
 
 /** Asks for a web page's address; tip: "Share → Allreads" in the browser skips this. */
 @Composable
@@ -243,7 +296,12 @@ private fun BookMenu(book: BookSummary, onDelete: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { menu = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "More for “${book.title}”")
+            Icon(
+                Icons.Default.MoreVert,
+                contentDescription = "More for “${book.title}”",
+                // Half strength: present on every row, so it should not compete with the titles.
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            )
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("Delete") }, onClick = {
@@ -256,21 +314,52 @@ private fun BookMenu(book: BookSummary, onDelete: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookRow(book: BookSummary, difficulty: BookDifficulty?, onOpen: () -> Unit, onLongPress: () -> Unit) {
-    Card(Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress)) {
-        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            BookCover(book, width = 56.dp)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(book.title, style = MaterialTheme.typography.titleMedium)
-                book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
-                difficulty?.let { DifficultyLine(it) }
-                if (book.lastReadAt != null) {
-                    BookProgressBar(book, Modifier.padding(top = 4.dp))
-                }
+private fun BookRow(
+    book: BookSummary,
+    difficulty: BookDifficulty?,
+    showLanguage: Boolean,
+    onOpen: () -> Unit,
+    onLongPress: () -> Unit,
+) {
+    // A plain row: only the Continue card is set off with a fill.
+    Row(
+        Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress).padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BookCover(book, width = 48.dp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(book.title, style = BookTitle, modifier = Modifier.weight(1f, fill = false))
+                // Only books outside the library's main language say which they are in.
+                if (showLanguage) SourceBadge(book.languageCode.uppercase())
             }
-            BookMenu(book, onDelete = onLongPress)
+            book.author?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            MetaLine(book, difficulty, short = true)
+            if (book.lastReadAt != null) BookProgressBar(book, Modifier.padding(top = 3.dp))
         }
+        BookMenu(book, onDelete = onLongPress)
+    }
+}
+
+/** Book titles in the reading font, so the library looks like books. */
+private val BookTitle: TextStyle
+    @Composable get() = MaterialTheme.typography.titleMedium.copy(fontFamily = Literata, fontWeight = FontWeight.SemiBold)
+
+/** "Ch. 15/47 · ● 11 % new" (or "Chapter 15 of 47 · …" on the Continue card), on one line. */
+@Composable
+private fun MetaLine(book: BookSummary, difficulty: BookDifficulty?, short: Boolean) {
+    val chapter = book.chapterIndex.toInt() + 1
+    val where = when {
+        book.lastReadAt == null -> "Not started"
+        short -> "Ch. $chapter/${book.chapterCount}"
+        else -> "Chapter $chapter of ${book.chapterCount}"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(where, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val percent = difficulty?.takeIf { it.words > 0uL }?.newPercent ?: return@Row
+        Text(" · ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        DotLabel(difficultyColour(percent), "${newPercentText(percent)} new")
     }
 }
 
@@ -278,22 +367,17 @@ private fun BookRow(book: BookSummary, difficulty: BookDifficulty?, onOpen: () -
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ContinueCard(book: BookSummary, difficulty: BookDifficulty?, onOpen: () -> Unit, onLongPress: () -> Unit) {
-    ElevatedCard(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onOpen, onLongClick = onLongPress),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).combinedClickable(onClick = onOpen, onLongClick = onLongPress),
     ) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            BookCover(book, width = 88.dp)
+            BookCover(book, width = 80.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "Continue reading",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
-                )
                 Text(book.title, style = MaterialTheme.typography.titleLarge)
                 book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                Text(book.chapterLine(), style = MaterialTheme.typography.labelMedium)
-                difficulty?.let { DifficultyLine(it) }
+                MetaLine(book, difficulty, short = false)
                 BookProgressBar(book, Modifier.padding(vertical = 4.dp))
                 Button(onClick = onOpen) { Text("Continue") }
             }
@@ -338,8 +422,13 @@ fun LibraryContent(
     onView: (LibraryView) -> Unit = {},
     onImportArticle: (url: String) -> Unit = {},
     onImportText: (title: String?, text: String) -> Unit = { _, _ -> },
+    onOpenSettings: () -> Unit = {},
 ) {
     val view = state.view
+    // Most people read in one language; only books in another say theirs.
+    val mainLanguage = remember(state.books) {
+        state.books.groupingBy { it.languageCode }.eachCount().maxByOrNull { it.value }?.key
+    }
     var askFor by rememberSaveable { mutableStateOf<ImportKind?>(null) }
     when (askFor) {
         ImportKind.Article -> ArticleDialog(onImport = { askFor = null; onImportArticle(it) }, onDismiss = { askFor = null })
@@ -378,7 +467,11 @@ fun LibraryContent(
             // One button, three sources: a book file, a web page, or pasted text.
             var menu by remember { mutableStateOf(false) }
             Box {
-                ExtendedFloatingActionButton(onClick = { menu = true }) { Text("Import") }
+                ExtendedFloatingActionButton(
+                    onClick = { menu = true },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("Import") },
+                )
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("Book file (EPUB or TXT)") }, onClick = { menu = false; onImport() })
                     DropdownMenuItem(text = { Text("Web article") }, onClick = { menu = false; askFor = ImportKind.Article })
@@ -388,9 +481,12 @@ fun LibraryContent(
         },
     ) { padding ->
         if (state.books.isEmpty() && !state.loading) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No books yet. Import an EPUB or TXT file.")
-            }
+            FirstSteps(
+                onImport = onImport,
+                onPaste = { askFor = ImportKind.Text },
+                onSettings = onOpenSettings,
+                modifier = Modifier.fillMaxSize().padding(padding),
+            )
             return@Scaffold
         }
         val shown = state.shown
@@ -404,7 +500,6 @@ fun LibraryContent(
             modifier = Modifier.fillMaxSize().padding(padding),
             // The bottom leaves room for the import button.
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // With nothing searched, filtered or re-sorted, the last book read
             // comes first and gets the big card.
@@ -414,8 +509,15 @@ fun LibraryContent(
                     ContinueCard(book, state.difficulty[book.id], onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
                 }
             }
-            items(shown.drop(if (current != null) 1 else 0), key = { it.id }) { book ->
-                BookRow(book, state.difficulty[book.id], onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
+            itemsIndexed(shown.drop(if (current != null) 1 else 0), key = { _, book -> book.id }) { index, book ->
+                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                BookRow(
+                    book,
+                    state.difficulty[book.id],
+                    showLanguage = book.languageCode != mainLanguage,
+                    onOpen = { onOpen(book) },
+                    onLongPress = { onLongPress(book) },
+                )
             }
         }
     }

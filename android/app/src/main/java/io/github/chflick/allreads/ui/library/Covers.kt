@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -77,7 +78,10 @@ internal fun coverColour(title: String): Color =
 /** The book's own cover, or one drawn from its title and author. Width-to-height is 2:3. */
 @Composable
 fun BookCover(book: BookSummary, width: Dp) {
-    val modifier = Modifier.size(width = width, height = width * 1.5f).clip(MaterialTheme.shapes.extraSmall)
+    // Rounded corners and a soft shadow, so covers read as books rather than placeholders.
+    val modifier = Modifier.size(width = width, height = width * 1.5f)
+        .shadow(3.dp, MaterialTheme.shapes.extraSmall)
+        .clip(MaterialTheme.shapes.extraSmall)
     val heightPx = with(LocalDensity.current) { (width * 1.5f).roundToPx() }
     val bitmap by produceState(CoverCache.get(book.coverPath, heightPx), book.coverPath, heightPx) {
         val path = book.coverPath ?: return@produceState
