@@ -24,10 +24,13 @@ pub struct QueuedTerm {
 
 impl Database {
     /// Records which `AnkiDroid` note a term was pushed as. Calling again for the
-    /// same term replaces the link, so edits update the same card.
+    /// same term replaces the link, so edits update the same card. A note that
+    /// a saved word now owns is no longer waiting to be suspended.
     /// # Errors
     /// Returns a database error if the statement fails.
     pub fn link_anki_note(&self, term_id: i64, note_id: i64, deck_id: i64) -> Result<(), DbError> {
+        self.conn()
+            .execute("DELETE FROM anki_suspend WHERE note_id = ?1", [note_id])?;
         self.conn().execute(
             "INSERT INTO anki_link (term_id, note_id, deck_id) VALUES (?1, ?2, ?3)
              ON CONFLICT (term_id) DO UPDATE SET
@@ -268,6 +271,30 @@ mod tests {
             .map(|q| q.term_id)
             .collect();
         assert_eq!(queued, ids);
+    }
+
+    #[test]
+    fn linking_a_note_cancels_its_pending_suspension() {
+        let (db, term) = db_with_term();
+        db.link_anki_note(term, 1001, 77).unwrap();
+        db.delete_term(term).unwrap();
+        assert_eq!(db.pending_anki_suspends(0).unwrap(), [1001]);
+        // The word comes back without `save_term` (e.g. an import) and its
+        // push relinks the same note: the card must not be suspended.
+        let other = db
+            .save_term(&NewTerm {
+                language_code: "fr".into(),
+                text: "chien".into(),
+                lemma: None,
+                status: Status::Learning(1),
+                translation: "dog".into(),
+                notes: String::new(),
+                parent_id: None,
+                context: None,
+            })
+            .unwrap();
+        db.link_anki_note(other, 1001, 77).unwrap();
+        assert!(db.pending_anki_suspends(0).unwrap().is_empty());
     }
 
     #[test]

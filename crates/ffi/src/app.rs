@@ -921,7 +921,8 @@ impl App {
     }
 
     /// Un-saves a word, so it shows as new again. Returns `false` if it was not
-    /// saved. Its card stays in `AnkiDroid`.
+    /// saved. A card Allreads made for it is suspended in `AnkiDroid` after the
+    /// Undo window (see `pending_anki_suspends`).
     ///
     /// # Errors
     /// Returns `Database` if the database cannot be written.

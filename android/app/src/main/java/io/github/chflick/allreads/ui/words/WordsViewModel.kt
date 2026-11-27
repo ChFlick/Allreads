@@ -158,7 +158,7 @@ class WordsViewModel(
         }
     }
 
-    /** A swipe to the right: the word is forgotten (its Anki card stays), with Undo. */
+    /** A swipe to the right: the word is forgotten (its Anki card is suspended after the Undo window), with Undo. */
     fun forget(term: SavedTerm) {
         viewModelScope.launch {
             val result = runCatching { repository.forgetTerm(term.languageCode, term.termKey) }

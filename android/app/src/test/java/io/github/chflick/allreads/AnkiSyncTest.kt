@@ -138,7 +138,7 @@ class AnkiSyncTest {
         queue.suspends += old
         sync.drain()
         // Saved again later as a new word (forgetting removed its link).
-        queue.links.remove(2)
+        queue.links.remove(1)
         queue.save(2, "chat", "cat")
         sync.drain()
         val fresh = queue.links.getValue(2)

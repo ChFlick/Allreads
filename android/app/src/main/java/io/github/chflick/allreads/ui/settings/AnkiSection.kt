@@ -254,11 +254,6 @@ private fun openStore(context: android.content.Context) {
 }
 
 /**
- * Step 19: how many words have not reached AnkiDroid yet, with a button to
- * send them now. Words wait while AnkiDroid is missing, not allowed, or no
- * deck is chosen, and go over by themselves once it is ready.
- */
-/**
  * Cards of words forgotten in Allreads stay in AnkiDroid, suspended and tagged
  * "allreads-forgotten", so forgetting never loses a card's history by
  * accident. Here they can be deleted for good, all at once.
@@ -271,7 +266,9 @@ private fun ForgottenCards(services: Services) {
     suspend fun recount() {
         count = runCatching { withContext(Dispatchers.IO) { services.anki.searchNoteIds("tag:$FORGOTTEN_TAG").size } }.getOrNull()
     }
-    LaunchedEffect(Unit) { recount() }
+    // Again after each sync, which may have suspended more cards.
+    val waiting by services.ankiSync.waiting.collectAsStateWithLifecycle()
+    LaunchedEffect(waiting) { recount() }
     val forgotten = count ?: return
     if (forgotten == 0) return
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -307,6 +304,11 @@ private fun ForgottenCards(services: Services) {
     }
 }
 
+/**
+ * Step 19: how many words have not reached AnkiDroid yet, with a button to
+ * send them now. Words wait while AnkiDroid is missing, not allowed, or no
+ * deck is chosen, and go over by themselves once it is ready.
+ */
 @Composable
 private fun WaitingWords(services: Services, access: AnkiAccess?) {
     val waiting by services.ankiSync.waiting.collectAsStateWithLifecycle()

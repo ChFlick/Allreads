@@ -56,9 +56,8 @@ class FakeAnki : AnkiBridge {
     override fun searchNotes(query: String) = deckNotes.toList()
     override fun searchNoteIds(query: String) = searches[query].orEmpty()
 
-    /** Notes suspended, with their tags. */
+    /** Notes whose cards were suspended. */
     val suspended = mutableSetOf<Long>()
-    val noteTagsById = mutableMapOf<Long, Set<String>>()
     override fun suspendNote(noteId: Long, tag: String): Boolean {
         if (noteId !in notes) return true
         suspended += noteId

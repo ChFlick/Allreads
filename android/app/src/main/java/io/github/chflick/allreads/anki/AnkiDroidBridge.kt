@@ -79,7 +79,8 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
                 put(FlashCardsContract.ReviewInfo.CARD_ORD, ord)
                 put(FlashCardsContract.ReviewInfo.SUSPEND, 1)
             }
-            resolver.update(FlashCardsContract.ReviewInfo.CONTENT_URI, values, null, null)
+            // A card AnkiDroid did not suspend: try again on the next drain, and don't tag the note yet.
+            if (resolver.update(FlashCardsContract.ReviewInfo.CONTENT_URI, values, null, null) < 1) return false
         }
         return runCatching { api.updateNoteTags(noteId, note.tags + tag) }.getOrDefault(false)
     }

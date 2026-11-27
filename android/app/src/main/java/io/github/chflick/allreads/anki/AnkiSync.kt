@@ -107,14 +107,17 @@ class AnkiSync(
     private suspend fun push(note: AnkiNote, deckId: Long): Long? {
         val tags = note.tags.toSet()
         note.noteId?.let { linked ->
-            if (isForgotten(linked)) bridge.deleteNotes(listOf(linked))
-            else if (bridge.updateNote(linked, note.fields, tags)) return linked
+            // A suspended card that cannot be deleted: try again later rather than add a second card.
+            if (isForgotten(linked)) {
+                if (bridge.deleteNotes(listOf(linked)) < 1) return null
+            } else if (bridge.updateNote(linked, note.fields, tags)) return linked
         }
         val noteTypeId = noteTypes.ensure(note.languageCode, deckId, includeWordCard()) ?: return null
         val word = note.fields.firstOrNull() ?: return null
         bridge.findNote(noteTypeId, word)?.let { existing ->
-            if (isForgotten(existing)) bridge.deleteNotes(listOf(existing))
-            else if (bridge.updateNote(existing, note.fields, tags)) return existing
+            if (isForgotten(existing)) {
+                if (bridge.deleteNotes(listOf(existing)) < 1) return null
+            } else if (bridge.updateNote(existing, note.fields, tags)) return existing
         }
         return bridge.addNote(noteTypeId, deckId, note.fields, tags)
     }
