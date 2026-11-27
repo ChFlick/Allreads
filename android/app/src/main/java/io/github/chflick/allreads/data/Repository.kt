@@ -112,6 +112,10 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
     suspend fun forgetTerm(languageCode: String, text: String): Boolean =
         io { app.forgetTerm(languageCode, text) }
 
+    /** Brings back a word just forgotten, whole; false when there is nothing to bring back. */
+    suspend fun undoForget(languageCode: String, text: String): Boolean =
+        io { app.undoForget(languageCode, text) }
+
     suspend fun languageInfo(languageCode: String): LanguageInfo? = io { app.languageInfo(languageCode) }
 
     suspend fun listTerms(languageCode: String): List<SavedTerm> = io { app.listTerms(languageCode) }

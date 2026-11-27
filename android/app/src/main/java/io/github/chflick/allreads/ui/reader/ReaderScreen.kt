@@ -160,7 +160,7 @@ fun ReaderScreen(
     LaunchedEffect(state.levelChange) {
         val change = state.levelChange ?: return@LaunchedEffect
         viewModel.levelChangeShown()
-        snackbar.offerUndo("${change.text}: ${change.to.longLabel().lowercase()}", SnackbarDuration.Short) {
+        snackbar.offerUndo(AppText.get(R.string.word_level_change, change.text, change.to.longLabel().lowercase()), SnackbarDuration.Short) {
             viewModel.undoLevelChange(change)
         }
     }

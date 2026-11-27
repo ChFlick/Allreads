@@ -156,7 +156,7 @@ class WordsViewModel(
             val result = runCatching { repository.setTermStatus(term.languageCode, term.termKey, next) }
             _state.update {
                 it.copy(
-                    undo = result.getOrNull()?.let { before -> WordUndo("${term.displayText}: ${next.longLabel().lowercase()}", term.copy(status = before), forgotten = false) },
+                    undo = result.getOrNull()?.let { before -> WordUndo(AppText.get(R.string.word_level_change, term.displayText, next.longLabel().lowercase()), term.copy(status = before), forgotten = false) },
                     message = result.exceptionOrNull()?.let(::describe),
                 )
             }
@@ -171,7 +171,7 @@ class WordsViewModel(
             val result = runCatching { repository.forgetTerm(term.languageCode, term.termKey) }
             _state.update {
                 it.copy(
-                    undo = WordUndo("${term.displayText} forgotten", term, forgotten = true).takeIf { result.isSuccess },
+                    undo = WordUndo(AppText.get(R.string.word_forgotten, term.displayText), term, forgotten = true).takeIf { result.isSuccess },
                     message = result.exceptionOrNull()?.let(::describe),
                 )
             }
@@ -187,20 +187,8 @@ class WordsViewModel(
         viewModelScope.launch {
             runCatching {
                 if (undo.forgotten) {
-                    repository.saveTerm(
-                        TermInput(
-                            languageCode = term.languageCode,
-                            text = term.displayText,
-                            status = term.status,
-                            translation = term.translation,
-                            notes = term.notes,
-                            lemma = term.lemma,
-                            sentence = null,
-                            sentenceTranslation = null,
-                            sourceBook = null,
-                            sourceChapter = null,
-                        ),
-                    )
+                    // The core kept the whole word: sentence, import badge and card.
+                    repository.undoForget(term.languageCode, term.termKey)
                 } else {
                     repository.setTermStatus(term.languageCode, term.termKey, term.status)
                 }

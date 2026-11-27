@@ -42,7 +42,7 @@ pub enum DbError {
 }
 
 /// The schema version after all migrations. Bump it with each new migration.
-pub const SCHEMA_VERSION: i64 = 16;
+pub const SCHEMA_VERSION: i64 = 17;
 
 /// An open `SQLite` database with the schema applied.
 pub struct Database {

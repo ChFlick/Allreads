@@ -100,6 +100,9 @@ pub struct Term {
     pub imported_from: String,
 }
 
+/// The current time in Unix milliseconds, in SQL (as for `anki_suspend.queued_at`).
+const NOW_MS: &str = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
+
 const COLUMNS: &str = "id, language_code, text, lemma, status, translation, notes, parent_id, \
      display_text, context_sentence, context_translation, source_book, source_chapter, imported_from";
 
@@ -381,7 +384,8 @@ impl Database {
     /// Deletes a term. Its `AnkiDroid` link and queue entry go with it. A card
     /// Allreads made is queued to be suspended in `AnkiDroid` (see
     /// [`Database::pending_anki_suspends`]); cards of words imported from Anki
-    /// are left alone.
+    /// are left alone. A copy is kept for a day, for
+    /// [`Database::restore_forgotten_term`].
     ///
     /// # Errors
     /// Returns `NotFound` if no term has this id.
@@ -404,10 +408,97 @@ impl Database {
                 params![link.note_id, term.language_code, term.text],
             )?;
         }
+        transaction.execute(
+            &format!("DELETE FROM forgotten_term WHERE forgotten_at < {NOW_MS} - 86400000"),
+            [],
+        )?;
+        transaction.execute(
+            &format!(
+                "INSERT OR REPLACE INTO forgotten_term
+                     (language_code, text, term_id, display_text, lemma, status, translation, notes,
+                      parent_id, context_sentence, context_translation, source_book, source_chapter,
+                      imported_from, card_elsewhere, note_id, deck_id, was_queued, forgotten_at)
+                 SELECT t.language_code, t.text, t.id, t.display_text, t.lemma, t.status, t.translation,
+                        t.notes, t.parent_id, t.context_sentence, t.context_translation, t.source_book,
+                        t.source_chapter, t.imported_from, t.card_elsewhere, l.note_id, l.deck_id,
+                        EXISTS (SELECT 1 FROM anki_outbox o WHERE o.term_id = t.id), {NOW_MS}
+                 FROM term t LEFT JOIN anki_link l ON l.term_id = t.id
+                 WHERE t.id = ?1"
+            ),
+            [id],
+        )?;
         transaction.execute("DELETE FROM term WHERE id = ?1", [id])?;
         self.record_word_counts(None)?;
         transaction.commit()?;
         Ok(())
+    }
+
+    /// Brings back a word forgotten in the last day exactly as it was: level,
+    /// meaning, sentence, import badge, `AnkiDroid` card (whose suspension is
+    /// called off) and place in the push queue. Returns its id, or `None` when
+    /// there is nothing to bring back, or the word has been saved again since.
+    ///
+    /// # Errors
+    /// Returns a database error if a statement fails.
+    pub fn restore_forgotten_term(
+        &self,
+        language_code: &str,
+        text: &str,
+    ) -> Result<Option<i64>, DbError> {
+        let Some(key) = self.term_key(language_code, text)? else {
+            return Ok(None);
+        };
+        let saved: Option<(Option<i64>, Option<i64>, bool)> = self
+            .conn()
+            .query_row(
+                "SELECT note_id, deck_id, was_queued FROM forgotten_term
+                 WHERE language_code = ?1 AND text = ?2",
+                params![language_code, key],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let Some((note_id, deck_id, was_queued)) = saved else {
+            return Ok(None);
+        };
+        if self.find_term(language_code, &key)?.is_some() {
+            // Saved again in the meantime: that newer word stays as it is.
+            self.conn().execute(
+                "DELETE FROM forgotten_term WHERE language_code = ?1 AND text = ?2",
+                params![language_code, key],
+            )?;
+            return Ok(None);
+        }
+        let transaction = self.conn().unchecked_transaction()?;
+        // The old id when it is still free (a new one otherwise), and the
+        // parent only if it still exists.
+        let id: i64 = transaction.query_row(
+            "INSERT INTO term
+                 (id, language_code, text, display_text, lemma, status, translation, notes, parent_id,
+                  context_sentence, context_translation, source_book, source_chapter, imported_from,
+                  card_elsewhere)
+             SELECT CASE WHEN EXISTS (SELECT 1 FROM term WHERE id = f.term_id) THEN NULL ELSE f.term_id END,
+                    f.language_code, f.text, f.display_text, f.lemma, f.status, f.translation, f.notes,
+                    CASE WHEN EXISTS (SELECT 1 FROM term WHERE id = f.parent_id) THEN f.parent_id END,
+                    f.context_sentence, f.context_translation, f.source_book, f.source_chapter,
+                    f.imported_from, f.card_elsewhere
+             FROM forgotten_term f WHERE f.language_code = ?1 AND f.text = ?2
+             RETURNING id",
+            params![language_code, key],
+            |row| row.get(0),
+        )?;
+        transaction.execute(
+            "DELETE FROM forgotten_term WHERE language_code = ?1 AND text = ?2",
+            params![language_code, key],
+        )?;
+        if let (Some(note_id), Some(deck_id)) = (note_id, deck_id) {
+            self.link_anki_note(id, note_id, deck_id)?;
+        }
+        if was_queued {
+            self.queue_for_anki(id)?;
+        }
+        self.record_word_counts(None)?;
+        transaction.commit()?;
+        Ok(Some(id))
     }
 
     /// Cards of forgotten words to suspend, by note id: those forgotten at least
@@ -931,5 +1022,88 @@ mod tests {
     fn deleting_a_missing_term_is_not_found() {
         let db = french_db();
         assert!(matches!(db.delete_term(5), Err(DbError::NotFound { .. })));
+    }
+
+    #[test]
+    fn a_forgotten_word_comes_back_whole() {
+        let db = french_db();
+        let mut word = new_term("Perle", Status::Learning(3));
+        word.translation = "pearl".into();
+        word.context = Some(TermContext {
+            sentence: "Une perle rare.".into(),
+            sentence_translation: "A rare pearl.".into(),
+            source_book: "Un".into(),
+            source_chapter: "I".into(),
+        });
+        let id = db.save_term(&word).unwrap();
+        db.link_anki_note(id, 1001, 77).unwrap();
+        db.queue_for_anki(id).unwrap();
+        let before = db.term(id).unwrap().unwrap();
+
+        db.delete_term(id).unwrap();
+        assert_eq!(db.pending_anki_suspends(0).unwrap(), [1001]);
+        assert_eq!(db.restore_forgotten_term("fr", "perle").unwrap(), Some(id));
+
+        assert_eq!(db.term(id).unwrap().unwrap(), before);
+        assert_eq!(db.anki_link(id).unwrap().map(|l| l.note_id), Some(1001));
+        assert!(
+            db.pending_anki_suspends(0).unwrap().is_empty(),
+            "the card is not suspended"
+        );
+        assert_eq!(db.anki_queue().unwrap().len(), 1);
+        // Only once.
+        assert_eq!(db.restore_forgotten_term("fr", "perle").unwrap(), None);
+    }
+
+    #[test]
+    fn an_imported_word_keeps_its_badge_and_stays_without_a_card() {
+        let db = french_db();
+        let imported = crate::db::import::ImportedWord {
+            text: "chat".into(),
+            meaning: Some("cat".into()),
+            status: Status::WellKnown,
+        };
+        db.import_words("fr", "Anki · Vocabulaire", true, &[imported])
+            .unwrap();
+        let id = db.find_term("fr", "chat").unwrap().unwrap().id;
+
+        db.delete_term(id).unwrap();
+        assert!(db.pending_anki_suspends(0).unwrap().is_empty());
+        db.restore_forgotten_term("fr", "chat").unwrap().unwrap();
+
+        let back = db.find_term("fr", "chat").unwrap().unwrap();
+        assert_eq!(back.imported_from, "Anki · Vocabulaire");
+        let elsewhere: bool = db
+            .conn()
+            .query_row(
+                "SELECT card_elsewhere FROM term WHERE id = ?1",
+                [back.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(elsewhere);
+    }
+
+    #[test]
+    fn a_word_saved_again_is_not_replaced_by_its_forgotten_copy() {
+        let db = french_db();
+        let id = db
+            .save_term(&new_term("chien", Status::Learning(1)))
+            .unwrap();
+        db.delete_term(id).unwrap();
+        db.save_term(&new_term("chien", Status::Learning(4)))
+            .unwrap();
+
+        assert_eq!(db.restore_forgotten_term("fr", "chien").unwrap(), None);
+        assert_eq!(
+            db.find_term("fr", "chien").unwrap().unwrap().status,
+            Status::Learning(4)
+        );
+    }
+
+    #[test]
+    fn nothing_to_restore_for_a_word_never_forgotten() {
+        let db = french_db();
+        assert_eq!(db.restore_forgotten_term("fr", "oiseau").unwrap(), None);
     }
 }

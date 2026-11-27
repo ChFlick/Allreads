@@ -935,6 +935,19 @@ impl App {
         Ok(true)
     }
 
+    /// Undoes [`App::forget_term`] within a day: the word comes back with its
+    /// level, meaning, sentence, import badge and `AnkiDroid` card. Returns
+    /// `false` when there is nothing to bring back or the word was saved again.
+    ///
+    /// # Errors
+    /// Returns a database error if a statement fails.
+    pub fn undo_forget(&self, language_code: String, text: String) -> Result<bool, AllreadsError> {
+        Ok(self
+            .db()?
+            .restore_forgotten_term(&language_code, &text)?
+            .is_some())
+    }
+
     /// Marks every new word in a chapter, from block `from_block` to the end,
     /// as well known (PRD F8). Saved words keep their status. Returns how many
     /// words were added and their term ids, for [`App::undo_mark_known`].
