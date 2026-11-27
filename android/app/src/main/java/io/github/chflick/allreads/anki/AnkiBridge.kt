@@ -54,4 +54,20 @@ interface AnkiBridge {
 
     /** The ids of the notes matching an Anki search, e.g. `deck:"French" prop:ivl>=21`. */
     fun searchNoteIds(query: String): Set<Long>
+
+    /**
+     * Suspends every card of a note and adds `tag` to it. `true` when done, or
+     * when the note no longer exists (nothing left to do). AnkiDroid's API can
+     * suspend but not un-suspend.
+     */
+    fun suspendNote(noteId: Long, tag: String): Boolean
+
+    /** A note's tags, or `null` if it no longer exists. */
+    fun noteTags(noteId: Long): Set<String>?
+
+    /** Deletes notes and their cards; returns how many were deleted. */
+    fun deleteNotes(noteIds: Collection<Long>): Int
 }
+
+/** The tag on cards of words forgotten in Allreads, whose cards were suspended. */
+const val FORGOTTEN_TAG = "allreads-forgotten"

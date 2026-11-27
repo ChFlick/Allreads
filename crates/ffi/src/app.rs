@@ -1064,6 +1064,23 @@ impl App {
             .record_anki_push(term_id, queue_id, note_id, deck_id)?)
     }
 
+    /// Note ids of forgotten words whose cards should now be suspended in
+    /// `AnkiDroid`: forgotten at least `min_age_seconds` ago, after the Undo window.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn pending_anki_suspends(&self, min_age_seconds: u32) -> Result<Vec<i64>, AllreadsError> {
+        Ok(self.db()?.pending_anki_suspends(min_age_seconds)?)
+    }
+
+    /// The cards of `note_id` were suspended (or the note is gone): done.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be written.
+    pub fn record_anki_suspended(&self, note_id: i64) -> Result<(), AllreadsError> {
+        Ok(self.db()?.record_anki_suspended(note_id)?)
+    }
+
     /// How many words are waiting to go to `AnkiDroid`, for Settings.
     ///
     /// # Errors

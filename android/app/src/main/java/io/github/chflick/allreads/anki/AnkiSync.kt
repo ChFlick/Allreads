@@ -14,7 +14,14 @@ interface SyncStore {
     suspend fun waitingCount(): Int
     suspend fun recordPush(note: AnkiNote, noteId: Long, deckId: Long)
     suspend fun recordFailure(note: AnkiNote)
+
+    /** Cards of words forgotten at least `minAgeSeconds` ago, to suspend now. */
+    suspend fun pendingSuspends(minAgeSeconds: Int): List<Long>
+    suspend fun recordSuspended(noteId: Long)
 }
+
+/** How long a forgotten word's card waits before it is suspended: the Undo snackbar's time, and some. */
+const val SUSPEND_AFTER_SECONDS = 60
 
 /** What a drain did. */
 sealed interface SyncResult {
@@ -59,6 +66,7 @@ class AnkiSync(
 
     private suspend fun drainLocked(): SyncResult {
         val access = bridge.access()
+        if (access == AnkiAccess.Connected) suspendForgotten()
         val deckId = store.deckId()
         if (access != AnkiAccess.Connected || deckId == null) {
             return SyncResult.NotReady(access.takeIf { it != AnkiAccess.Connected }, store.waitingCount())
@@ -78,16 +86,35 @@ class AnkiSync(
         return SyncResult.Done(pushed, failed)
     }
 
+    /**
+     * Suspends the cards of words forgotten in Allreads (before pushes, so a
+     * word saved again afterwards meets an already suspended card, see [push]).
+     */
+    private suspend fun suspendForgotten() {
+        for (noteId in store.pendingSuspends(SUSPEND_AFTER_SECONDS)) {
+            if (runCatching { bridge.suspendNote(noteId, FORGOTTEN_TAG) }.getOrDefault(false)) store.recordSuspended(noteId)
+        }
+    }
+
+    /**
+     * A note whose word was forgotten and whose cards were suspended. AnkiDroid
+     * cannot un-suspend through its API, so a word saved again gets a fresh
+     * card instead, and the suspended one is deleted.
+     */
+    private fun isForgotten(noteId: Long): Boolean = bridge.noteTags(noteId)?.contains(FORGOTTEN_TAG) == true
+
     /** The note id the word now has in AnkiDroid, or `null` on failure. */
     private suspend fun push(note: AnkiNote, deckId: Long): Long? {
         val tags = note.tags.toSet()
         note.noteId?.let { linked ->
-            if (bridge.updateNote(linked, note.fields, tags)) return linked
+            if (isForgotten(linked)) bridge.deleteNotes(listOf(linked))
+            else if (bridge.updateNote(linked, note.fields, tags)) return linked
         }
         val noteTypeId = noteTypes.ensure(note.languageCode, deckId, includeWordCard()) ?: return null
         val word = note.fields.firstOrNull() ?: return null
         bridge.findNote(noteTypeId, word)?.let { existing ->
-            if (bridge.updateNote(existing, note.fields, tags)) return existing
+            if (isForgotten(existing)) bridge.deleteNotes(listOf(existing))
+            else if (bridge.updateNote(existing, note.fields, tags)) return existing
         }
         return bridge.addNote(noteTypeId, deckId, note.fields, tags)
     }

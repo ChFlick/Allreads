@@ -2,7 +2,7 @@
 
 use rusqlite::{params, OptionalExtension, Row};
 
-use super::{require_one_changed, require_text, Database, DbError};
+use super::{require_text, Database, DbError};
 use crate::text::key::{parse_substitutions, term_key};
 
 /// A word's status. A word with no saved term is "new".
@@ -166,6 +166,11 @@ impl Database {
         if self.wants_anki_card(id, term.status)? {
             self.queue_for_anki(id)?;
         }
+        // Saved again (e.g. Undo after forgetting): its card is not suspended after all.
+        self.conn().execute(
+            "DELETE FROM anki_suspend WHERE language_code = ?1 AND term_key = ?2",
+            params![term.language_code, key],
+        )?;
         // In the same transaction, so a save is one commit.
         self.record_word_counts(Some(&term.language_code))?;
         transaction.commit()?;
@@ -373,17 +378,61 @@ impl Database {
         Ok(deleted)
     }
 
-    /// Deletes a term. Its `AnkiDroid` link and queue entry go with it; the card
-    /// itself stays in `AnkiDroid`.
+    /// Deletes a term. Its `AnkiDroid` link and queue entry go with it. A card
+    /// Allreads made is queued to be suspended in `AnkiDroid` (see
+    /// [`Database::pending_anki_suspends`]); cards of words imported from Anki
+    /// are left alone.
     ///
     /// # Errors
     /// Returns `NotFound` if no term has this id.
     pub fn delete_term(&self, id: i64) -> Result<(), DbError> {
-        let changed = self
-            .conn()
-            .execute("DELETE FROM term WHERE id = ?1", [id])?;
-        require_one_changed(changed, || format!("term {id}"))?;
-        self.record_word_counts(None)
+        let term = self.term(id)?.ok_or_else(|| DbError::NotFound {
+            what: format!("term {id}"),
+        })?;
+        let link = self.anki_link(id)?;
+        let elsewhere: bool = self.conn().query_row(
+            "SELECT card_elsewhere FROM term WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )?;
+        let transaction = self.conn().unchecked_transaction()?;
+        if let (Some(link), false) = (link, elsewhere) {
+            transaction.execute(
+                "INSERT INTO anki_suspend (note_id, language_code, term_key, queued_at)
+                 VALUES (?1, ?2, ?3, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
+                 ON CONFLICT (note_id) DO UPDATE SET queued_at = excluded.queued_at",
+                params![link.note_id, term.language_code, term.text],
+            )?;
+        }
+        transaction.execute("DELETE FROM term WHERE id = ?1", [id])?;
+        self.record_word_counts(None)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// Cards of forgotten words to suspend, by note id: those forgotten at least
+    /// `min_age_seconds` ago, so a word brought back with Undo is never touched.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn pending_anki_suspends(&self, min_age_seconds: u32) -> Result<Vec<i64>, DbError> {
+        let mut statement = self.conn().prepare(
+            "SELECT note_id FROM anki_suspend
+             WHERE queued_at <= CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER) - ?1 * 1000
+             ORDER BY queued_at",
+        )?;
+        let rows = statement.query_map([min_age_seconds], |row| row.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The card of `note_id` was suspended (or no longer exists): done.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn record_anki_suspended(&self, note_id: i64) -> Result<(), DbError> {
+        self.conn()
+            .execute("DELETE FROM anki_suspend WHERE note_id = ?1", [note_id])?;
+        Ok(())
     }
 }
 
@@ -808,6 +857,34 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn forgetting_a_word_with_a_card_queues_its_suspension_unless_saved_again() {
+        let db = french_db();
+        let chat = db
+            .save_term(&new_term("chat", Status::Learning(1)))
+            .unwrap();
+        let chien = db
+            .save_term(&new_term("chien", Status::Learning(1)))
+            .unwrap();
+        db.save_term(&new_term("oiseau", Status::Learning(1)))
+            .unwrap();
+        db.link_anki_note(chat, 101, 1).unwrap();
+        db.link_anki_note(chien, 102, 1).unwrap();
+        db.delete_term(chat).unwrap();
+        db.delete_term(chien).unwrap();
+        // A word without a card queues nothing.
+        let oiseau = db.find_term("fr", "oiseau").unwrap().unwrap().id;
+        db.delete_term(oiseau).unwrap();
+        // Undo brings "chien" back before the suspension ran.
+        db.save_term(&new_term("chien", Status::Learning(1)))
+            .unwrap();
+        assert_eq!(db.pending_anki_suspends(0).unwrap(), [101]);
+        // Not before the Undo window has passed.
+        assert!(db.pending_anki_suspends(60).unwrap().is_empty());
+        db.record_anki_suspended(101).unwrap();
+        assert!(db.pending_anki_suspends(0).unwrap().is_empty());
     }
 
     #[test]

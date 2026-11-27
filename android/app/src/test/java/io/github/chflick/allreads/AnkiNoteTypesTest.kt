@@ -55,6 +55,18 @@ class FakeAnki : AnkiBridge {
     override fun fieldNames(noteTypeId: Long) = fieldLists[noteTypeId].orEmpty()
     override fun searchNotes(query: String) = deckNotes.toList()
     override fun searchNoteIds(query: String) = searches[query].orEmpty()
+
+    /** Notes suspended, with their tags. */
+    val suspended = mutableSetOf<Long>()
+    val noteTagsById = mutableMapOf<Long, Set<String>>()
+    override fun suspendNote(noteId: Long, tag: String): Boolean {
+        if (noteId !in notes) return true
+        suspended += noteId
+        notes[noteId] = notes.getValue(noteId).let { it.copy(tags = it.tags + tag) }
+        return true
+    }
+    override fun noteTags(noteId: Long) = notes[noteId]?.tags
+    override fun deleteNotes(noteIds: Collection<Long>) = noteIds.count { notes.remove(it) != null }
 }
 
 class FakeStore : NoteTypeStore {

@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import io.github.chflick.allreads.anki.FORGOTTEN_TAG
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -174,6 +177,7 @@ fun AnkiSection(services: Services) {
         }
     }
     WaitingWords(services, state.access)
+    if (state.access == AnkiAccess.Connected) ForgottenCards(services)
     state.error?.let {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     }
@@ -254,6 +258,55 @@ private fun openStore(context: android.content.Context) {
  * send them now. Words wait while AnkiDroid is missing, not allowed, or no
  * deck is chosen, and go over by themselves once it is ready.
  */
+/**
+ * Cards of words forgotten in Allreads stay in AnkiDroid, suspended and tagged
+ * "allreads-forgotten", so forgetting never loses a card's history by
+ * accident. Here they can be deleted for good, all at once.
+ */
+@Composable
+private fun ForgottenCards(services: Services) {
+    val scope = rememberCoroutineScope()
+    var count by remember { mutableStateOf<Int?>(null) }
+    var confirming by remember { mutableStateOf(false) }
+    suspend fun recount() {
+        count = runCatching { withContext(Dispatchers.IO) { services.anki.searchNoteIds("tag:$FORGOTTEN_TAG").size } }.getOrNull()
+    }
+    LaunchedEffect(Unit) { recount() }
+    val forgotten = count ?: return
+    if (forgotten == 0) return
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "$forgotten ${if (forgotten == 1) "card" else "cards"} of forgotten words, suspended in AnkiDroid",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        OutlinedButton(onClick = { confirming = true }) { Text("Delete them from AnkiDroid…") }
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Delete $forgotten forgotten ${if (forgotten == 1) "card" else "cards"}?") },
+            text = {
+                Text(
+                    "They are deleted from AnkiDroid with their review history. This cannot be undone. " +
+                        "In Anki they are the notes tagged “$FORGOTTEN_TAG”.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirming = false
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            runCatching { services.anki.deleteNotes(services.anki.searchNoteIds("tag:$FORGOTTEN_TAG")) }
+                        }
+                        recount()
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancel") } },
+        )
+    }
+}
+
 @Composable
 private fun WaitingWords(services: Services, access: AnkiAccess?) {
     val waiting by services.ankiSync.waiting.collectAsStateWithLifecycle()

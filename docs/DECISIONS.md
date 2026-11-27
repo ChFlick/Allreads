@@ -107,3 +107,7 @@ Import is for colouring the reader and avoiding duplicate cards, not for managin
 ## 2026-11-27: design review
 
 The changes from the design review were all taken (see POLISH). Words list swipes: left raises a level (as the reader's double tap), right forgets the word (its AnkiDroid card stays); both need half the row's width and offer Undo. Undo after a forget restores the word's level, translation, notes and dictionary form, but not its card sentence or import badge.
+
+## 2026-11-27: forgetting a word suspends its Anki card
+
+Forgetting a word in Allreads (drawer or Words swipe) suspends the cards Allreads made for it in AnkiDroid and tags the note `allreads-forgotten`, so it stops coming up in reviews but keeps its history. Cards of words imported from Anki are never touched. The suspension waits a minute (the Undo window) and goes through the sync queue, so Undo or saving the word again in that time leaves the card alone. AnkiDroid's API can suspend and delete but not un-suspend (checked in its `CardContentProvider`), so a word saved again after its card was suspended gets a fresh card and the suspended one is deleted. Settings → AnkiDroid offers "Delete them from AnkiDroid…" for all forgotten cards at once, with a confirmation. No "delete instead of suspend" setting for now.

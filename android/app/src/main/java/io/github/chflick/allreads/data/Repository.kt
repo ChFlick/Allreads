@@ -147,6 +147,10 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     override suspend fun recordFailure(note: AnkiNote) = io { app.recordAnkiFailure(note.termId) }
 
+    override suspend fun pendingSuspends(minAgeSeconds: Int): List<Long> = io { app.pendingAnkiSuspends(minAgeSeconds.toUInt()) }
+
+    override suspend fun recordSuspended(noteId: Long) = io { app.recordAnkiSuspended(noteId) }
+
     suspend fun setAnkiDeckId(deckId: Long) = io { app.setAnkiDeckId(deckId) }
 
     override suspend fun modelId(languageCode: String): Long? = io { app.ankiModelId(languageCode) }

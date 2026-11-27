@@ -1,6 +1,7 @@
 package io.github.chflick.allreads
 
 import io.github.chflick.allreads.anki.AnkiAccess
+import io.github.chflick.allreads.anki.FORGOTTEN_TAG
 import io.github.chflick.allreads.anki.AnkiNoteTypes
 import io.github.chflick.allreads.anki.AnkiSync
 import io.github.chflick.allreads.anki.SyncResult
@@ -31,6 +32,13 @@ class FakeQueue : SyncStore {
     }
     override suspend fun recordFailure(note: AnkiNote) {
         failures.merge(note.termId, 1, Int::plus)
+    }
+
+    /** Note ids of forgotten words waiting to be suspended. */
+    val suspends = mutableListOf<Long>()
+    override suspend fun pendingSuspends(minAgeSeconds: Int) = suspends.toList()
+    override suspend fun recordSuspended(noteId: Long) {
+        suspends.remove(noteId)
     }
 }
 
@@ -107,5 +115,35 @@ class AnkiSyncTest {
         assertEquals(SyncResult.Done(pushed = 1, failed = 0), sync.drain())
         assertEquals(1, anki.notes.size)
         assertEquals(0, sync.waiting.value)
+    }
+
+    @Test
+    fun aForgottenWordsCardIsSuspendedAndTagged() = runBlocking {
+        queue.save(1, "chat", "cat")
+        sync.drain()
+        val noteId = queue.links.getValue(1)
+        // The word is forgotten in Allreads: the core queues its card.
+        queue.suspends += noteId
+        sync.drain()
+        assertEquals(setOf(noteId), anki.suspended)
+        assertEquals(true, anki.noteTags(noteId)?.contains(FORGOTTEN_TAG))
+        assertEquals(emptyList<Long>(), queue.suspends)
+    }
+
+    @Test
+    fun aWordSavedAgainAfterItsCardWasSuspendedGetsAFreshCard() = runBlocking {
+        queue.save(1, "chat", "cat")
+        sync.drain()
+        val old = queue.links.getValue(1)
+        queue.suspends += old
+        sync.drain()
+        // Saved again later as a new word (forgetting removed its link).
+        queue.links.remove(2)
+        queue.save(2, "chat", "cat")
+        sync.drain()
+        val fresh = queue.links.getValue(2)
+        assertEquals(false, fresh == old)
+        assertEquals(null, anki.noteTags(old))
+        assertEquals(false, anki.noteTags(fresh)?.contains(FORGOTTEN_TAG))
     }
 }

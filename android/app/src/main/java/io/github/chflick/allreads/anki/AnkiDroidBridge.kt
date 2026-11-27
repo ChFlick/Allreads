@@ -1,6 +1,8 @@
 package io.github.chflick.allreads.anki
 
+import android.content.ContentValues
 import android.content.Context
+import android.net.Uri
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import com.ichi2.anki.FlashCardsContract
@@ -63,6 +65,32 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
     override fun searchNotes(query: String): List<AnkiNoteData> = query(query, withFields = true)
 
     override fun searchNoteIds(query: String): Set<Long> = query(query, withFields = false).map { it.id }.toSet()
+
+    override fun suspendNote(noteId: Long, tag: String): Boolean {
+        val note = api.getNote(noteId) ?: return true
+        val resolver = context.contentResolver
+        val cards = Uri.withAppendedPath(Uri.withAppendedPath(FlashCardsContract.Note.CONTENT_URI, noteId.toString()), "cards")
+        val ords = resolver.query(cards, arrayOf(FlashCardsContract.Card.CARD_ORD), null, null, null)?.use { cursor ->
+            buildList<Int> { while (cursor.moveToNext()) add(cursor.getInt(0)) }
+        } ?: return false
+        for (ord in ords) {
+            val values = ContentValues().apply {
+                put(FlashCardsContract.ReviewInfo.NOTE_ID, noteId)
+                put(FlashCardsContract.ReviewInfo.CARD_ORD, ord)
+                put(FlashCardsContract.ReviewInfo.SUSPEND, 1)
+            }
+            resolver.update(FlashCardsContract.ReviewInfo.CONTENT_URI, values, null, null)
+        }
+        return runCatching { api.updateNoteTags(noteId, note.tags + tag) }.getOrDefault(false)
+    }
+
+    override fun noteTags(noteId: Long): Set<String>? = api.getNote(noteId)?.tags
+
+    override fun deleteNotes(noteIds: Collection<Long>): Int = noteIds.sumOf { id ->
+        runCatching {
+            context.contentResolver.delete(Uri.withAppendedPath(FlashCardsContract.Note.CONTENT_URI, id.toString()), null, null)
+        }.getOrDefault(0)
+    }
 
     /** Notes through AnkiDroid's content provider, which takes an Anki search as its selection. */
     private fun query(search: String, withFields: Boolean): List<AnkiNoteData> {
