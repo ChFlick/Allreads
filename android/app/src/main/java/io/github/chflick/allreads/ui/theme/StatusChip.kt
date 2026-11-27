@@ -59,7 +59,7 @@ fun StatusChip(status: WordStatus, selected: Boolean, onClick: () -> Unit) {
 
 /** A small pill in the status colour with "Level 2", "Known" and so on. */
 @Composable
-fun StatusPill(status: WordStatus) {
+fun StatusPill(status: WordStatus, short: Boolean = false) {
     val fill = status.highlight(LocalDarkTheme.current)
     val shape = MaterialTheme.shapes.small
     val modifier = if (fill != null) {
@@ -68,7 +68,7 @@ fun StatusPill(status: WordStatus) {
         Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
     }
     Text(
-        status.longLabel(),
+        if (short) status.label().replace("Ignore", "Ignored") else status.longLabel(),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.padding(horizontal = 8.dp, vertical = 3.dp),

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uniffi.allreads_ffi.SavedTerm
+import io.github.chflick.allreads.ui.theme.longLabel
 import uniffi.allreads_ffi.WordProgress
 import uniffi.allreads_ffi.TermInput
 import uniffi.allreads_ffi.WordStatus
@@ -28,6 +29,8 @@ data class WordsState(
     val message: String? = null,
     /** Known and learning words per day in this language, for the chart. */
     val progress: WordProgress = WordProgress(emptyList(), 0u),
+    /** The last swipe, offered for undo. */
+    val undo: WordUndo? = null,
 ) {
     /** Words per filter chip, counted once per state, not on every recomposition. */
     private val counts: Map<WordFilter, Int> by lazy {
@@ -135,4 +138,71 @@ class WordsViewModel(
     }
 
     fun messageShown() = _state.update { it.copy(message = null) }
+
+    /** A swipe to the left: one level up, 5 becomes known, as the reader's double tap. */
+    fun raise(term: SavedTerm) {
+        val next = when (val status = term.status) {
+            is WordStatus.Learning -> if (status.level < 5u) WordStatus.Learning((status.level + 1u).toUByte()) else WordStatus.WellKnown
+            else -> return
+        }
+        viewModelScope.launch {
+            val result = runCatching { repository.setTermStatus(term.languageCode, term.termKey, next) }
+            _state.update {
+                it.copy(
+                    undo = result.getOrNull()?.let { before -> WordUndo("${term.displayText}: ${next.longLabel().lowercase()}", term.copy(status = before), forgotten = false) },
+                    message = result.exceptionOrNull()?.let(::describe),
+                )
+            }
+            refresh()
+            syncAnki()
+        }
+    }
+
+    /** A swipe to the right: the word is forgotten (its Anki card stays), with Undo. */
+    fun forget(term: SavedTerm) {
+        viewModelScope.launch {
+            val result = runCatching { repository.forgetTerm(term.languageCode, term.termKey) }
+            _state.update {
+                it.copy(
+                    undo = WordUndo("${term.displayText} forgotten", term, forgotten = true).takeIf { result.isSuccess },
+                    message = result.exceptionOrNull()?.let(::describe),
+                )
+            }
+            refresh()
+        }
+    }
+
+    fun undoShown() = _state.update { it.copy(undo = null) }
+
+    /** Puts a swiped word back as it was: its level, or the whole word after a forget. */
+    fun undo(undo: WordUndo) {
+        val term = undo.term
+        viewModelScope.launch {
+            runCatching {
+                if (undo.forgotten) {
+                    repository.saveTerm(
+                        TermInput(
+                            languageCode = term.languageCode,
+                            text = term.displayText,
+                            status = term.status,
+                            translation = term.translation,
+                            notes = term.notes,
+                            lemma = term.lemma,
+                            sentence = null,
+                            sentenceTranslation = null,
+                            sourceBook = null,
+                            sourceChapter = null,
+                        ),
+                    )
+                } else {
+                    repository.setTermStatus(term.languageCode, term.termKey, term.status)
+                }
+            }.onFailure { e -> _state.update { it.copy(message = describe(e)) } }
+            refresh()
+            syncAnki()
+        }
+    }
 }
+
+/** What a swipe did, for the Undo snackbar: the word as it was before. */
+data class WordUndo(val message: String, val term: SavedTerm, val forgotten: Boolean)

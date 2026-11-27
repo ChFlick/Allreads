@@ -1,5 +1,24 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
+import io.github.chflick.allreads.ui.theme.Literata
+import io.github.chflick.allreads.ui.theme.LocalDarkTheme
+import io.github.chflick.allreads.ui.theme.highlight
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -73,6 +92,12 @@ fun WordsScreen(viewModel: WordsViewModel, services: Services? = null) {
     var importOpens by rememberSaveable { mutableIntStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(state.undo) {
+        val undo = state.undo ?: return@LaunchedEffect
+        viewModel.undoShown()
+        val result = snackbar.showSnackbar(undo.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+        if (result == SnackbarResult.ActionPerformed) viewModel.undo(undo)
+    }
     LaunchedEffect(state.message) {
         state.message?.let {
             snackbar.showSnackbar(it)
@@ -87,6 +112,8 @@ fun WordsScreen(viewModel: WordsViewModel, services: Services? = null) {
         onSearch = viewModel::search,
         onFilter = viewModel::filter,
         onEdit = viewModel::edit,
+        onRaise = viewModel::raise,
+        onForget = viewModel::forget,
         onImport = services?.let {
             {
                 importOpens += 1
@@ -118,21 +145,88 @@ fun WordsScreen(viewModel: WordsViewModel, services: Services? = null) {
 
 @Composable
 private fun TermRow(term: SavedTerm, onClick: () -> Unit) {
+    val dark = LocalDarkTheme.current
+    val edge = term.status.highlight(dark) ?: MaterialTheme.colorScheme.outlineVariant
     ListItem(
         modifier = Modifier.clickable(onClick = onClick),
-        headlineContent = { Text(term.displayText) },
-        supportingContent = if (term.translation.isBlank() && term.importedFrom.isBlank()) {
-            null
-        } else {
-            {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (term.translation.isNotBlank()) Text(term.translation)
-                    SourceBadge(term.importedFrom)
+        leadingContent = {
+            // The level's colour down the left edge: scanning the list shows its shape.
+            Box(Modifier.width(4.dp).height(40.dp).background(edge, MaterialTheme.shapes.extraSmall))
+        },
+        headlineContent = { Text(term.displayText, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = Literata)) },
+        supportingContent = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // "believe · croire": a form says which word it belongs to.
+                val lemma = term.lemma?.takeIf { it.isNotBlank() && it != term.termKey }
+                if (term.translation.isNotBlank() || lemma != null) {
+                    Text(buildAnnotatedString {
+                        append(term.translation)
+                        if (lemma != null) {
+                            if (term.translation.isNotBlank()) append(" · ")
+                            withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(lemma) }
+                        }
+                    })
+                }
+                SourceBadge(term.importedFrom)
+            }
+        },
+        trailingContent = { StatusPill(term.status, short = true) },
+    )
+}
+
+/**
+ * A word row that swipes: to the left raises its level, to the right forgets
+ * it. Both leave the row in place; the list updates, and Undo is offered.
+ */
+@Composable
+private fun SwipeableTermRow(term: SavedTerm, onClick: () -> Unit, onRaise: () -> Unit, onForget: () -> Unit) {
+    val canRaise = term.status is WordStatus.Learning
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.EndToStart -> if (canRaise) onRaise()
+                SwipeToDismissBoxValue.StartToEnd -> onForget()
+                SwipeToDismissBoxValue.Settled -> Unit
+            }
+            // Snap back: the action happened, the row stays until the list updates.
+            false
+        },
+        // Half the width: a short flick never forgets a word.
+        positionalThreshold = { width -> width * 0.5f },
+    )
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromEndToStart = canRaise,
+        backgroundContent = {
+            val forgetting = state.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+            val raising = state.dismissDirection == SwipeToDismissBoxValue.EndToStart
+            Box(
+                Modifier.fillMaxSize().background(
+                    when {
+                        forgetting -> MaterialTheme.colorScheme.error
+                        raising -> Color(0xFF4F8A3B)
+                        else -> Color.Transparent
+                    },
+                ).padding(horizontal = 24.dp),
+                contentAlignment = if (forgetting) Alignment.CenterStart else Alignment.CenterEnd,
+            ) {
+                if (forgetting) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onError)
+                        Text("Forget", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
+                    }
+                } else if (raising) {
+                    Text(
+                        if ((term.status as? WordStatus.Learning)?.level == 5.toUByte()) "Known ›" else "Level up ›",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
             }
         },
-        trailingContent = { StatusPill(term.status) },
-    )
+    ) {
+        Surface(color = MaterialTheme.colorScheme.surface) { TermRow(term, onClick) }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -201,6 +295,8 @@ fun WordsContent(
     onFilter: (WordFilter) -> Unit,
     onEdit: (SavedTerm) -> Unit,
     onImport: (() -> Unit)? = null,
+    onRaise: (SavedTerm) -> Unit = {},
+    onForget: (SavedTerm) -> Unit = {},
 ) {
     Scaffold(
         // A slim header like the library's: the search, then one row of chips
@@ -253,11 +349,11 @@ fun WordsContent(
             LazyColumn(Modifier.fillMaxSize().padding(padding)) {
                 if (showProgress) {
                     item(key = "progress") {
-                        ProgressCard(state.progress, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        ProgressStrip(state.progress, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
                 }
                 items(visible, key = { it.id }) { term ->
-                    TermRow(term, onClick = { onEdit(term) })
+                    SwipeableTermRow(term, onClick = { onEdit(term) }, onRaise = { onRaise(term) }, onForget = { onForget(term) })
                 }
             }
         }
