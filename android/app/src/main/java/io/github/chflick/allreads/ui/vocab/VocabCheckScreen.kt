@@ -205,13 +205,21 @@ private fun ResultView(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        val chosenWords = result.choices.getOrNull(state.chosen)?.words?.toInt() ?: 0
-        Button(onClick = onApply, enabled = chosenWords > 0 && !state.applying, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text(pluralStringResource(R.plurals.mark_words_known, chosenWords, "%,d".format(chosenWords)))
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = onRetake) { Text(stringResource(R.string.retake_the_check)) }
-            TextButton(onClick = onClose) { Text(stringResource(R.string.not_now)) }
+        if (result.choices.isEmpty()) {
+            // Answers too unsure to mark anything: a retake is the way on.
+            Button(onClick = onRetake, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text(stringResource(R.string.retake_the_check))
+            }
+            TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.not_now)) }
+        } else {
+            val chosenWords = result.choices.getOrNull(state.chosen)?.words?.toInt() ?: 0
+            Button(onClick = onApply, enabled = chosenWords > 0 && !state.applying, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text(pluralStringResource(R.plurals.mark_words_known, chosenWords, "%,d".format(chosenWords)))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                TextButton(onClick = onRetake) { Text(stringResource(R.string.retake_the_check)) }
+                TextButton(onClick = onClose) { Text(stringResource(R.string.not_now)) }
+            }
         }
     }
 }

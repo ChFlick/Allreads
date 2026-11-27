@@ -374,7 +374,7 @@
     <string name="no">No</string>
     <string name="vocab_result_explained">Allreads can mark the most common of them as known, so they are not underlined in your books. The fewer it marks, the surer it is.</string>
     <string name="vocab_result_unsure">Hard to tell this time</string>
-    <string name="vocab_result_unsure_explained">You said yes to several made-up words, so only words you are likely to know are offered. A retake, answering only for words you know, gives a better result.</string>
+    <string name="vocab_result_unsure_explained">You said yes to several made-up words, so Allreads cannot tell which words you know and marks none. In a retake, say yes only when you know what a word means.</string>
     <string name="vocab_result_fine_print">Words you said no to stay new. Known words get no Anki cards, and you can undo this in Settings → Dictionaries.</string>
     <string name="retake_the_check">Retake</string>
     <string name="about_percent_right">About %1$d %% of them right</string>

@@ -70,14 +70,15 @@ pub struct MarkChoice {
 /// What the test found.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckResult {
-    /// False when the reader said "yes" to too many made-up words; then only
-    /// the words they said "yes" to are offered.
+    /// False when the reader said "yes" to too many made-up words; then
+    /// nothing is offered, and a retake is the way on.
     pub reliable: bool,
     /// The share of made-up words answered "yes" (0 to 1).
     pub false_yes: f64,
     /// Roughly how many of the listed words the reader knows, for display.
     pub estimated_known: usize,
-    /// The safe choice first, then a larger one when it marks more.
+    /// The safe choice first, then a larger one when it marks more; empty
+    /// when the answers are not reliable.
     pub choices: Vec<MarkChoice>,
 }
 
@@ -178,10 +179,9 @@ impl VocabCheck {
                     choices.push(choice);
                 }
             }
-        } else {
-            // No cut-off: only "yes" answers likely to be real (few, with this many guesses).
-            choices.push(self.choice(&curve, f64::INFINITY));
         }
+        // With too many guesses nothing is offered: even "yes" answers to
+        // common words are unsure then, and a retake is cheap.
         CheckResult {
             reliable,
             false_yes,
@@ -478,8 +478,11 @@ fn falling(values: &[f64], weights: &[f64]) -> Vec<f64> {
 }
 
 /// Made-up words that look like the language: the start of one real word
-/// joined to the end of another, checked against the word list and the
-/// dictionary so none of them exists.
+/// joined to the end of another. A good one is hard to tell from a real
+/// word, so a "yes" to it really is a guess. So it must use only letter
+/// sequences the language uses ([`Spelling::looks_real`]), not be one letter
+/// away from a common word (an honest reader could take it for that word),
+/// and not exist (in the word list or the dictionary).
 fn make_up_words(
     ranked: &[String],
     is_word: &dyn Fn(&str) -> bool,
@@ -487,6 +490,7 @@ fn make_up_words(
     count: usize,
 ) -> Vec<String> {
     let known: std::collections::HashSet<&str> = ranked.iter().map(String::as_str).collect();
+    let spelling = Spelling::learn(&ranked[..ranked.len().min(COMMON_WORDS)]);
     // Middle-frequency words of a reasonable length make the likeliest parts.
     let parts: Vec<&str> = ranked
         .iter()
@@ -508,13 +512,109 @@ fn make_up_words(
         let length = word.chars().count();
         if (5..=11).contains(&length)
             && !known.contains(word.as_str())
-            && !is_word(&word)
             && !made_up.contains(&word)
+            && spelling.looks_real(&word)
+            && !spelling.one_letter_from_a_word(&word)
+            && !is_word(&word)
         {
             made_up.push(word);
         }
     }
     made_up
+}
+
+/// Made-up words are checked against this many of the most common words.
+const COMMON_WORDS: usize = 10_000;
+/// A letter sequence must occur in at least this many of them to look real.
+const SEQUENCE_WORDS: usize = 3;
+
+/// How the language's common words are spelled: which three-letter sequences
+/// they use (with `^` and `$` for the start and end), and the words
+/// themselves.
+struct Spelling<'a> {
+    /// Each sequence (three characters packed into one number) and how many words use it.
+    sequences: std::collections::HashMap<u64, usize>,
+    words: std::collections::HashSet<&'a str>,
+    letters: Vec<char>,
+}
+
+impl<'a> Spelling<'a> {
+    fn learn(words: &'a [String]) -> Self {
+        let mut sequences = std::collections::HashMap::new();
+        let mut letters = std::collections::BTreeSet::new();
+        let mut in_word = Vec::new();
+        for word in words {
+            letters.extend(word.chars().filter(|c| c.is_alphabetic()));
+            in_word.clear();
+            in_word.extend(Self::sequences_of(word));
+            // Each word counts once per sequence.
+            in_word.sort_unstable();
+            in_word.dedup();
+            for &sequence in &in_word {
+                *sequences.entry(sequence).or_insert(0) += 1;
+            }
+        }
+        Self {
+            sequences,
+            words: words.iter().map(String::as_str).collect(),
+            letters: letters.into_iter().collect(),
+        }
+    }
+
+    /// The word's three-character sequences, with `^` and `$` for its start
+    /// and end, each packed into one number (21 bits per character).
+    fn sequences_of(word: &str) -> impl Iterator<Item = u64> + '_ {
+        let padded = std::iter::once('^')
+            .chain(word.chars())
+            .chain(std::iter::once('$'));
+        let mut window = [0_u64; 3];
+        padded.enumerate().filter_map(move |(i, c)| {
+            window = [window[1], window[2], u64::from(u32::from(c))];
+            (i >= 2).then(|| window[0] << 42 | window[1] << 21 | window[2])
+        })
+    }
+
+    /// Every letter sequence of `word`, its start and end included, is common
+    /// in real words ("graloter" yes; "balusppe", "fréqtôt" no).
+    fn looks_real(&self, word: &str) -> bool {
+        Self::sequences_of(word)
+            .all(|s| self.sequences.get(&s).copied().unwrap_or(0) >= SEQUENCE_WORDS)
+    }
+
+    /// A common word is one letter away: one left out, changed or added
+    /// ("amélette" for "omelette").
+    fn one_letter_from_a_word(&self, word: &str) -> bool {
+        let chars: Vec<char> = word.chars().collect();
+        for at in 0..=chars.len() {
+            if at < chars.len() {
+                let without: String = chars[..at].iter().chain(&chars[at + 1..]).collect();
+                if self.words.contains(without.as_str()) {
+                    return true;
+                }
+            }
+            for &letter in &self.letters {
+                if at < chars.len() {
+                    let changed: String = chars[..at]
+                        .iter()
+                        .chain([&letter])
+                        .chain(&chars[at + 1..])
+                        .collect();
+                    if self.words.contains(changed.as_str()) {
+                        return true;
+                    }
+                }
+                let added: String = chars[..at]
+                    .iter()
+                    .chain([&letter])
+                    .chain(&chars[at..])
+                    .collect();
+                if self.words.contains(added.as_str()) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 /// A small random number generator (xorshift64*), so the check needs no

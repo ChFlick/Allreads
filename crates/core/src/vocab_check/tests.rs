@@ -1,57 +1,62 @@
 use super::*;
 
-/// The stand-in dictionary form at `rank`: its rank in letters ("bab",
-/// "bac", …), so made-up words can be spliced from them as from real ones.
+/// 30,000 stand-in dictionary forms, most common first: words of two to
+/// four random syllables, a sparse sample of millions of possible ones, so
+/// made-up words spliced from them are as rarely real (or one letter from a
+/// real one) as in a real language.
+fn ranked() -> Vec<String> {
+    words().to_vec()
+}
+
+/// The stand-in words, made once.
+fn words() -> &'static [String] {
+    use std::sync::OnceLock;
+    static WORDS: OnceLock<Vec<String>> = OnceLock::new();
+    WORDS.get_or_init(|| {
+        let onsets = [
+            "b", "d", "f", "g", "l", "m", "n", "p", "r", "s", "t", "v", "ch", "br", "tr", "pl",
+        ];
+        let vowels = ["a", "e", "i", "o", "u", "ou", "ai", "é"];
+        let codas = ["", "", "", "r", "n", "s", "l"];
+        let mut rng = Rng::new(2026);
+        let mut seen = std::collections::HashSet::new();
+        let mut words = Vec::new();
+        while words.len() < 30_000 {
+            let syllables = 2 + rng.below(3);
+            let word: String = (0..syllables)
+                .map(|_| {
+                    format!(
+                        "{}{}{}",
+                        onsets[rng.below(onsets.len())],
+                        vowels[rng.below(vowels.len())],
+                        codas[rng.below(codas.len())]
+                    )
+                })
+                .collect();
+            if seen.insert(word.clone()) {
+                words.push(word);
+            }
+        }
+        words
+    })
+}
+
+/// The stand-in word at `rank`.
 fn word_at(rank: usize) -> String {
-    let consonants = ['b', 'd', 'f', 'g', 'l', 'm', 'n', 'p', 'r', 's', 't', 'v'];
-    let vowels = ['a', 'e', 'i', 'o', 'u'];
-    let mut word = String::new();
-    let mut n = rank + 60; // at least two syllables
-    while n > 0 {
-        word.push(consonants[n % 12]);
-        n /= 12;
-        word.push(vowels[n % 5]);
-        n /= 5;
-    }
-    // A check letter, so a word spliced from two others is rarely another
-    // stand-in, as in a real language.
-    word.push(['x', 'y', 'z', 'k', 'h', 'w', 'j'][rank % 7]);
-    word
+    words()[rank].clone()
 }
 
 /// The rank of a stand-in word.
 fn rank_of(word: &str) -> usize {
-    let consonants = "bdfglmnprstv";
-    let vowels = "aeiou";
-    let chars: Vec<char> = word.chars().collect();
-    let chars = &chars[..chars.len() - 1];
-    let mut n = 0;
-    for pair in chars.chunks(2).rev() {
-        n = n * 5 + vowels.find(pair[1]).unwrap();
-        n = n * 12 + consonants.find(pair[0]).unwrap();
-    }
-    n - 60
-}
-
-/// 30,000 stand-in dictionary forms, most common first.
-fn ranked() -> Vec<String> {
-    (0..30_000).map(word_at).collect()
-}
-
-/// Real-looking words for the made-up word tests: letters only.
-fn lettered() -> Vec<String> {
-    let syllables = [
-        "ma", "ri", "lo", "te", "pu", "san", "vor", "del", "quin", "bre",
-    ];
-    let mut words = Vec::new();
-    for a in syllables {
-        for b in syllables {
-            for c in syllables {
-                words.push(format!("{a}{b}{c}"));
-            }
-        }
-    }
-    words
+    use std::sync::OnceLock;
+    static RANKS: OnceLock<std::collections::HashMap<String, usize>> = OnceLock::new();
+    RANKS.get_or_init(|| {
+        ranked()
+            .into_iter()
+            .enumerate()
+            .map(|(rank, w)| (w, rank))
+            .collect()
+    })[word]
 }
 
 /// A simulated reader: knows the word at rank r with a chance that falls
@@ -202,30 +207,14 @@ fn the_larger_choice_marks_more_and_stays_mostly_right() {
 }
 
 #[test]
-fn an_over_claimer_is_caught_and_only_their_yes_words_are_offered() {
-    let mut learner = Learner::new(1_000, 0.6, 1);
-    let (check, _) = learner.take(VocabCheck::new(ranked(), &|_| false, 1));
-    let result = check.result();
-    assert!(!result.reliable);
-    assert_eq!(result.choices.len(), 1);
-    let choice = result.choices[0];
-    assert_eq!(choice.up_to_rank, 0);
-    // Only "yes" answers, and with this much guessing hardly any of them.
-    let yes: std::collections::HashSet<String> = check
-        .answers
-        .iter()
-        .filter(|(_, yes)| *yes)
-        .map(|(rank, _)| word_at(*rank))
-        .collect();
-    let marked = check.words_to_mark(&choice);
-    assert!(marked.iter().all(|w| yes.contains(w)));
-    assert!(
-        marked.len() * 4 < yes.len(),
-        "{} of {} yes-words marked",
-        marked.len(),
-        yes.len()
-    );
-    assert_eq!(choice.words, marked.len());
+fn an_over_claimer_is_caught_and_offered_nothing() {
+    for seed in 0..5 {
+        let mut learner = Learner::new(1_000, 0.6, seed);
+        let (check, _) = learner.take(VocabCheck::new(ranked(), &|_| false, seed));
+        let result = check.result();
+        assert!(!result.reliable, "seed {seed}");
+        assert!(result.choices.is_empty());
+    }
 }
 
 #[test]
@@ -260,13 +249,19 @@ fn a_beginner_stops_early_and_an_advanced_reader_goes_through_every_band() {
 
 #[test]
 fn made_up_words_look_real_but_are_not_words() {
-    let words = lettered();
+    let words = ranked();
     let real: std::collections::HashSet<String> = words.iter().cloned().collect();
-    let in_dictionary = |w: &str| w.ends_with("ma");
-    let mut check = VocabCheck::new(words, &in_dictionary, 3);
+    // Some other words the dictionary knows.
+    let in_dictionary = |w: &str| w.ends_with("ra");
+    let mut check = VocabCheck::new(words.clone(), &in_dictionary, 3);
     assert_eq!(check.made_up.len(), MADE_UP);
+    let spelling = Spelling::learn(&words[..COMMON_WORDS]);
     for word in check.made_up.clone() {
         assert!(!real.contains(&word) && !in_dictionary(&word), "{word}");
+        assert!(
+            spelling.looks_real(&word) && !spelling.one_letter_from_a_word(&word),
+            "{word}"
+        );
         assert!(
             word.chars().all(char::is_alphabetic) && (5..=11).contains(&word.chars().count()),
             "{word}"
@@ -346,4 +341,29 @@ fn marking_includes_every_form_of_each_marked_word() {
         check.forms_to_mark(&choice, &forms),
         ["est", "était", "être", "été", "avoir", "lire", "lisait"]
     );
+}
+
+#[test]
+fn made_up_words_use_only_common_letter_sequences_and_are_not_near_a_word() {
+    let words = ranked();
+    let spelling = Spelling::learn(&words[..COMMON_WORDS]);
+    // Real words use common sequences; letters no word puts together do not.
+    // Nearly all real words: any word may hold one rare sequence.
+    let real = words[..1_000]
+        .iter()
+        .filter(|w| spelling.looks_real(w))
+        .count();
+    assert!(real >= 900, "{real} of 1,000");
+    assert!(!spelling.looks_real("bxqzé") && !spelling.looks_real("aaaaa"));
+    // A word with one letter left out, changed or added is too close.
+    let word: Vec<char> = words[7].chars().collect();
+    let without: String = word[1..].iter().collect();
+    let changed: String = std::iter::once('z')
+        .chain(word[1..].iter().copied())
+        .collect();
+    let added: String = std::iter::once('z').chain(word.iter().copied()).collect();
+    for near in [without, changed, added] {
+        assert!(spelling.one_letter_from_a_word(&near), "{near}");
+    }
+    assert!(!spelling.one_letter_from_a_word("zzzzzzzz"));
 }

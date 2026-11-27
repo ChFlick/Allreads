@@ -133,3 +133,7 @@ The app side of Find a book (book lists, the screen, Get) is merged into `main` 
 ## 2026-11-27: vocabulary check from Lexique, tuned against wrong "known" marks
 
 The vocabulary check uses Lexique 3.82 (CC BY-SA 4.0) for French word frequencies and FrequencyWords (OpenSubtitles) for other languages, packed into the dictionary download. Sources plug in through one interface in dictgen and end up in the same table, so adding a provider later touches nothing else. It aims at few wrong marks rather than many marks: made-up words correct for over-claiming, only bands known at 90 % or more are marked, "no" answers stay new, and an unreliable result marks only the words answered "yes". Marked words are known (no Anki cards), carry the source "Vocabulary check", and can be undone. Plan: IMPLEMENTATION_PLAN, "Vocabulary check".
+
+## 2026-11-27: vocabulary check, after an accuracy review
+
+Checked against the real French ranks. One curve for all words stays: cognates (about 40 % of the words from rank 500 on) do not lower the accuracy of the safe choice, while separate curves for cognates and other words marked more at about 95 % right. Made-up words must use only letter sequences common in real words and must not be one letter from a common word, so a "yes" to one really is a guess. An unreliable result (more than 30 % "yes" to made-up words) offers nothing and asks for a retake, rather than marking the "yes" answers.
