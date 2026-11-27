@@ -4,6 +4,7 @@ pub mod anki;
 pub mod apkg;
 pub mod article;
 pub mod book;
+pub mod catalog;
 pub mod db;
 pub mod dictionary;
 pub mod epub;
