@@ -220,7 +220,6 @@
     <string name="add_a_note">Add a note</string>
     <string name="dictionary_form">Dictionary form</string>
     <string name="add_one">Add one</string>
-    <string name="no_browser_is_installed_to">No browser is installed to open the dictionary.</string>
     <string name="part_of">"Part of "</string>
     <string name="marked_words_as_known">Marked %1$s words as known</string>
     <string name="no_voice_for_this_language">No voice for this language on the phone</string>

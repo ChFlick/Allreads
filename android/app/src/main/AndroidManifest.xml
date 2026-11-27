@@ -11,6 +11,17 @@
     <!-- Android 11+ hides other apps unless they are listed here. -->
     <queries>
         <package android:name="com.ichi2.anki" />
+        <!-- To show "Look up in the web dictionary" only when a browser can open it. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="http" />
+        </intent>
     </queries>
 
     <application

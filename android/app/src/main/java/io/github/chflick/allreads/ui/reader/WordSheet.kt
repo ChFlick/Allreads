@@ -41,7 +41,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -73,8 +72,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
-import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.unit.dp
 import io.github.chflick.allreads.ui.theme.StatusChip
 import io.github.chflick.allreads.ui.theme.longLabel
@@ -339,14 +338,15 @@ fun WordSheetContent(
                 draft.typed = true
             }
         }
-        word.dictionaryUrl?.let { url ->
+        // Shown only when an app can open the link (a phone without a browser has none).
+        val preview = LocalInspectionMode.current
+        val webLookup = word.dictionaryUrl?.let { url -> Intent(Intent.ACTION_VIEW, Uri.parse(url)) }
+            ?.takeIf { intent -> preview || remember(intent.data) { intent.resolveActivity(context.packageManager) != null } }
+        webLookup?.let { intent ->
             OutlinedButton(
                 onClick = {
-                    try {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } catch (e: ActivityNotFoundException) {
-                        Toast.makeText(context, AppText.get(R.string.no_browser_is_installed_to), Toast.LENGTH_LONG).show()
-                    }
+                    // The browser could have been removed since the drawer opened.
+                    runCatching { context.startActivity(intent) }
                 },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             ) { Text(stringResource(R.string.look_up_in_the_web)) }
