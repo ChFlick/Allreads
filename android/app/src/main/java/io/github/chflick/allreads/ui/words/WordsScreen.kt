@@ -1,5 +1,11 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.AnimatedVisibility
 import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
@@ -129,7 +135,13 @@ fun WordsScreen(viewModel: WordsViewModel, services: Services? = null) {
         },
     )
 
-    if (importing && services != null) {
+    // The import screen rises over the list and sinks back when done.
+    AnimatedVisibility(
+        visible = importing && services != null,
+        enter = slideInVertically(tween(300)) { it / 8 } + fadeIn(tween(200)),
+        exit = slideOutVertically(tween(250)) { it / 8 } + fadeOut(tween(200)),
+    ) {
+        if (services == null) return@AnimatedVisibility
         val context = LocalContext.current
         val importer = viewModel(key = "anki-import-$importOpens") {
             AnkiImportViewModel(services.repository, services.anki, state.language, context.cacheDir)

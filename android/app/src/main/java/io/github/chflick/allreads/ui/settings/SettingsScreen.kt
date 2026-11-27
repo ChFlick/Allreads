@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.settings
 
+import io.github.chflick.allreads.ui.sharedAxisX
+import androidx.compose.animation.AnimatedContent
 import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import androidx.annotation.StringRes
@@ -104,17 +106,26 @@ private enum class SettingsPage(@StringRes val title: Int) {
 fun SettingsScreen(services: Services) {
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     BackHandler(enabled = page != null) { page = null }
-    val open = page
-    if (open == null) {
-        SettingsOverview(services, onOpen = { page = it })
-        return
+    // A page slides in from the overview and back out to it.
+    AnimatedContent(targetState = page, transitionSpec = { sharedAxisX(forward = targetState != null) }, label = "settings") { open ->
+        if (open == null) {
+            SettingsOverview(services, onOpen = { page = it })
+        } else {
+            SettingsPageScreen(services, open, onBack = { page = null })
+        }
     }
+}
+
+/** One settings page, with a back arrow to the overview. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsPageScreen(services: Services, open: SettingsPage, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(open.title)) },
                 navigationIcon = {
-                    IconButton(onClick = { page = null }) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back_to_settings))
                     }
                 },

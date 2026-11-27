@@ -1,5 +1,9 @@
 package io.github.chflick.allreads
 
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import io.github.chflick.allreads.ui.fadeThrough
+import io.github.chflick.allreads.ui.sharedAxisX
+import androidx.compose.animation.AnimatedContent
 import io.github.chflick.allreads.R
 import io.github.chflick.allreads.ui.AppText
 import android.content.Intent
@@ -109,21 +113,46 @@ private fun AllreadsNavigation(services: Services) {
         }
     }
 
-    val bookId = openBookId
-    if (bookId != null) {
-        // One reader ViewModel for every book; open() starts a fresh session per opening.
-        val reader = viewModel(key = "reader") { ReaderViewModel(services) }
-        // Reset before the first frame, so the previous book never flashes.
-        // open() ignores repeat calls for the same opening (e.g. on rotation).
-        remember(bookId, opens) { reader.open(bookId, opens) }
-        ReaderPageTheme(settings.readerPage) {
-            ReaderScreen(reader, settings, onBack = { openBookId = null }, textSettings = { ReadingSettings(services) })
+    // Keeps the tabs' state (scroll positions, searches) while a book is open.
+    val saved = rememberSaveableStateHolder()
+    // The book slides in over the tabs and back out again.
+    AnimatedContent(
+        targetState = openBookId,
+        transitionSpec = { sharedAxisX(forward = targetState != null) },
+        contentKey = { it != null },
+        label = "book",
+    ) { bookId ->
+        if (bookId != null) {
+            // One reader ViewModel for every book; open() starts a fresh session per opening.
+            val reader = viewModel(key = "reader") { ReaderViewModel(services) }
+            // Reset before the first frame, so the previous book never flashes.
+            // open() ignores repeat calls for the same opening (e.g. on rotation).
+            remember(bookId, opens) { reader.open(bookId, opens) }
+            ReaderPageTheme(settings.readerPage) {
+                ReaderScreen(reader, settings, onBack = { openBookId = null }, textSettings = { ReadingSettings(services) })
+            }
+        } else {
+            saved.SaveableStateProvider("tabs") {
+                AllreadsTabs(services, tab, onTab = { tab = it }, shared = shared, onOpenBook = {
+                    opens += 1
+                    openBookId = it
+                })
+            }
         }
-        return
     }
+}
 
+/** The three tabs and the bottom bar. */
+@Composable
+private fun AllreadsTabs(
+    services: Services,
+    tab: Tab,
+    onTab: (Tab) -> Unit,
+    shared: SharedImport?,
+    onOpenBook: (Long) -> Unit,
+) {
     // Back from Words or Settings goes to the Library first; back there leaves the app.
-    BackHandler(enabled = tab != Tab.Library) { tab = Tab.Library }
+    BackHandler(enabled = tab != Tab.Library) { onTab(Tab.Library) }
 
     Scaffold(
         bottomBar = {
@@ -131,7 +160,7 @@ private fun AllreadsNavigation(services: Services) {
                 Tab.entries.forEach { item ->
                     NavigationBarItem(
                         selected = tab == item,
-                        onClick = { tab = item },
+                        onClick = { onTab(item) },
                         icon = { Icon(item.icon, contentDescription = null) },
                         label = { Text(item.label) },
                     )
@@ -144,24 +173,27 @@ private fun AllreadsNavigation(services: Services) {
         // consumed: the screens' top bars still need the status-bar inset.
         val bottom = PaddingValues(bottom = padding.calculateBottomPadding())
         Box(Modifier.padding(bottom).consumeWindowInsets(bottom)) {
-            when (tab) {
-                Tab.Library -> {
-                    val library = viewModel { LibraryViewModel(services.repository, services.settings) }
-                    // Reading changes progress, so refresh whenever the library is shown.
-                    LaunchedEffect(Unit) { library.refresh() }
-                    LaunchedEffect(shared) {
-                        shared?.let {
-                            services.sharedImport.value = null
-                            library.importShared(it)
+            // Each tab keeps its scroll position while another is shown.
+            val savedTabs = rememberSaveableStateHolder()
+            AnimatedContent(targetState = tab, transitionSpec = { fadeThrough() }, label = "tab") { shown ->
+                savedTabs.SaveableStateProvider(shown.name) {
+                    when (shown) {
+                        Tab.Library -> {
+                            val library = viewModel { LibraryViewModel(services.repository, services.settings) }
+                            // Reading changes progress, so refresh whenever the library is shown.
+                            LaunchedEffect(Unit) { library.refresh() }
+                            LaunchedEffect(shared) {
+                                shared?.let {
+                                    services.sharedImport.value = null
+                                    library.importShared(it)
+                                }
+                            }
+                            LibraryScreen(library, onOpen = { onOpenBook(it.id) }, onOpenSettings = { onTab(Tab.Settings) })
                         }
+                        Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki) }, services)
+                        Tab.Settings -> SettingsScreen(services)
                     }
-                    LibraryScreen(library, onOpen = {
-                        opens += 1
-                        openBookId = it.id
-                    }, onOpenSettings = { tab = Tab.Settings })
                 }
-                Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki) }, services)
-                Tab.Settings -> SettingsScreen(services)
             }
         }
     }
