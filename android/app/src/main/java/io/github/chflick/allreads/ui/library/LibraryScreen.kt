@@ -153,12 +153,14 @@ private fun BookSummary.chapterLine(): String =
 internal fun DifficultyLine(difficulty: BookDifficulty) {
     if (difficulty.words == 0uL) return
     val percent = difficulty.newPercent
-    val colour = when {
-        percent <= 5.0 -> Color(0xFF4F8A3B)
-        percent <= 12.0 -> Color(0xFFD39A2C)
-        else -> Color(0xFFC0533F)
-    }
-    DotLabel(colour, "${newPercentText(percent)} new words")
+    DotLabel(difficultyColour(percent), "${newPercentText(percent)} new words")
+}
+
+/** Green up to 5 % new words (a good level to learn from), amber up to 12 %, red beyond. */
+internal fun difficultyColour(percent: Double): Color = when {
+    percent <= 5.0 -> Color(0xFF4F8A3B)
+    percent <= 12.0 -> Color(0xFFD39A2C)
+    else -> Color(0xFFC0533F)
 }
 
 /** "4 %", or "<1 %" for a few new words in a long book. */

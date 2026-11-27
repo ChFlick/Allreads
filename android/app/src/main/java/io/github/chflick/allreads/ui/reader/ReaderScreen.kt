@@ -1,5 +1,11 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Surface
+import io.github.chflick.allreads.ui.library.difficultyColour
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -56,7 +62,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -218,7 +226,7 @@ private fun SentenceRow(
     onSpeak: () -> Unit,
 ) {
     val dark = LocalDarkTheme.current
-    val text = remember(row, dark) { styledText(row, dark) }
+    val text = remember(row) { styledText(row) }
     // Words inside a saved phrase take the phrase's colour, so they get no underline.
     // Names get no underline either: they are not words to learn.
     val newWords = remember(row) { row.content.ranges { it.status == WordStatus.New && it.phrase == null && !it.name } }
@@ -254,6 +262,7 @@ private fun SentenceRow(
                                 val chars = row.content.charRange(tokens)
                                 drawPath(textLayout.getPathForRange(chars.first, chars.last + 1), selectionColor)
                             }
+                            drawHighlights(textLayout, row.content.marks, dark, rowStyle.fontSize.toPx())
                             drawFaintUnderlines(textLayout, newWords, underline)
                         }
                     }
@@ -359,21 +368,38 @@ private fun TranslateButton(shown: Boolean, onClick: () -> Unit) {
     }
 }
 
-/**
- * A sentence's tokens with italic, bold, and a background for words being
- * learned. New words get no fill here; [drawFaintUnderlines] marks them.
- */
-private fun styledText(row: ReaderRow, dark: Boolean): AnnotatedString = buildAnnotatedString {
+/** A sentence's tokens with italic and bold; [drawHighlights] and [drawFaintUnderlines] add the marks. */
+private fun styledText(row: ReaderRow): AnnotatedString = buildAnnotatedString {
     row.content.tokens.forEach { token ->
-        val status = token.status
-        // A saved phrase is coloured as one, spaces between its words too.
-        val colour = token.phrase?.status ?: status
         val style = SpanStyle(
             fontStyle = if (token.italic) FontStyle.Italic else null,
             fontWeight = if (token.bold) FontWeight.Bold else null,
-            background = colour?.takeIf { it != WordStatus.New }?.highlight(dark) ?: Color.Unspecified,
         )
         withStyle(style) { append(token.text) }
+    }
+}
+
+/**
+ * Learning words as rounded marker shapes, one per text line a range covers,
+ * sized to the letters rather than the line, so neighbouring words and lines
+ * stay apart.
+ */
+private fun DrawScope.drawHighlights(layout: TextLayoutResult, marks: List<Pair<IntRange, WordStatus>>, dark: Boolean, fontSize: Float) {
+    val radius = CornerRadius(4.dp.toPx())
+    // Less than half a space, so two marked words side by side stay apart.
+    val pad = 1.dp.toPx()
+    for ((range, status) in marks) {
+        val colour = status.highlight(dark) ?: continue
+        val firstLine = layout.getLineForOffset(range.first)
+        val lastLine = layout.getLineForOffset(range.last)
+        for (line in firstLine..lastLine) {
+            val start = if (line == firstLine) layout.getBoundingBox(range.first).left else layout.getLineLeft(line)
+            val end = if (line == lastLine) layout.getBoundingBox(range.last).right else layout.getLineRight(line)
+            val baseline = layout.getLineBaseline(line)
+            val top = baseline - fontSize * 0.92f
+            val bottom = baseline + fontSize * 0.3f
+            drawRoundRect(colour, Offset(minOf(start, end) - pad, top), Size(kotlin.math.abs(end - start) + 2 * pad, bottom - top), radius)
+        }
     }
 }
 
@@ -402,14 +428,76 @@ private fun DrawScope.drawFaintUnderlines(layout: TextLayoutResult, ranges: List
     }
 }
 
+/** What reading the chapter did: words saved and raised since it was opened, and words still new. */
+internal data class ChapterSummary(val saved: Int, val raised: Int, val stillNew: Int)
+
+/** Counts each word once, by its term key; names are not words to learn. */
+internal fun chapterSummary(rows: List<ReaderRow>, openStatuses: Map<String, WordStatus>): ChapterSummary {
+    val now = rows.flatMap { it.content.tokens }
+        .filter { it.termKey != null && !it.name }
+        .associate { it.termKey!! to (it.status ?: WordStatus.New) }
+    fun rank(status: WordStatus?) = when (status) {
+        is WordStatus.Learning -> status.level.toInt()
+        WordStatus.WellKnown -> 6
+        else -> 0
+    }
+    var saved = 0
+    var raised = 0
+    var stillNew = 0
+    for ((key, status) in now) {
+        val before = openStatuses[key] ?: WordStatus.New
+        when {
+            status == WordStatus.New -> stillNew++
+            // Saved to learn; words marked known in bulk are not "saved".
+            before == WordStatus.New -> if (status is WordStatus.Learning) saved++
+            rank(status) > rank(before) -> raised++
+        }
+    }
+    return ChapterSummary(saved, raised, stillNew)
+}
+
+/** The end of a chapter: what was learned, "mark the rest known" where it is needed, and the next chapter. */
 @Composable
-private fun ChapterButtons(canGoBack: Boolean, canGoOn: Boolean, onPrevious: () -> Unit, onNext: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 32.dp, end = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+private fun ChapterEnd(
+    chapterNumber: Int,
+    summary: ChapterSummary,
+    canGoBack: Boolean,
+    canGoOn: Boolean,
+    onMarkKnown: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth().padding(top = 28.dp, end = 12.dp),
     ) {
-        OutlinedButton(onClick = onPrevious, enabled = canGoBack) { Text("Previous chapter") }
-        OutlinedButton(onClick = onNext, enabled = canGoOn) { Text("Next chapter") }
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("End of chapter $chapterNumber", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                ChapterStat(summary.saved, "words saved")
+                ChapterStat(summary.raised, "levels raised")
+                ChapterStat(summary.stillNew, "still new")
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (summary.stillNew > 0) {
+                    OutlinedButton(onClick = onMarkKnown) { Text("Mark ${summary.stillNew} as known") }
+                }
+                Spacer(Modifier.weight(1f))
+                Button(onClick = onNext, enabled = canGoOn) { Text(if (canGoOn) "Next chapter ›" else "Last chapter") }
+            }
+            if (canGoBack) {
+                TextButton(onClick = onPrevious, contentPadding = PaddingValues(0.dp)) { Text("‹ Previous chapter") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChapterStat(value: Int, label: String) {
+    Column {
+        Text("$value", style = MaterialTheme.typography.headlineSmall)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -478,11 +566,14 @@ fun ReaderContent(
                             // The chapter's share of new words, next to the book's title.
                             val newShare = remember(state.rows) { chapterNewPercent(state.rows) }
                             state.book?.let {
-                                Text(
-                                    it.title + (newShare?.let { p -> " · ${newPercentText(p)} new" } ?: ""),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("${it.title}${if (newShare != null) " · " else ""}", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    // The same green, amber or red dot as on the library card.
+                                    newShare?.let { p ->
+                                        Box(Modifier.padding(end = 4.dp).size(7.dp).background(difficultyColour(p), CircleShape))
+                                        Text("${newPercentText(p)} new", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    }
+                                }
                             }
                         }
                     },
@@ -515,12 +606,13 @@ fun ReaderContent(
                         if (state.rows.isEmpty()) 0f else ((last + 1).toFloat() / state.rows.size).coerceIn(0f, 1f)
                     }
                 }
+                // Inset and with a visible track, so it reads as progress, not as a divider.
                 LinearProgressIndicator(
                     progress = { progress },
-                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp).height(3.dp),
                     drawStopIndicator = {},
                     gapSize = 0.dp,
-                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
                 )
             }
         },
@@ -547,9 +639,12 @@ fun ReaderContent(
                 )
             }
             item {
-                ChapterButtons(
+                ChapterEnd(
+                    chapterNumber = state.chapterIndex.toInt() + 1,
+                    summary = remember(state.rows, state.openStatuses) { chapterSummary(state.rows, state.openStatuses) },
                     canGoBack = state.chapterIndex > 0u,
                     canGoOn = state.book?.let { state.chapterIndex + 1u < it.chapterCount } ?: false,
+                    onMarkKnown = { actions.onMarkRestKnown(0) },
                     onPrevious = actions.onPreviousChapter,
                     onNext = actions.onNextChapter,
                 )

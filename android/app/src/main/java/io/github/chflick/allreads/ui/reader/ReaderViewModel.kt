@@ -80,6 +80,8 @@ data class ReaderState(
     val levelChange: LevelChange? = null,
     /** Words just marked known, offered for undo in a snackbar. */
     val markedKnown: MarkedKnown? = null,
+    /** Each word's status when the chapter was opened, for the chapter-end summary. */
+    val openStatuses: Map<String, WordStatus> = emptyMap(),
     /** Set when read-aloud found no voice for the book's language; the screen offers the TTS settings. */
     val noVoice: Boolean = false,
 )
@@ -152,6 +154,9 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
                         chapterIndex = index,
                         chapterTitle = titles.getOrNull(index.toInt()),
                         rows = readerRows(chapter.blocks),
+                        openStatuses = chapter.blocks.flatMap { it.tokens }
+                            .mapNotNull { t -> t.termKey?.let { key -> t.status?.let { key to it } } }
+                            .toMap(),
                         startBlock = startBlock,
                         translations = emptyMap(),
                     )

@@ -3,6 +3,7 @@ package io.github.chflick.allreads.reader
 import java.net.URLEncoder
 import uniffi.allreads_ffi.ChapterBlock
 import uniffi.allreads_ffi.Token
+import uniffi.allreads_ffi.WordStatus
 
 /**
  * A run of tokens with the character offset where each one starts, so a tap
@@ -37,6 +38,32 @@ class TokenText(val tokens: List<Token>) {
         tokens.indices
             .filter { matches(tokens[it]) && tokens[it].text.isNotEmpty() }
             .map { starts[it] until starts[it] + tokens[it].text.length }
+
+    /**
+     * The character ranges to mark in a level colour, with the level: learning
+     * words, and saved phrases as one range (spaces between their words too).
+     */
+    val marks: List<Pair<IntRange, WordStatus>> by lazy {
+        val runs = mutableListOf<Pair<IntRange, WordStatus>>()
+        var lastPhrase: UInt? = null
+        tokens.forEachIndexed { i, token ->
+            val status = token.phrase?.status ?: token.status
+            if (status !is WordStatus.Learning || token.text.isEmpty()) {
+                lastPhrase = null
+                return@forEachIndexed
+            }
+            val range = starts[i] until starts[i] + token.text.length
+            val phrase = token.phrase?.id
+            if (phrase != null && phrase == lastPhrase && runs.isNotEmpty()) {
+                val (previous, level) = runs.removeAt(runs.lastIndex)
+                runs += (previous.first..range.last) to level
+            } else {
+                runs += range to status
+            }
+            lastPhrase = phrase
+        }
+        runs
+    }
 
     /** The tokens of the saved phrase that token `index` is part of, or null if none. */
     fun phraseRange(index: Int): IntRange? {
