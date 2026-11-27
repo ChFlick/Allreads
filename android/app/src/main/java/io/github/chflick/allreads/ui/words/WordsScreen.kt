@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -194,6 +196,11 @@ private fun SwipeableTermRow(term: SavedTerm, onClick: () -> Unit, onRaise: () -
         // Half the width: a short flick never forgets a word.
         positionalThreshold = { width -> width * 0.5f },
     )
+    // A tick when the swipe passes the point where letting go acts.
+    val haptics = LocalHapticFeedback.current
+    LaunchedEffect(state.targetValue) {
+        if (state.targetValue != SwipeToDismissBoxValue.Settled) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+    }
     SwipeToDismissBox(
         state = state,
         enableDismissFromEndToStart = canRaise,

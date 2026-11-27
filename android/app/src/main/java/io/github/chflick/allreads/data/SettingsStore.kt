@@ -20,7 +20,7 @@ enum class BookSort(val label: String) {
 }
 
 /** The reader's page colours: the app's light or dark theme, or warm sepia. */
-enum class ReaderPage(val label: String) { App("Same as the app"), Sepia("Sepia") }
+enum class ReaderPage(val label: String) { App("Same as the app"), Sepia("Sepia"), Black("Black") }
 
 /** Reading and app preferences. API keys are kept apart, in [ApiKeyStore]. */
 data class AppSettings(

@@ -2,6 +2,7 @@ package io.github.chflick.allreads
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import io.github.chflick.allreads.data.SharedImport
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -48,6 +49,8 @@ import io.github.chflick.allreads.ui.words.WordsViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The system splash (icon on the app's colours) until the first frame.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val services = (application as AllreadsApplication).services

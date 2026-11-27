@@ -13,6 +13,11 @@ import io.github.chflick.allreads.ui.library.difficultyColour
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.material3.SnackbarResult
@@ -244,6 +249,8 @@ private fun SentenceRow(
     onRetryTranslation: () -> Unit,
     onSpeak: () -> Unit,
 ) {
+    // A short buzz confirms the gestures that act without opening anything.
+    val haptics = LocalHapticFeedback.current
     val dark = LocalDarkTheme.current
     val text = remember(row) { styledText(row) }
     // Words inside a saved phrase take the phrase's colour, so they get no underline.
@@ -290,7 +297,16 @@ private fun SentenceRow(
                             layout?.getOffsetForPosition(position)?.let { row.content.wordAt(it) }
                         // With double tap on, a single tap waits a moment for a possible second one.
                         detectTapGestures(
-                            onDoubleTap = if (doubleTapRaises) { position -> wordAt(position)?.let(onRaise) } else null,
+                            onDoubleTap = if (doubleTapRaises) {
+                                { position ->
+                                    wordAt(position)?.let {
+                                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        onRaise(it)
+                                    }
+                                }
+                            } else {
+                                null
+                            },
                             onTap = { position -> wordAt(position)?.let(onWord) },
                         )
                     }
@@ -303,6 +319,7 @@ private fun SentenceRow(
                             onDragStart = { position ->
                                 anchor = wordUnder(position)
                                 selection = anchor?.let { it..it }
+                                if (anchor != null) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             },
                             onDrag = { change, _ ->
                                 val start = anchor
@@ -547,6 +564,9 @@ internal fun chapterNewPercent(rows: List<ReaderRow>): Double? {
     return new * 100.0 / words.size
 }
 
+/** The widest the text gets: about 70 characters at the default size. */
+private val ReadingWidth = 640.dp
+
 /** What the reader's rows and bars can ask for. */
 data class ReaderActions(
     val onBack: () -> Unit = {},
@@ -576,10 +596,15 @@ fun ReaderContent(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val textStyle = readerTextStyle(settings)
+    // The top bar slides away while reading down and comes back on the way up;
+    // the thin progress line under it stays.
+    val barScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(barScroll.nestedScrollConnection),
         topBar = {
             Column {
                 TopAppBar(
+                    scrollBehavior = barScroll,
                     title = {
                         Column {
                             val number = state.chapterIndex.toInt() + 1
@@ -652,32 +677,39 @@ fun ReaderContent(
             state = listState,
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 24.dp),
+            // On tablets and in landscape, a centred column of about 70
+            // characters: longer lines are hard to follow back to their start.
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             items(state.rows, key = { it.key }) { row ->
-                SentenceRow(
-                    row = row,
-                    style = textStyle,
-                    translation = state.translations[row.key],
-                    playing = speaking == row.key,
-                    onWord = { tokenIndex -> actions.onWord(row, tokenIndex) },
-                    onRaise = { tokenIndex -> actions.onRaise(row, tokenIndex) },
-                    doubleTapRaises = settings.doubleTapRaises,
-                    onSelectRange = { range -> actions.onSelectRange(row, range) },
-                    onTranslate = { actions.onTranslate(row) },
-                    onRetryTranslation = { actions.onRetryTranslation(row) },
-                    onSpeak = { actions.onSpeak(row) },
-                )
+                Box(Modifier.widthIn(max = ReadingWidth)) {
+                    SentenceRow(
+                        row = row,
+                        style = textStyle,
+                        translation = state.translations[row.key],
+                        playing = speaking == row.key,
+                        onWord = { tokenIndex -> actions.onWord(row, tokenIndex) },
+                        onRaise = { tokenIndex -> actions.onRaise(row, tokenIndex) },
+                        doubleTapRaises = settings.doubleTapRaises,
+                        onSelectRange = { range -> actions.onSelectRange(row, range) },
+                        onTranslate = { actions.onTranslate(row) },
+                        onRetryTranslation = { actions.onRetryTranslation(row) },
+                        onSpeak = { actions.onSpeak(row) },
+                    )
+                }
             }
             item {
-                ChapterEnd(
-                    chapterNumber = state.chapterIndex.toInt() + 1,
-                    summary = remember(state.rows, state.openStatuses) { chapterSummary(state.rows, state.openStatuses) },
-                    canGoBack = state.chapterIndex > 0u,
-                    canGoOn = state.book?.let { state.chapterIndex + 1u < it.chapterCount } ?: false,
-                    onMarkKnown = { actions.onMarkRestKnown(0) },
-                    onPrevious = actions.onPreviousChapter,
-                    onNext = actions.onNextChapter,
-                )
+                Box(Modifier.widthIn(max = ReadingWidth)) {
+                    ChapterEnd(
+                        chapterNumber = state.chapterIndex.toInt() + 1,
+                        summary = remember(state.rows, state.openStatuses) { chapterSummary(state.rows, state.openStatuses) },
+                        canGoBack = state.chapterIndex > 0u,
+                        canGoOn = state.book?.let { state.chapterIndex + 1u < it.chapterCount } ?: false,
+                        onMarkKnown = { actions.onMarkRestKnown(0) },
+                        onPrevious = actions.onPreviousChapter,
+                        onNext = actions.onNextChapter,
+                    )
+                }
             }
         }
     }

@@ -1,4 +1,16 @@
 <resources>
-    <!-- Compose draws the UI; this only themes the window around it. -->
-    <style name="Theme.Allreads" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Compose draws the UI; this only themes the window around it, in the
+         app's paper colour (dark in night mode), so nothing flashes white. -->
+    <style name="Theme.Allreads" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+
+    <!-- The system splash while the app starts: the icon on its navy circle,
+         on the window colour. Replaced by Theme.Allreads once started. -->
+    <style name="Theme.Allreads.Starting" parent="Theme.SplashScreen.IconBackground">
+        <item name="windowSplashScreenBackground">@color/window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_icon_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.Allreads</item>
+    </style>
 </resources>

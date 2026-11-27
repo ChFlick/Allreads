@@ -1,0 +1,5 @@
+<resources>
+    <!-- The window behind Compose and the system splash, matching the app's own colours. -->
+    <color name="window_background">#FBF9F5</color>
+    <color name="splash_icon_background">#2E4A7D</color>
+</resources>

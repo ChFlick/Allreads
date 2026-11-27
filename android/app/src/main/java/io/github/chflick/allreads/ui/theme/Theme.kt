@@ -102,25 +102,47 @@ private val SepiaColors = LightColors.copy(
 )
 
 /**
+ * True black for OLED screens: black pixels are switched off, which saves
+ * battery and reads well in the dark. Sheets and cards stay a touch lighter.
+ */
+private val BlackColors = DarkColors.copy(
+    background = Color(0xFF000000),
+    surface = Color(0xFF000000),
+    surfaceContainerLowest = Color(0xFF000000),
+    surfaceContainerLow = Color(0xFF0E0F11),
+    surfaceContainer = Color(0xFF141518),
+    surfaceContainerHigh = Color(0xFF1C1D20),
+    surfaceContainerHighest = Color(0xFF26272A),
+)
+
+/**
  * The reader's colours: the app theme as it is, or Sepia, which is a light
  * page in either app theme. Sepia also asks for dark status-bar icons.
  */
 @Composable
 fun ReaderPageTheme(page: ReaderPage, content: @Composable () -> Unit) {
-    if (page != ReaderPage.Sepia) {
+    if (page == ReaderPage.App) {
         content()
         return
     }
+    // Sepia is a light page and Black a dark one, whatever the app's theme;
+    // the status-bar icons follow the page.
+    val light = page == ReaderPage.Sepia
     val view = LocalView.current
-    DisposableEffect(view) {
+    DisposableEffect(view, light) {
         val window = (view.context as? Activity)?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, view) }
         val wasLight = controller?.isAppearanceLightStatusBars
-        controller?.isAppearanceLightStatusBars = true
+        controller?.isAppearanceLightStatusBars = light
         onDispose { if (wasLight != null) controller.isAppearanceLightStatusBars = wasLight }
     }
-    CompositionLocalProvider(LocalDarkTheme provides false) {
-        MaterialTheme(colorScheme = SepiaColors, typography = MaterialTheme.typography, content = content)
+    CompositionLocalProvider(LocalDarkTheme provides !light) {
+        MaterialTheme(
+            colorScheme = if (light) SepiaColors else BlackColors,
+            typography = MaterialTheme.typography,
+            shapes = MaterialTheme.shapes,
+            content = content,
+        )
     }
 }
 

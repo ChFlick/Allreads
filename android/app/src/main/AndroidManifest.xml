@@ -23,6 +23,7 @@
         android:theme="@style/Theme.Allreads">
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.Allreads.Starting"
             android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
