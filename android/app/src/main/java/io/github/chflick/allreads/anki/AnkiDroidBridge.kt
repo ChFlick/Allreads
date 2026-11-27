@@ -67,7 +67,15 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
     override fun searchNoteIds(query: String): Set<Long> = query(query, withFields = false).map { it.id }.toSet()
 
     override fun suspendNote(noteId: Long, tag: String): Boolean {
-        val note = api.getNote(noteId) ?: return true
+        // getNote gives null both for a deleted note and when AnkiDroid fails to
+        // answer, so ask first whether the note is there: only a note that is
+        // really gone may drop the queued suspension.
+        when (noteExists(noteId)) {
+            null -> return false
+            false -> return true
+            true -> Unit
+        }
+        val note = api.getNote(noteId) ?: return false
         val resolver = context.contentResolver
         val cards = Uri.withAppendedPath(Uri.withAppendedPath(FlashCardsContract.Note.CONTENT_URI, noteId.toString()), "cards")
         val ords = resolver.query(cards, arrayOf(FlashCardsContract.Card.CARD_ORD), null, null, null)?.use { cursor ->
@@ -86,6 +94,14 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
     }
 
     override fun noteTags(noteId: Long): Set<String>? = api.getNote(noteId)?.tags
+
+    /** Whether AnkiDroid has the note, or `null` when it did not answer. */
+    private fun noteExists(noteId: Long): Boolean? = runCatching {
+        // A search, because a search for a missing note answers with no rows,
+        // while the note's own URI may throw for it.
+        context.contentResolver.query(FlashCardsContract.Note.CONTENT_URI, arrayOf(FlashCardsContract.Note._ID), "nid:$noteId", null, null)
+            ?.use { it.count > 0 }
+    }.getOrNull()
 
     override fun deleteNotes(noteIds: Collection<Long>): Int = noteIds.sumOf { id ->
         runCatching {
