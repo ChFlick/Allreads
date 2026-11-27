@@ -1,5 +1,15 @@
 package io.github.chflick.allreads
 
+import io.github.chflick.allreads.ui.books.FindBooksViewModel
+import io.github.chflick.allreads.ui.books.FindBooksScreen
+import io.github.chflick.allreads.data.Repository
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import io.github.chflick.allreads.ui.fadeThrough
 import io.github.chflick.allreads.ui.sharedAxisX
@@ -188,7 +198,44 @@ private fun AllreadsTabs(
                                     library.importShared(it)
                                 }
                             }
-                            LibraryScreen(library, onOpen = { onOpenBook(it.id) }, onOpenSettings = { onTab(Tab.Settings) })
+                            // "Find a book" covers the library while open; each opening starts fresh.
+                            var finding by rememberSaveable { mutableStateOf(false) }
+                            var findOpens by rememberSaveable { mutableIntStateOf(0) }
+                            LibraryScreen(
+                                library,
+                                onOpen = { onOpenBook(it.id) },
+                                onOpenSettings = { onTab(Tab.Settings) },
+                                onFindBooks = {
+                                    findOpens += 1
+                                    finding = true
+                                },
+                            )
+                            AnimatedVisibility(
+                                visible = finding,
+                                enter = slideInVertically(tween(300)) { it / 8 } + fadeIn(tween(200)),
+                                exit = slideOutVertically(tween(250)) { it / 8 } + fadeOut(tween(200)),
+                            ) {
+                                val context = LocalContext.current
+                                // One view model for every opening, as for the reader; open() starts afresh.
+                                val finder = viewModel(key = "find-books") {
+                                    FindBooksViewModel(services.repository, services.bookFetcher, context.cacheDir) {
+                                        installedBookLists(services.repository)
+                                    }
+                                }
+                                remember(findOpens) { finder.open(findOpens) }
+                                FindBooksScreen(
+                                    finder,
+                                    services.catalogs,
+                                    onOpenBook = { id ->
+                                        finding = false
+                                        onOpenBook(id)
+                                    },
+                                    onClose = {
+                                        finding = false
+                                        library.refresh()
+                                    },
+                                )
+                            }
                         }
                         Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki) }, services)
                         Tab.Settings -> SettingsScreen(services)
@@ -197,4 +244,11 @@ private fun AllreadsTabs(
             }
         }
     }
+}
+
+/** The languages with an installed book list, the language read most recently first. */
+private suspend fun installedBookLists(repository: Repository): List<String> {
+    val installed = repository.installedCatalogs().map { it.languageCode }
+    val recent = repository.library().sortedByDescending { it.lastReadAt ?: 0 }.map { it.languageCode }.distinct()
+    return installed.sortedBy { code -> recent.indexOf(code).let { if (it < 0) Int.MAX_VALUE else it } }
 }

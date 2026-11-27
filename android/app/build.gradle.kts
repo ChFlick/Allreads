@@ -33,6 +33,17 @@ android {
         val build = System.getenv("ALLREADS_BUILD_NUMBER")?.toIntOrNull()
         versionCode = build ?: 1
         versionName = if (build != null) "$workspaceVersion-build.$build" else workspaceVersion
+        // A preview from a feature branch (CI passes the branch's name) installs
+        // next to the normal app, as "Allreads Preview" with its own data, so a
+        // branch's database changes never reach the real library.
+        val preview = System.getenv("ALLREADS_PREVIEW")?.takeIf { it.isNotBlank() }
+        if (preview != null) {
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-$preview"
+            manifestPlaceholders["appLabel"] = "Allreads Preview"
+        } else {
+            manifestPlaceholders["appLabel"] = "@string/app_name"
+        }
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }

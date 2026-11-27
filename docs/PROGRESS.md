@@ -49,3 +49,12 @@ First run of the CI APK on Christoph's phone. Working: all screens, EPUB import.
 - [-] 26. Library, stats and backup (deferred past v1, backup included, 2026-11-25; see the roadmap)
 - [ ] 26a. Make the repository presentable (2026-11-25: README with features, privacy, install, how it works, credits and screenshots; screenshots rendered on the JVM by Paparazzi 1.3.5 from sample data, light and dark, in `docs/screenshots`; Library, Words, Reader and the word drawer split into view-model-free content composables; CONTRIBUTING.md, SECURITY.md and issue templates; GitHub description and topics. Pending: Christoph's look at the GitHub page)
 - [ ] 27. Release
+
+## Find a book (branch `feature/find-books`, plan: IMPLEMENTATION_PLAN "Find a book")
+
+- [x] 1. Spike: catalog size and counting (2026-11-27: 20 French Wikisource novels, 1.9 M running words; Gutenberg was down. Dropping words met once miscounts 5–6 % of a book, so every word is kept, packed)
+- [x] 2. Core: catalog format and `catalog_fit` (2026-11-27: `catalog::Catalog` with accent-insensitive search and `fit`, the library's difficulty numbers plus words worth learning; `CatalogWriter`; `dictgen --bin catalog` counts a folder of EPUBs with the app's own rules)
+- [x] 3. Packed word counts (2026-11-27: each book's counts are one varint blob, words numbered by how common they are; `top_new_words` for the detail sheet. The 20 novels: 1.36 MB, 720 KB compressed; estimate for 500 books about 12 MB, 6 MB to download)
+- [x] 4. App: download and the screen (2026-11-27: book lists are listed in the dictionaries manifest under `catalogs` and installed by the core like dictionaries (checksum, unpack, check); Settings → Dictionaries shows them under "Book lists" once one is published. Library → ＋ Import → Find a book: search, Fits me / A stretch, Short / Medium / Long, sort (best fit, popular, shortest, title), rows with the difficulty dot and "N to learn", a details sheet with the 20 new words met most, and Get, which downloads the EPUB and imports it, then offers Open. With no list installed, the screen offers the download. JVM tests: the arrangement rules, and Get with the real core and a fixture EPUB. Screenshot: `findBooks`. Phone check pending: needs a published list, step 5)
+- [ ] 5. Later: the real catalog (waits: needs the books downloaded)
+- [ ] 6. Phone check and merge

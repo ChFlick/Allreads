@@ -54,6 +54,7 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 - **Sentence cards** (planned 2026-11-26, first after v1; see the plan below): a word can have several cards, one per sentence and meaning.
 - **Import words from Anki** (planned 2026-11-26; see the plan below): words studied in Anki show as known or learning in the reader, without duplicate cards.
   - Later (2026-11-27): recent AnkiDroid versions expose each card's interval, queue (suspended) and FSRS stability in the provider's card columns (`FlashCardsContract.Card.INTERVAL`, `RAW_QUEUE`, `FSRS_STABILITY`). Reading those would give exact levels instead of the `prop:ivl>=…` search buckets. Older versions lack the columns, so keep the searches as the fallback.
+- **Find a book** (planned 2026-11-27, in progress on `feature/find-books`; see the plan below): search public-domain books by title, author and subject, filtered by language, ranked by how well they fit the words you know.
 - **TalkBack support** (2026-11-27): make the app usable with Android's screen reader. Today the menus, buttons and lists read out, but the reader's words do not: a sentence is one drawn text, so there is nothing for TalkBack to tap, and swipes and double taps have no spoken equivalent. Plan: give each sentence row TalkBack actions ("Look up a word…" opening a list of its words, Read aloud, Translate); speak a word's level with it ("perle, level 3"); offer menu actions for the Words swipes (raise a level, forget) and for the double-tap raise; then a pass over labels, heading semantics and 48 dp touch targets, checked with TalkBack on a phone.
 - **Word families** (2026-11-26): treat the forms of a word as one word, so "lisait", "lis" and "lu" share the status of "lire" in the reader, can be marked known together, and do not each make their own card. Builds on the dictionary's form → lemma links (already used for the book difficulty) and on sentence cards (a form met in a new sentence adds a card to the family instead of a new word). Open questions: whether a form keeps its own status once saved on its own, how a family shows in Words, and what happens to forms already saved separately.
 
@@ -262,6 +263,32 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 27. **Release.** Set up a release keystore and signing, reproducible-build settings, and fastlane metadata with screenshots.
     - Publish signed APKs on GitHub releases. F-Droid was dropped on 2026-11-24.
     - **Done when** the app installs from a GitHub release APK. M5 is complete, and v1.0 is out.
+
+### Find a book (planned 2026-11-27)
+
+**Why.** Finding something to read at the right level is the hardest part of learning by reading. Allreads already knows every word's status and can count a book's new words, but only for books already imported.
+
+**How.** A catalog file per language, built by a hand-run workflow and downloaded in the app like a dictionary. It lists public-domain books (title, author, subjects, length, source link) and, for each, its word counts made with the core's own counting. The app compares those counts with the saved words locally: no search service, nothing leaves the phone.
+
+**Fit to the reader.** For each book: the share of its running words that are new (names left out, forms counted with a saved dictionary form, as for library books), and the words worth learning (new words that occur five or more times). "Fits me" is at most 5 % new and "A stretch" 5–12 %, the same thresholds and dots as the library cards. Until the reader knows about 1,000 words, "Best fit" ranks by how common a book's words are in general.
+
+**Size.** Every word is kept, exactly: each book's word counts are one packed blob (word ids sorted by how common they are across the catalog, stored as varint gaps, with varint counts), about 2 bytes per word. Measured on 20 French novels (1.9 M running words): 18 KB per book, against 180 KB as SQLite rows. Estimate for 500 books: about 11 MB on the phone, about 5 MB to download compressed. Dropping words met once was rejected: it miscounts 5–6 % of a book's running words, as much as the "fits me" threshold.
+
+**Sources** (checked 2026-11-27, see DECISIONS):
+- **French Wikisource**, first: an OPDS feed of 9,335 texts marked ready for export, all CC BY-SA 3.0, with author, year and an EPUB link through Wikisource's export tool; 3,240 of them from 1900–1949 (Leblanc's Arsène Lupin, Leroux, Colette, Proust, Pergaud, Alain-Fournier, Radiguet). Proofread texts, EPUBs that open and count cleanly. Short pieces (single poems, articles) are left out by length after counting.
+- **Project Gutenberg**: its catalog file and a mirror (Gutenberg asks automated tools not to crawl its website). Added to the same catalog; a book in both keeps one entry.
+- **StoryWeaver**: modern illustrated children's stories with reading levels, 1,496 in French (506 at level 1, 488 at level 2), with read counts. A separate "Stories" shelf for beginners. Licence (believed CC BY 4.0) and how downloads work still to check.
+- **Extra information, not books:** Open Library links its records to Gutenberg numbers and gives covers, first publication year and reading counts. LibriVox recordings name their source text (a Gutenberg number or a Wikisource page), so a catalog book can show "audiobook available"; read-along is a roadmap idea of its own. data.bnf.fr gives authors' death years for checking French public domain (names can be ambiguous).
+- **Not used:** Open Library's own ebooks (Internet Archive scans with OCR text, or DRM-protected loans); Gallica (refuses automated access, mostly scans); the Bibliothèque numérique romande and Ebooks libres et gratuits (non-commercial use only, which an MIT-licensed app should not build on).
+
+Steps, each with its check:
+
+1. **Spike: catalog size and counting.** Count 20 French books with `word_tally`, store them in the planned format, and measure. **Done when** the numbers give a size estimate for 500 books and the format is fixed in DECISIONS. *Done 2026-11-27 with 20 Wikisource novels (Gutenberg was down): see Size above.*
+2. **Core: catalog format and `catalog_fit`.** Open a catalog file, search title, author and subjects (accent-insensitive), and compute each book's fit against the saved words in one query. **Done when** core tests on a small generated catalog give the expected new shares, words worth learning and "fits me" order.
+3. **Packed word counts.** Store each book's counts as one packed blob (see Size) instead of `book_word` rows; `Catalog::fit` reads the blobs. **Done when** the catalog tests pass on the new format and a round-trip test covers the packing.
+4. **App: download and the screen,** built against a test catalog made from the fixture books (no real books needed). The catalog download in Settings (with the dictionaries), and Library → ＋ Import → Find a book: search pill, Fits me / A stretch / length / subject chips, sort, rows with the difficulty dot and words worth learning, and a detail sheet with the most frequent new words. Get downloads the EPUB and imports it. **Done when** screenshots show the screen and a JVM test imports a book from a fake catalog.
+5. **Later: the real catalog** (postponed 2026-11-27: downloading the books to count them waits). The builder already counts a folder of EPUBs (`dictgen --bin catalog`). Still to do: read Wikisource's OPDS feed (and later Gutenberg's catalog), download the books politely (cached, one at a time), leave out short pieces, add LibriVox and Open Library information, and a hand-run workflow that publishes the French catalog next to the dictionaries. **Done when** the workflow publishes a French catalog and its listing.
+6. **Phone check and merge.** Needs step 5's catalog. On a phone: find, get and read a book, and compare the predicted share with the library card's after import. **Done when** the two numbers roughly agree and the branch is merged into `main`.
 
 ### Import words from Anki (planned 2026-11-26)
 

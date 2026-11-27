@@ -52,6 +52,26 @@ pub enum AllreadsError {
     /// A dictionary file that cannot be used (wrong format, pair, or broken).
     #[error("the dictionary cannot be used: {reason}")]
     DictionaryInvalid { reason: String },
+    /// A book catalog that cannot be used (wrong format or language, or broken).
+    #[error("the book catalog cannot be used: {reason}")]
+    CatalogInvalid { reason: String },
+}
+
+impl From<allreads_core::catalog::CatalogError> for AllreadsError {
+    fn from(error: allreads_core::catalog::CatalogError) -> Self {
+        use allreads_core::catalog::CatalogError;
+        match error {
+            // The same message as a damaged dictionary: download it again.
+            CatalogError::ChecksumMismatch => AllreadsError::DictionaryDamaged,
+            CatalogError::Format(reason) => AllreadsError::CatalogInvalid { reason },
+            CatalogError::Io(e) => AllreadsError::Storage {
+                reason: e.to_string(),
+            },
+            CatalogError::Sql(e) => AllreadsError::Database {
+                reason: e.to_string(),
+            },
+        }
+    }
 }
 
 impl From<allreads_core::word_tally::CountError> for AllreadsError {

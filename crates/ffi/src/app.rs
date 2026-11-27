@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use allreads_core::catalog::Catalog;
 use allreads_core::db::book::Book as BookRow;
 use allreads_core::db::term::NewTerm;
 use allreads_core::db::translation_cache::CacheKey;
@@ -44,6 +45,8 @@ pub struct App {
     open_books: Mutex<Vec<(i64, Arc<OpenedBook>)>>,
     /// Installed dictionaries opened so far, by pair (e.g. `fr-en`).
     dictionaries: Mutex<HashMap<String, Dictionary>>,
+    /// Installed book catalogs opened so far, by language (see `catalog.rs`).
+    pub(crate) catalogs: Mutex<HashMap<String, Catalog>>,
 }
 
 impl App {
@@ -55,7 +58,7 @@ impl App {
             .and_then(|value| value.parse().ok()))
     }
 
-    fn db(&self) -> Result<MutexGuard<'_, Database>, AllreadsError> {
+    pub(crate) fn db(&self) -> Result<MutexGuard<'_, Database>, AllreadsError> {
         self.db.lock().map_err(|_| poisoned())
     }
 
@@ -83,6 +86,10 @@ impl App {
 
     fn dictionaries_dir(&self) -> PathBuf {
         self.data_dir.join("dictionaries")
+    }
+
+    pub(crate) fn catalogs_dir(&self) -> PathBuf {
+        self.data_dir.join("catalogs")
     }
 
     /// The articles stripped from imported words in a language ("le|la|les|l'").
@@ -191,13 +198,8 @@ impl App {
     /// installed dictionary's pair and build date, if any.
     fn count_stamp(&self, language_code: &str) -> Result<String, AllreadsError> {
         let dictionary = self.with_dictionary(language_code, |d| d.meta("built"))?;
-        let identity = dictionary.map(|built| {
-            format!(
-                "{}-en {}",
-                language_code.to_lowercase(),
-                built.unwrap_or_default()
-            )
-        });
+        let identity = dictionary
+            .map(|built| word_tally::dictionary_identity(language_code, built.as_deref()));
         Ok(word_tally::count_stamp(identity.as_deref()))
     }
 
@@ -316,6 +318,7 @@ impl App {
             data_dir: folder,
             open_books: Mutex::new(Vec::new()),
             dictionaries: Mutex::new(HashMap::new()),
+            catalogs: Mutex::new(HashMap::new()),
         }))
     }
 

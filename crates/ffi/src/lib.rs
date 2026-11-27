@@ -4,12 +4,15 @@
 //! - `records`: the data types Kotlin sees.
 //! - `error`: `AllreadsError`, the exception type Kotlin sees.
 //! - `app`: `App`, the object with every call.
+//! - `catalog`: `App`'s calls for downloaded book catalogs ("Find a book").
 
 mod app;
+mod catalog;
 mod error;
 mod records;
 
 pub use app::{check_deepl_key, parse_dictionary_manifest, read_book_meta, App};
+pub use catalog::parse_catalog_manifest;
 pub use error::AllreadsError;
 pub use records::{
     AnkiCardTemplate, AnkiNote, AnkiNoteType, AvailableDictionary, BookMeta, BookSummary, Chapter,

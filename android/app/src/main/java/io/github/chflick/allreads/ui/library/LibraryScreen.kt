@@ -92,7 +92,12 @@ import kotlin.math.roundToInt
 /** Step 9: the list of books, with import and delete. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit, onOpenSettings: () -> Unit = {}) {
+fun LibraryScreen(
+    viewModel: LibraryViewModel,
+    onOpen: (BookSummary) -> Unit,
+    onOpenSettings: () -> Unit = {},
+    onFindBooks: (() -> Unit)? = null,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val resolver = LocalContext.current.contentResolver
     val snackbar = remember { SnackbarHostState() }
@@ -118,6 +123,7 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit, on
         onImportArticle = viewModel::importArticle,
         onImportText = viewModel::importText,
         onOpenSettings = onOpenSettings,
+        onFindBooks = onFindBooks,
     )
 
     state.pending?.let { pending ->
@@ -163,21 +169,21 @@ private fun BookSummary.chapterLine(): String =
  * level (green), up to 12 % a stretch (amber), more is hard going (red).
  */
 @Composable
-internal fun DifficultyLine(difficulty: BookDifficulty) {
+fun DifficultyLine(difficulty: BookDifficulty) {
     if (difficulty.words == 0uL) return
     val percent = difficulty.newPercent
     DotLabel(difficultyColour(percent), AppText.get(R.string.new_words, newPercentText(percent)))
 }
 
 /** Green up to 5 % new words (a good level to learn from), amber up to 12 %, red beyond. */
-internal fun difficultyColour(percent: Double): Color = when {
+fun difficultyColour(percent: Double): Color = when {
     percent <= 5.0 -> Color(0xFF4F8A3B)
     percent <= 12.0 -> Color(0xFFD39A2C)
     else -> Color(0xFFC0533F)
 }
 
 /** "4 %", or "<1 %" for a few new words in a long book. */
-internal fun newPercentText(percent: Double): String = when {
+fun newPercentText(percent: Double): String = when {
     percent <= 0.0 -> "0 %"
     percent < 1.0 -> "<1 %"
     else -> "${percent.roundToInt()} %"
@@ -362,7 +368,7 @@ private fun MetaLine(book: BookSummary, difficulty: BookDifficulty?, short: Bool
         Text(where, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val percent = difficulty?.takeIf { it.words > 0uL }?.newPercent ?: return@Row
         Text(" · ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        DotLabel(difficultyColour(percent), "${newPercentText(percent)} new")
+        DotLabel(difficultyColour(percent), AppText.get(R.string.percent_new, newPercentText(percent)))
     }
 }
 
@@ -426,6 +432,8 @@ fun LibraryContent(
     onImportArticle: (url: String) -> Unit = {},
     onImportText: (title: String?, text: String) -> Unit = { _, _ -> },
     onOpenSettings: () -> Unit = {},
+    /** Opens "Find a book"; null hides the menu item. */
+    onFindBooks: (() -> Unit)? = null,
 ) {
     val view = state.view
     // Most people read in one language; only books in another say theirs.
@@ -479,6 +487,9 @@ fun LibraryContent(
                     DropdownMenuItem(text = { Text(stringResource(R.string.book_file_epub_or_txt)) }, onClick = { menu = false; onImport() })
                     DropdownMenuItem(text = { Text(stringResource(R.string.web_article)) }, onClick = { menu = false; askFor = ImportKind.Article })
                     DropdownMenuItem(text = { Text(stringResource(R.string.paste_text)) }, onClick = { menu = false; askFor = ImportKind.Text })
+                    onFindBooks?.let { find ->
+                        DropdownMenuItem(text = { Text(stringResource(R.string.find_a_book)) }, onClick = { menu = false; find() })
+                    }
                 }
             }
         },

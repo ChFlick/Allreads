@@ -62,7 +62,15 @@ class Services(
     // Lives as long as the process, so a sync started by a save finishes even if the screen closes.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    val dictionaries = Dictionaries(repository, HttpFetcher(), cacheDir, scope, ::describe)
+    private val fetcher = HttpFetcher()
+
+    val dictionaries = Dictionaries(repository, fetcher, cacheDir, scope, ::describe)
+
+    /** Book catalogs for "Find a book", from the same published list. */
+    val catalogs = Catalogs(repository, fetcher, cacheDir, scope, ::describe)
+
+    /** For "Find a book"'s Get, which downloads an EPUB before importing it. */
+    val bookFetcher: Fetcher get() = fetcher
 
     /** A link or text shared to the app ("Share → Allreads"), waiting for the library to import it. */
     val sharedImport = MutableStateFlow<SharedImport?>(null)
