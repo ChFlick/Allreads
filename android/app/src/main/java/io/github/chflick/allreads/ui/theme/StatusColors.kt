@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.theme
 
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.graphics.Color
 import uniffi.allreads_ffi.WordStatus
 
@@ -24,18 +26,18 @@ fun WordStatus.highlight(dark: Boolean): Color? = when (this) {
 
 /** A longer label for lists, e.g. "Level 2". */
 fun WordStatus.longLabel(): String = when (this) {
-    WordStatus.New -> "New"
-    is WordStatus.Learning -> "Level $level"
-    WordStatus.WellKnown -> "Known"
-    WordStatus.Ignored -> "Ignored"
+    WordStatus.New -> AppText.get(R.string.status_new)
+    is WordStatus.Learning -> AppText.get(R.string.status_level, level.toString())
+    WordStatus.WellKnown -> AppText.get(R.string.known_2)
+    WordStatus.Ignored -> AppText.get(R.string.ignored)
 }
 
 /** A short label for status chips. */
 fun WordStatus.label(): String = when (this) {
-    WordStatus.New -> "New"
+    WordStatus.New -> AppText.get(R.string.status_new)
     is WordStatus.Learning -> level.toString()
-    WordStatus.WellKnown -> "Known"
-    WordStatus.Ignored -> "Ignore"
+    WordStatus.WellKnown -> AppText.get(R.string.known_2)
+    WordStatus.Ignored -> AppText.get(R.string.status_ignore)
 }
 
 /** Every status the word sheet offers, in display order. */

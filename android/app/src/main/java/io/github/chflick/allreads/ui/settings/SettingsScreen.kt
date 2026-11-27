@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.settings
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import androidx.annotation.StringRes
 import io.github.chflick.allreads.R
@@ -150,33 +151,33 @@ private fun SettingsOverview(services: Services, onOpen: (SettingsPage) -> Unit)
 
     Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
-            GroupLabel("Words and cards")
-            OverviewRow("文A", "Translation", onClick = { onOpen(SettingsPage.Translation) },
-                summary = if (keyHint == null) "No DeepL key yet" else "DeepL · into ${languageName(settings.nativeLanguage)}",
+            GroupLabel(AppText.get(R.string.words_and_cards))
+            OverviewRow("文A", AppText.get(R.string.translation), onClick = { onOpen(SettingsPage.Translation) },
+                summary = if (keyHint == null) AppText.get(R.string.no_deepl_key_yet) else AppText.get(R.string.deepl_into, languageName(settings.nativeLanguage)),
                 problem = keyHint == null)
-            OverviewRow("A", "AnkiDroid", onClick = { onOpen(SettingsPage.Anki) },
+            OverviewRow("A", AppText.get(R.string.ankidroid), onClick = { onOpen(SettingsPage.Anki) },
                 summary = when (ankiAccess) {
                     null -> ""
-                    AnkiAccess.NotInstalled -> "AnkiDroid is not installed"
-                    AnkiAccess.NeedsPermission -> "Not connected yet"
-                    AnkiAccess.Connected -> if (waiting > 0) "Connected · $waiting words waiting" else "Connected"
+                    AnkiAccess.NotInstalled -> AppText.get(R.string.ankidroid_is_not_installed)
+                    AnkiAccess.NeedsPermission -> AppText.get(R.string.not_connected_yet)
+                    AnkiAccess.Connected -> if (waiting > 0) AppText.get(R.string.connected_words_waiting, waiting) else AppText.get(R.string.connected)
                 },
                 problem = ankiAccess == AnkiAccess.NeedsPermission || waiting > 0)
-            OverviewRow("D", "Dictionaries", onClick = { onOpen(SettingsPage.Dictionaries) },
+            OverviewRow("D", AppText.get(R.string.dictionaries), onClick = { onOpen(SettingsPage.Dictionaries) },
                 summary = dictionaries.installed.takeIf { it.isNotEmpty() }
-                    ?.joinToString { "${languageName(it.pair.substringBefore('-'))} → English" }
-                    ?.let { "$it installed" } ?: "None installed")
-            GroupLabel("Reading")
-            OverviewRow("Aa", "Text and page", onClick = { onOpen(SettingsPage.Text) },
+                    ?.joinToString { AppText.get(R.string.english, languageName(it.pair.substringBefore('-'))) }
+                    ?.let { "$it installed" } ?: AppText.get(R.string.none_installed))
+            GroupLabel(AppText.get(R.string.reading))
+            OverviewRow(AppText.get(R.string.aa), AppText.get(R.string.text_and_page), onClick = { onOpen(SettingsPage.Text) },
                 summary = "${settings.readingFont.label} · ${(settings.fontScale * 100).toInt()} % · ${settings.readerPage.label}",
                 serif = true)
-            OverviewRow("▶", "Read aloud", onClick = { onOpen(SettingsPage.ReadAloud) },
-                summary = "${"%.1f".format(settings.speechRate)}× · speak on tap ${if (settings.speakOnTap) "on" else "off"}")
-            OverviewRow("◐", "Appearance", onClick = { onOpen(SettingsPage.Appearance) },
-                summary = "${settings.theme.name} theme · ${if (settings.wallpaperColors) "wallpaper colours" else "app colours"}")
-            GroupLabel("About")
-            OverviewRow("i", "About Allreads", onClick = { onOpen(SettingsPage.About) },
-                summary = "${BuildConfig.VERSION_NAME} · licences · source code")
+            OverviewRow("▶", AppText.get(R.string.read_aloud), onClick = { onOpen(SettingsPage.ReadAloud) },
+                summary = AppText.get(if (settings.speakOnTap) R.string.speech_summary_on else R.string.speech_summary_off, settings.speechRate))
+            OverviewRow("◐", AppText.get(R.string.appearance), onClick = { onOpen(SettingsPage.Appearance) },
+                summary = AppText.get(R.string.theme, settings.theme.label, AppText.get(if (settings.wallpaperColors) R.string.wallpaper_colours else R.string.app_colours)))
+            GroupLabel(AppText.get(R.string.about))
+            OverviewRow("i", AppText.get(R.string.about_allreads), onClick = { onOpen(SettingsPage.About) },
+                summary = AppText.get(R.string.licences_source_code, BuildConfig.VERSION_NAME))
         }
     }
 }
@@ -230,7 +231,7 @@ private fun TranslationSettings(services: Services) {
     val hasKey by services.apiKeys.hasDeeplKey.collectAsStateWithLifecycle()
     DeeplKeyField(services, hasKey)
     SettingsDropdown(
-        label = "Translate into",
+        label = AppText.get(R.string.translate_into),
         selected = languageName(settings.nativeLanguage),
         options = AppSettings.nativeLanguages.map { languageName(it) to it },
         onSelect = { code -> services.settings.update { it.copy(nativeLanguage = code) } },
@@ -242,9 +243,8 @@ private fun DictionarySettings(services: Services) {
     val settings by services.settings.settings.collectAsStateWithLifecycle()
     DictionarySection(services.dictionaries)
     SwitchSetting(
-        title = "Meanings in the book's language",
-        description = "The word drawer shows synonyms and dictionary forms first. Translations stay hidden " +
-            "until you tap Reveal; they still load in the background, so revealing is instant.",
+        title = AppText.get(R.string.meanings_in_the_book_s),
+        description = AppText.get(R.string.the_word_drawer_shows_synonyms),
         checked = settings.hideTranslations,
         onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
     )
@@ -311,9 +311,8 @@ fun ReadingSettings(services: Services) {
             onSelect = { page -> services.settings.update { it.copy(readerPage = page) } },
         )
         SwitchSetting(
-            title = "Double-tap to raise a level",
-            description = "A double tap on a word you are learning moves it up one level (5 becomes known) " +
-                "without opening the drawer. Single taps then wait a moment for a possible second tap.",
+            title = AppText.get(R.string.double_tap_to_raise_a),
+            description = AppText.get(R.string.a_double_tap_on_a),
             checked = settings.doubleTapRaises,
             onCheckedChange = { on -> services.settings.update { it.copy(doubleTapRaises = on) } },
         )
@@ -326,12 +325,12 @@ private fun AppearanceSettings(services: Services) {
     ChoiceChips(
         choices = ThemeMode.entries,
         selected = settings.theme,
-        label = { it.name },
+        label = { it.label },
         onSelect = { mode -> services.settings.update { it.copy(theme = mode) } },
     )
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         SwitchSetting(
-            title = "Use the wallpaper's colours",
+            title = AppText.get(R.string.use_the_wallpaper_s_colours),
             checked = settings.wallpaperColors,
             onCheckedChange = { on -> services.settings.update { it.copy(wallpaperColors = on) } },
         )
@@ -340,13 +339,13 @@ private fun AppearanceSettings(services: Services) {
 
 /** What Allreads builds on, and under which licence. */
 private val credits = listOf(
-    "Literata" to "reading font · SIL Open Font License 1.1",
-    "Wiktionary, via kaikki.org" to "dictionary data · CC BY-SA 4.0",
-    "Lukaisu" to "language rules · MIT / Unlicense",
-    "DeepL" to "translations, with your own key",
-    "AnkiDroid API" to "the connection to AnkiDroid",
-    "Android Jetpack and Compose" to "Apache License 2.0",
-    "Rust libraries" to "rusqlite, scraper, rbook, zip, ruzstd, encoding_rs, ureq, uniffi · MIT / Apache 2.0",
+    AppText.get(R.string.literata) to AppText.get(R.string.reading_font_sil_open_font),
+    AppText.get(R.string.wiktionary_via_kaikki_org) to AppText.get(R.string.dictionary_data_cc_by_sa),
+    AppText.get(R.string.lukaisu) to AppText.get(R.string.language_rules_mit_unlicense),
+    AppText.get(R.string.deepl_2) to AppText.get(R.string.translations_with_your_own_key),
+    AppText.get(R.string.ankidroid_api) to AppText.get(R.string.the_connection_to_ankidroid),
+    AppText.get(R.string.android_jetpack_and_compose) to AppText.get(R.string.apache_license_2_0),
+    AppText.get(R.string.rust_libraries) to AppText.get(R.string.rusqlite_scraper_rbook_zip_ruzstd),
 )
 
 @Composable
@@ -356,8 +355,7 @@ private fun AboutSettings() {
     var showOfl by remember { mutableStateOf(false) }
     Text(stringResource(R.string.allreads_mit_licence, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.titleMedium)
     Text(
-        "Privacy: translations go to DeepL with your own key, and cards go to AnkiDroid on this phone. " +
-            "Nothing else leaves it.",
+        AppText.get(R.string.privacy_translations_go_to_deepl),
         style = MaterialTheme.typography.bodyMedium,
     )
     TextButton(onClick = { uri.openUri("https://github.com/ChFlick/Allreads") }, contentPadding = PaddingValues(0.dp)) {
@@ -375,7 +373,7 @@ private fun AboutSettings() {
     if (showOfl) {
         val text = remember {
             runCatching { context.assets.open("licences/Literata-OFL.txt").bufferedReader().use { it.readText() } }
-                .getOrDefault("The licence text is missing from this build.")
+                .getOrDefault(AppText.get(R.string.the_licence_text_is_missing))
         }
         AlertDialog(
             onDismissRequest = { showOfl = false },
@@ -404,7 +402,7 @@ private fun Section(title: String) {
  * never says "check Settings": the user is already here.
  */
 private fun keyCheckMessage(error: Throwable): String = when (error) {
-    is AllreadsException.TranslationKeyRejected -> "DeepL rejected this key."
+    is AllreadsException.TranslationKeyRejected -> AppText.get(R.string.deepl_rejected_this_key)
     else -> describe(error)
 }
 
@@ -448,7 +446,7 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
     val uri = LocalUriHandler.current
     var confirmRemove by remember { mutableStateOf(false) }
     Text(
-        if (hint != null) "DeepL API key saved (…$hint)" else "No DeepL API key yet. DeepL's free plan translates 500,000 characters a month.",
+        hint?.let { AppText.get(R.string.deepl_api_key_saved, it) } ?: AppText.get(R.string.no_deepl_api_key_yet),
         style = MaterialTheme.typography.bodyMedium,
     )
     if (hint == null) {
@@ -474,10 +472,9 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
         KeyCheck.Checking -> Text(stringResource(R.string.checking_the_key_with_deepl), style = MaterialTheme.typography.bodySmall)
         is KeyCheck.Works -> Text(
             if (result.used != null && result.limit != null) {
-                "✓ The key works · ${"%,d".format(result.used.toLong())} of " +
-                    "${"%,d".format(result.limit.toLong())} characters used this month"
+                AppText.get(R.string.the_key_works_usage, result.used.toLong(), result.limit.toLong())
             } else {
-                "✓ The key works"
+                AppText.get(R.string.the_key_works)
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary,
@@ -491,7 +488,7 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
     OutlinedTextField(
         value = input,
         onValueChange = { input = it },
-        label = { Text(if (hasKey) "Replace the DeepL API key" else "DeepL API key") },
+        label = { Text(if (hasKey) AppText.get(R.string.replace_the_deepl_api_key) else AppText.get(R.string.deepl_api_key)) },
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
         modifier = Modifier.fillMaxWidth(),

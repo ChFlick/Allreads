@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.screenshots
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
@@ -27,6 +28,7 @@ import io.github.chflick.allreads.speech.SpeechVoice
 import io.github.chflick.allreads.ui.settings.SettingsScreen
 import io.github.chflick.allreads.ui.theme.AllreadsTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -56,6 +58,9 @@ class SettingsScreenshot(private val dark: Boolean) {
         maxPercentDifference = 0.1,
     )
 
+    @After
+    fun forgetText() = AppText.init(null)
+
     private class QuietSpeech : Speech {
         override val speaking = MutableStateFlow<String?>(null)
         override suspend fun voices(localeTag: String) = listOf(SpeechVoice("fr-fr-x-frc-local", "fr-FR", true))
@@ -78,6 +83,7 @@ class SettingsScreenshot(private val dark: Boolean) {
     @Test
     fun settings() = paparazzi.snapshot(name = if (dark) "dark" else "light") {
         val context = LocalContext.current
+        AppText.init(context.resources)
         val services = Services(
             repository = Repository(temp.newFolder("data")),
             cacheDir = temp.newFolder("cache"),

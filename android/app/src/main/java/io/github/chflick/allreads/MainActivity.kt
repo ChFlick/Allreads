@@ -1,5 +1,7 @@
 package io.github.chflick.allreads
 
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 import android.content.Intent
 import android.os.Bundle
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -83,9 +85,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
-    Library("Library", BookIcon),
-    Words("Words", Icons.AutoMirrored.Filled.List),
-    Settings("Settings", Icons.Default.Settings),
+    Library(AppText.get(R.string.library), BookIcon),
+    Words(AppText.get(R.string.words), Icons.AutoMirrored.Filled.List),
+    Settings(AppText.get(R.string.settings), Icons.Default.Settings),
 }
 
 /** Three tabs (Library, Words, Settings); opening a book shows the reader full screen. */

@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.anki
 
+import io.github.chflick.allreads.ui.AppText
+import io.github.chflick.allreads.R
 import uniffi.allreads_ffi.CardProgress
 import uniffi.allreads_ffi.ImportGroup
 import uniffi.allreads_ffi.ImportNote
@@ -13,8 +15,15 @@ import uniffi.allreads_ffi.ImportNote
  * `is:review`), and `-is:suspended` for the notes with a card still active.
  * A note counts with its furthest card, as for `.apkg` files. If the searches
  * fail, progress is left out and the import offers one level for all.
+ *
+ * [typeLabel] and [fieldLabel] name note types and fields AnkiDroid gives no
+ * name for; tests pass plain ones, since they run without the app's resources.
  */
-class DeckImport(private val bridge: AnkiBridge) {
+class DeckImport(
+    private val bridge: AnkiBridge,
+    private val typeLabel: (Long) -> String = { AppText.get(R.string.note_type, it) },
+    private val fieldLabel: (Int) -> String = { AppText.get(R.string.field_n, it) },
+) {
     fun read(deckName: String): List<ImportGroup> {
         val deck = "deck:\"${deckName.replace("\"", "\\\"")}\""
         val notes = bridge.searchNotes(deck)
@@ -24,8 +33,8 @@ class DeckImport(private val bridge: AnkiBridge) {
             .map { (typeId, typeNotes) ->
                 val width = typeNotes.maxOf { it.fields.size }
                 ImportGroup(
-                    name = typeNames[typeId] ?: "Note type $typeId",
-                    fields = bridge.fieldNames(typeId).ifEmpty { (1..width).map { "Field $it" } },
+                    name = typeNames[typeId] ?: typeLabel(typeId),
+                    fields = bridge.fieldNames(typeId).ifEmpty { (1..width).map(fieldLabel) },
                     notes = typeNotes.map { note -> ImportNote(note.fields, progress?.invoke(note.id)) },
                 )
             }

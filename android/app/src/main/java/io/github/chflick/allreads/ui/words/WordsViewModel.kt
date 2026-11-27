@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.annotation.StringRes
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,7 +20,11 @@ import uniffi.allreads_ffi.TermInput
 import uniffi.allreads_ffi.WordStatus
 
 /** Which saved words the list shows. */
-enum class WordFilter(val label: String) { All("All"), Learning("Learning"), Known("Known"), Ignored("Ignored") }
+enum class WordFilter(@StringRes private val labelId: Int) {
+    All(R.string.all), Learning(R.string.learning), Known(R.string.known_2), Ignored(R.string.ignored);
+
+    val label: String get() = AppText.get(labelId)
+}
 
 data class WordsState(
     val languages: List<String> = emptyList(),

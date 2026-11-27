@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.settings
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.foundation.layout.Arrangement
@@ -61,8 +62,8 @@ fun SpeechSection(services: Services) {
         colors = calmSliderColors(),
     )
     SwitchSetting(
-        title = "Speak words when tapped",
-        description = "Otherwise use the play button in the word drawer.",
+        title = AppText.get(R.string.speak_words_when_tapped),
+        description = AppText.get(R.string.otherwise_use_the_play_button),
         checked = settings.speakOnTap,
         onCheckedChange = { on -> services.settings.update { it.copy(speakOnTap = on) } },
     )
@@ -83,7 +84,7 @@ private fun VoiceChoice(services: Services, language: LanguageVoices, settings: 
     val current = pickVoice(language.voices, language.localeTag, chosen)
     SettingsDropdown(
         label = "${language.name} voice",
-        selected = current?.let { voiceLabel(it) } ?: "Default",
+        selected = current?.let { voiceLabel(it) } ?: AppText.get(R.string.default_label),
         options = language.voices.map { voiceLabel(it) to it.name },
         onSelect = { name -> services.settings.update { it.copy(voices = it.voices + (language.code to name)) } },
     )
@@ -93,7 +94,7 @@ private fun VoiceChoice(services: Services, language: LanguageVoices, settings: 
                 val result = services.speech.speak(
                     sampleSentence(language.localeTag), language.localeTag, chosen, settings.speechRate, "test",
                 )
-                problem = if (result == SpeakResult.Started) null else "The voice could not speak."
+                problem = if (result == SpeakResult.Started) null else AppText.get(R.string.the_voice_could_not_speak)
             }
         }) { Text(stringResource(R.string.test)) }
         if (chosen != null) {
@@ -108,13 +109,13 @@ private fun VoiceChoice(services: Services, language: LanguageVoices, settings: 
 /** E.g. "French (Canada) · fr-ca-x-cad-local · offline". */
 private fun voiceLabel(voice: SpeechVoice): String {
     val where = Locale.forLanguageTag(voice.localeTag).displayName
-    return "$where · ${voice.name} · ${if (voice.offline) "offline" else "needs network"}"
+    return AppText.get(R.string.voice_label, where, voice.name, AppText.get(if (voice.offline) R.string.voice_offline else R.string.voice_needs_network))
 }
 
 private fun sampleSentence(localeTag: String): String = when (localeTag.substringBefore('-').lowercase()) {
-    "fr" -> "Bonjour ! Voici comment je lis vos livres."
-    "de" -> "Hallo! So lese ich deine Bücher vor."
-    "es" -> "¡Hola! Así leo tus libros en voz alta."
-    "en" -> "Hello! This is how I read your books aloud."
+    "fr" -> AppText.get(R.string.bonjour_voici_comment_je_lis)
+    "de" -> AppText.get(R.string.hallo_so_lese_ich_deine)
+    "es" -> AppText.get(R.string.hola_as_leo_tus_libros)
+    "en" -> AppText.get(R.string.hello_this_is_how_i)
     else -> Locale.forLanguageTag(localeTag).let { it.getDisplayLanguage(it) }
 }

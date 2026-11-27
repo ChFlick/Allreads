@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.library
 
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 import io.github.chflick.allreads.data.BookSort
 import android.content.ContentResolver
 import android.net.Uri
@@ -114,12 +116,12 @@ class LibraryViewModel(
             val result = runCatching {
                 val (name, mime) = withContext(Dispatchers.IO) { describeUri(resolver, uri) }
                 val extension = BookFiles.extensionFor(name, mime)
-                    ?: error("Only EPUB and TXT books can be imported")
+                    ?: error(AppText.get(R.string.only_epub_and_txt_books))
                 // Named after the picked file, so a TXT book's title is its file name.
                 val file = File(repository.newBookPath(name, extension))
                 withContext(Dispatchers.IO) {
                     resolver.openInputStream(uri).use { input ->
-                        requireNotNull(input) { "The file could not be opened" }
+                        requireNotNull(input) { AppText.get(R.string.the_file_could_not_be) }
                         file.outputStream().use { input.copyTo(it) }
                     }
                 }

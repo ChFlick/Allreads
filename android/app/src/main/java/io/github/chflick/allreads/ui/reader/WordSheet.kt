@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.foundation.BorderStroke
@@ -215,7 +216,7 @@ fun WordSheetContent(
             FilledTonalIconButton(onClick = onSpeak) {
                 Icon(
                     if (speakingWord) StopIcon else Icons.Default.PlayArrow,
-                    contentDescription = if (speakingWord) "Stop" else "Say the word",
+                    contentDescription = if (speakingWord) AppText.get(R.string.stop) else AppText.get(R.string.say_the_word),
                 )
             }
         }
@@ -246,7 +247,7 @@ fun WordSheetContent(
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    translation.ifBlank { if (word.translating) "Translating…" else "No translation yet" },
+                    translation.ifBlank { if (word.translating) AppText.get(R.string.translating) else AppText.get(R.string.no_translation_yet) },
                     style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 19.sp),
                     color = if (translation.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
@@ -289,7 +290,7 @@ fun WordSheetContent(
         )
         justSaved?.let { saved ->
             Text(
-                if (saved == WordStatus.New) "Forgotten" else "✓ Saved as ${saved.longLabel().lowercase()}",
+                if (saved == WordStatus.New) AppText.get(R.string.forgotten) else AppText.get(R.string.saved_as, saved.longLabel().lowercase()),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -329,11 +330,11 @@ fun WordSheetContent(
             )
         }
         Column {
-            EditableRow("Notes", draft.notes, placeholder = "Add a note", singleLine = false) {
+            EditableRow(AppText.get(R.string.notes), draft.notes, placeholder = AppText.get(R.string.add_a_note), singleLine = false) {
                 draft.notes = it
                 draft.typed = true
             }
-            EditableRow("Dictionary form", draft.lemma, placeholder = "Add one") {
+            EditableRow(AppText.get(R.string.dictionary_form), draft.lemma, placeholder = AppText.get(R.string.add_one)) {
                 draft.lemma = it
                 draft.typed = true
             }
@@ -344,7 +345,7 @@ fun WordSheetContent(
                     try {
                         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
                     } catch (e: ActivityNotFoundException) {
-                        Toast.makeText(context, "No browser is installed to open the dictionary.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, AppText.get(R.string.no_browser_is_installed_to), Toast.LENGTH_LONG).show()
                     }
                 },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
@@ -378,7 +379,7 @@ private fun PhraseRow(choice: PhraseChoice, showGloss: Boolean, onClick: () -> U
         Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 buildAnnotatedString {
-                    append("Part of ")
+                    append(AppText.get(R.string.part_of))
                     withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(choice.suggestion.text) }
                     if (showGloss && choice.suggestion.gloss.isNotBlank()) append(" · ${choice.suggestion.gloss}")
                 },

@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.screenshots
 
+import io.github.chflick.allreads.ui.AppText
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,7 @@ import io.github.chflick.allreads.ui.reader.WordSheetContent
 import io.github.chflick.allreads.ui.theme.AllreadsTheme
 import io.github.chflick.allreads.ui.words.WordsContent
 import io.github.chflick.allreads.ui.words.WordsState
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -73,7 +76,11 @@ class Screenshots(private val dark: Boolean) {
         maxPercentDifference = 0.1,
     )
 
+    @After
+    fun forgetText() = AppText.init(null)
+
     private fun shot(content: @Composable () -> Unit) = paparazzi.snapshot(name = if (dark) "dark" else "light") {
+        AppText.init(LocalContext.current.resources)
         AllreadsTheme(if (dark) ThemeMode.Dark else ThemeMode.Light, wallpaperColors = false) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
         }

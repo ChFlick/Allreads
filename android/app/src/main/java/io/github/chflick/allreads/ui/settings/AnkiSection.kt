@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.settings
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.material3.TextButton
@@ -84,7 +85,7 @@ fun AnkiSection(services: Services) {
             val failed = pairs.filter { it.second == null }.map { it.first }
             state = state.copy(
                 noteTypesReady = pairs.filter { it.second != null }.map { Locale.forLanguageTag(it.first).displayLanguage },
-                error = if (failed.isEmpty()) null else "AnkiDroid could not create the card type for ${failed.joinToString()}.",
+                error = if (failed.isEmpty()) null else AppText.get(R.string.ankidroid_could_not_create_the, failed.joinToString()),
             )
         }.onFailure { state = state.copy(error = describe(it)) }
     }
@@ -126,7 +127,7 @@ fun AnkiSection(services: Services) {
         scope.launch {
             val id = runCatching { withContext(Dispatchers.IO) { services.anki.addDeck(name) } }.getOrNull()
             if (id == null) {
-                state = state.copy(error = "AnkiDroid could not create the deck.")
+                state = state.copy(error = AppText.get(R.string.ankidroid_could_not_create_the_2))
             } else {
                 chooseDeck(id)
                 refresh()
@@ -171,8 +172,8 @@ fun AnkiSection(services: Services) {
             }
             val settings by services.settings.settings.collectAsStateWithLifecycle()
             SwitchSetting(
-                title = "Also add a word card",
-                description = "Word → meaning, next to the sentence card. Applies to card types created from now on.",
+                title = AppText.get(R.string.also_add_a_word_card),
+                description = AppText.get(R.string.word_meaning_next_to_the),
                 checked = settings.ankiWordCard,
                 onCheckedChange = { on -> services.settings.update { it.copy(ankiWordCard = on) } },
             )
@@ -191,8 +192,8 @@ fun AnkiSection(services: Services) {
 private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (String) -> Unit) {
     val chosen = state.decks.firstOrNull { it.id == state.deckId }
     SettingsDropdown(
-        label = "Deck for new cards",
-        selected = chosen?.name ?: "Choose a deck",
+        label = AppText.get(R.string.deck_for_new_cards),
+        selected = chosen?.name ?: AppText.get(R.string.choose_a_deck),
         options = state.decks.map { it.name to it.id },
         onSelect = onChoose,
     )
@@ -207,7 +208,7 @@ private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (St
     var parent by remember { mutableStateOf<String?>(null) }
     Text(stringResource(R.string.new_deck_2), style = MaterialTheme.typography.labelLarge)
     SettingsDropdown(
-        label = "Inside",
+        label = AppText.get(R.string.inside),
         selected = parent ?: TOP_LEVEL,
         options = listOf<Pair<String, String?>>(TOP_LEVEL to null) + state.decks.map { it.name to it.name },
         onSelect = { parent = it },
@@ -223,9 +224,9 @@ private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (St
     val exists = state.decks.any { it.name.equals(fullName, ignoreCase = true) }
     Text(
         when {
-            fullName == null -> "Enter a name."
-            exists -> "“$fullName” already exists; pick it above."
-            else -> "Creates “$fullName”."
+            fullName == null -> AppText.get(R.string.enter_a_name)
+            exists -> AppText.get(R.string.already_exists_pick_it_above, fullName)
+            else -> AppText.get(R.string.creates, fullName)
         },
         style = MaterialTheme.typography.bodySmall,
     )
@@ -241,7 +242,7 @@ private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (St
     }
 }
 
-private const val TOP_LEVEL = "Top level"
+private val TOP_LEVEL: String get() = AppText.get(R.string.top_level)
 
 
 /** Opens AnkiDroid in the app store, or on the web if there is no store. */
@@ -286,8 +287,7 @@ private fun ForgottenCards(services: Services) {
             title = { Text(stringResource(R.string.delete_forgotten, forgotten, if (forgotten == 1) "card" else "cards")) },
             text = {
                 Text(
-                    "They are deleted from AnkiDroid with their review history. This cannot be undone. " +
-                        "In Anki they are the notes tagged “$FORGOTTEN_TAG”.",
+                    AppText.get(R.string.they_are_deleted_from_ankidroid, FORGOTTEN_TAG),
                 )
             },
             confirmButton = {
@@ -324,7 +324,7 @@ private fun WaitingWords(services: Services, access: AnkiAccess?) {
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            if (count == 1) "1 word waiting for AnkiDroid" else "$count words waiting for AnkiDroid",
+            if (count == 1) AppText.get(R.string.t_1_word_waiting_for_ankidroid) else AppText.get(R.string.words_waiting_for_ankidroid, count),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )

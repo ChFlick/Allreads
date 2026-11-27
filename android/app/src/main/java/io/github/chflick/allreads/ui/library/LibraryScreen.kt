@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.library
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -154,7 +155,7 @@ private fun BookProgressBar(book: BookSummary, modifier: Modifier = Modifier) {
 }
 
 private fun BookSummary.chapterLine(): String =
-    "${languageName(languageCode)} · chapter ${chapterIndex.toInt() + 1} of $chapterCount"
+    AppText.get(R.string.chapter_of, languageName(languageCode), chapterIndex.toInt() + 1, chapterCount)
 
 /**
  * "● 4 % new words": the share of the book's running words not saved yet. The
@@ -165,7 +166,7 @@ private fun BookSummary.chapterLine(): String =
 internal fun DifficultyLine(difficulty: BookDifficulty) {
     if (difficulty.words == 0uL) return
     val percent = difficulty.newPercent
-    DotLabel(difficultyColour(percent), "${newPercentText(percent)} new words")
+    DotLabel(difficultyColour(percent), AppText.get(R.string.new_words, newPercentText(percent)))
 }
 
 /** Green up to 5 % new words (a good level to learn from), amber up to 12 %, red beyond. */
@@ -197,16 +198,16 @@ private fun FirstSteps(onImport: () -> Unit, onPaste: () -> Unit, onSettings: ()
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        FirstStep(1, "Add something to read", "An EPUB or TXT book, a web article, or pasted text.") {
+        FirstStep(1, AppText.get(R.string.add_something_to_read), AppText.get(R.string.an_epub_or_txt_book)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onImport) { Text(stringResource(R.string.import_a_book)) }
                 OutlinedButton(onClick = onPaste) { Text(stringResource(R.string.paste_text)) }
             }
         }
-        FirstStep(2, "Add a DeepL key", "For translations of words and sentences. DeepL's free plan is enough.") {
+        FirstStep(2, AppText.get(R.string.add_a_deepl_key), AppText.get(R.string.for_translations_of_words_and)) {
             OutlinedButton(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
         }
-        FirstStep(3, "Choose an AnkiDroid deck", "Optional: words you save become flashcards there.") {
+        FirstStep(3, AppText.get(R.string.choose_an_ankidroid_deck), AppText.get(R.string.optional_words_you_save_become)) {
             OutlinedButton(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
         }
     }
@@ -353,9 +354,9 @@ private val BookTitle: TextStyle
 private fun MetaLine(book: BookSummary, difficulty: BookDifficulty?, short: Boolean) {
     val chapter = book.chapterIndex.toInt() + 1
     val where = when {
-        book.lastReadAt == null -> "Not started"
-        short -> "Ch. $chapter/${book.chapterCount}"
-        else -> "Chapter $chapter of ${book.chapterCount}"
+        book.lastReadAt == null -> AppText.get(R.string.not_started)
+        short -> AppText.get(R.string.ch, chapter, book.chapterCount)
+        else -> AppText.get(R.string.chapter_of_2, chapter, book.chapterCount)
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(where, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -455,7 +456,7 @@ fun LibraryContent(
         topBar = {
             if (state.books.isNotEmpty()) {
                 Column(Modifier.statusBarsPadding().padding(top = 8.dp, bottom = 4.dp)) {
-                    SearchPill(view.query, "Search your library", onQuery = { onView(view.copy(query = it)) })
+                    SearchPill(view.query, AppText.get(R.string.search_your_library), onQuery = { onView(view.copy(query = it)) })
                     FilterRow(state, onView)
                 }
             } else {
@@ -564,7 +565,7 @@ private fun SortChip(sort: BookSort, onSort: (BookSort) -> Unit) {
             label = { Text(sort.label) },
             leadingIcon = { Icon(SortIcon, contentDescription = null, modifier = Modifier.size(18.dp)) },
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            modifier = Modifier.semantics { contentDescription = "Sort books, now by ${sort.label.lowercase()}" },
+            modifier = Modifier.semantics { contentDescription = AppText.get(R.string.sort_books_now_by, sort.label.lowercase()) },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             BookSort.entries.forEach { choice ->

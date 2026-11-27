@@ -1,14 +1,20 @@
 package io.github.chflick.allreads.ui.library
 
+import androidx.annotation.StringRes
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 import io.github.chflick.allreads.data.BookSort
 import java.text.Collator
 import uniffi.allreads_ffi.BookSummary
 
 /** Which books the library shows, besides the search. */
-enum class BookProgress(val label: String) {
-    All("All"),
-    Reading("Reading"),
-    NotStarted("Not started"),
+enum class BookProgress(@StringRes private val labelId: Int) {
+    All(R.string.all),
+    Reading(R.string.reading),
+    NotStarted(R.string.not_started),
+    ;
+
+    val label: String get() = AppText.get(labelId)
 }
 
 /** The search, filters and sort chosen in the library. The default shows everything, recently read first. */

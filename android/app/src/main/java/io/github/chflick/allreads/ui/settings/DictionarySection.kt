@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.settings
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import android.content.Context
@@ -45,7 +46,7 @@ fun DictionarySection(dictionaries: Dictionaries) {
     val pairs = (list.available.orEmpty().map { it.pair } + list.installed.map { it.pair }).distinct().sorted()
     if (pairs.isEmpty()) {
         Text(
-            if (list.available == null && list.listError == null) "Looking for dictionaries…" else "No dictionaries yet.",
+            if (list.available == null && list.listError == null) AppText.get(R.string.looking_for_dictionaries) else AppText.get(R.string.no_dictionaries_yet),
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -108,8 +109,7 @@ private fun DictionaryRow(
             }
             available != null -> {
                 Text(
-                    "${megabytes(available.downloadBytes.toLong())} download, " +
-                        "${megabytes(available.installedBytes.toLong())} on the phone",
+                    AppText.get(R.string.download_on_the_phone, megabytes(available.downloadBytes.toLong()), megabytes(available.installedBytes.toLong())),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 if (download is DownloadState.Failed) {
@@ -117,7 +117,7 @@ private fun DictionaryRow(
                 }
                 Button(onClick = {
                     if (onMobileData(context)) confirmMobileData = true else dictionaries.download(available)
-                }) { Text(if (download is DownloadState.Failed) "Try again" else "Download") }
+                }) { Text(if (download is DownloadState.Failed) AppText.get(R.string.try_again) else AppText.get(R.string.download)) }
             }
         }
     }

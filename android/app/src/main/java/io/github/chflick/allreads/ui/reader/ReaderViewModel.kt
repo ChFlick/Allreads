@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 import uniffi.allreads_ffi.MarkedKnown
 import uniffi.allreads_ffi.PhraseSuggestion
 import io.github.chflick.allreads.data.DownloadState
@@ -131,7 +133,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         openJob = viewModelScope.launch {
             val book = repository.book(bookId)
             if (book == null) {
-                _state.update { it.copy(message = "This book is no longer in the library") }
+                _state.update { it.copy(message = AppText.get(R.string.this_book_is_no_longer)) }
                 return@launch
             }
             titles = runCatching { repository.chapterTitles(bookId) }.getOrDefault(emptyList())
@@ -367,7 +369,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     }
 
     private suspend fun translate(text: String, context: String?): Result<String> {
-        val book = _state.value.book ?: return Result.failure(IllegalStateException("No book"))
+        val book = _state.value.book ?: return Result.failure(IllegalStateException(AppText.get(R.string.no_book)))
         // Decrypting goes through the Android Keystore, so keep it off the main thread.
         val key = withContext(Dispatchers.IO) { services.apiKeys.deeplKey() }
             ?: return Result.failure(IllegalStateException(NO_DEEPL_KEY))
@@ -430,7 +432,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             _state.update { state ->
                 result.fold(
                     // Nothing to undo when no word was new.
-                    { marked -> if (marked.termIds.isEmpty()) state.copy(message = "No new words left in this chapter") else state.copy(markedKnown = marked) },
+                    { marked -> if (marked.termIds.isEmpty()) state.copy(message = AppText.get(R.string.no_new_words_left_in)) else state.copy(markedKnown = marked) },
                     { state.copy(message = describe(it)) },
                 )
             }
@@ -469,7 +471,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
         val language = _state.value.book?.languageCode ?: return
         viewModelScope.launch {
             val result = runCatching {
-                repository.setTermStatus(language, change.text, change.to) ?: error("“${change.text}” is not saved")
+                repository.setTermStatus(language, change.text, change.to) ?: error(AppText.get(R.string.is_not_saved, change.text))
             }
             _state.update { state ->
                 result.fold(
@@ -531,7 +533,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             when (result) {
                 SpeakResult.Started -> Unit
                 SpeakResult.NoVoice -> _state.update { it.copy(noVoice = true) }
-                SpeakResult.Unavailable -> _state.update { it.copy(message = "Text-to-speech is not available on this phone") }
+                SpeakResult.Unavailable -> _state.update { it.copy(message = AppText.get(R.string.text_to_speech_is_not)) }
             }
         }
     }

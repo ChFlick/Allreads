@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -102,7 +104,7 @@ class AnkiImportViewModel(
 
     /** Reads an AnkiDroid deck (subdecks included). */
     fun readDeck(deck: AnkiDeck) = read {
-        Loaded("Anki · ${deck.name}", fromAnki = true, withContext(Dispatchers.IO) { DeckImport(anki).read(deck.name) })
+        Loaded(AppText.get(R.string.anki_2, deck.name), fromAnki = true, withContext(Dispatchers.IO) { DeckImport(anki).read(deck.name) })
     }
 
     /** Reads a picked file: an `.apkg` deck, or a text/CSV export. */
@@ -114,14 +116,14 @@ class AnkiImportViewModel(
                 val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
                     ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null } ?: "import.txt"
                 resolver.openInputStream(uri).use { input ->
-                    requireNotNull(input) { "The file could not be opened" }
+                    requireNotNull(input) { AppText.get(R.string.the_file_could_not_be) }
                     copy.outputStream().use { input.copyTo(it) }
                 }
                 // A deck by its name, or by its content (a zip) when the name lacks the extension.
                 val byName = name.lowercase().let { it.endsWith(".apkg") || it.endsWith(".colpkg") }
                 name to (byName || startsLikeZip(copy))
             }
-            val label = if (isDeck) "Anki · ${name.substringBeforeLast('.')}" else "File · $name"
+            val label = if (isDeck) AppText.get(R.string.anki_2, name.substringBeforeLast('.')) else AppText.get(R.string.file, name)
             Loaded(label, fromAnki = isDeck, repository.readImportFile(copy.absolutePath, name))
         } finally {
             // Also when the screen closes mid-read, so the copy never stays in the cache.
@@ -156,7 +158,7 @@ class AnkiImportViewModel(
                             choices = groups.map { FieldChoice() },
                             samples = emptyMap(),
                             followReviews = groups.any { g -> g.notes.any { it.progress != null } },
-                            error = if (groups.isEmpty()) "No notes found there." else null,
+                            error = if (groups.isEmpty()) AppText.get(R.string.no_notes_found_there) else null,
                         )
                     },
                     { state.copy(reading = false, error = describe(it)) },
@@ -216,7 +218,7 @@ class AnkiImportViewModel(
         _state.update { it.copy(importing = true, error = null) }
         viewModelScope.launch {
             val result = runCatching {
-                repository.importWords(language, state.source ?: "Import", state.fromAnki, rows, status)
+                repository.importWords(language, state.source ?: AppText.get(R.string.import_label), state.fromAnki, rows, status)
             }
             _state.update {
                 it.copy(importing = false, summary = result.getOrNull(), error = result.exceptionOrNull()?.let(::describe))

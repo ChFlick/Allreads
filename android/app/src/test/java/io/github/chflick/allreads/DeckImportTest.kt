@@ -23,7 +23,7 @@ class DeckImportTest {
         anki.searches["$deck prop:ivl>=21"] = setOf(1)
         anki.searches["$deck prop:ivl>=7"] = setOf(1, 2)
         anki.searches["$deck is:review"] = setOf(1, 2)
-        val groups = DeckImport(anki).read("Français")
+        val groups = DeckImport(anki, { "Note type $it" }, { "Field $it" }).read("Français")
         assertEquals(listOf("Basic", "Note type 20"), groups.map { it.name })
         assertEquals(listOf("Front", "Back"), groups[0].fields)
         assertEquals(listOf("Field 1", "Field 2", "Field 3"), groups[1].fields)

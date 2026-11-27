@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.words
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,7 +56,7 @@ fun ProgressCard(progress: WordProgress, modifier: Modifier = Modifier) {
                 Text(stringResource(R.string.known_words), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp))
                 if (progress.knownThisWeek > 0u) {
                     Text(
-                        "+%,d this week".format(progress.knownThisWeek.toInt()),
+                        AppText.get(R.string.known_this_week, progress.knownThisWeek.toInt()),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(bottom = 5.dp),
@@ -65,12 +66,12 @@ fun ProgressCard(progress: WordProgress, modifier: Modifier = Modifier) {
             if (progress.days.size > 1) {
                 ProgressChart(progress.days, knownColour, learningColour)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    DotLabel(knownColour, "Known")
-                    DotLabel(learningColour, "Learning (%,d)".format(now.learning.toInt()))
+                    DotLabel(knownColour, AppText.get(R.string.known_2))
+                    DotLabel(learningColour, AppText.get(R.string.learning_count, now.learning.toInt()))
                 }
             } else {
                 Text(
-                    "%,d words being learned. The chart starts tomorrow.".format(now.learning.toInt()),
+                    AppText.get(R.string.chart_starts_tomorrow, now.learning.toInt()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -122,7 +123,7 @@ fun ProgressStrip(progress: WordProgress, modifier: Modifier = Modifier) {
                 Text(stringResource(R.string.known_words), style = MaterialTheme.typography.labelMedium)
                 if (progress.knownThisWeek > 0u) {
                     Text(
-                        "+%,d this week".format(progress.knownThisWeek.toInt()),
+                        AppText.get(R.string.known_this_week, progress.knownThisWeek.toInt()),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )

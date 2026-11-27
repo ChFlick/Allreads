@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.data
 
+import io.github.chflick.allreads.ui.AppText
+import io.github.chflick.allreads.R
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -90,7 +92,7 @@ class Dictionaries(
         _list.update {
             it.copy(
                 available = available.getOrNull() ?: it.available,
-                listError = available.exceptionOrNull()?.let { "Could not load the list of dictionaries." },
+                listError = available.exceptionOrNull()?.let { AppText.get(R.string.could_not_load_dictionaries) },
             )
         }
     }

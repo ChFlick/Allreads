@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.foundation.rememberScrollState
@@ -147,7 +148,7 @@ fun ReaderScreen(
     LaunchedEffect(state.markedKnown) {
         val marked = state.markedKnown ?: return@LaunchedEffect
         viewModel.markedKnownShown()
-        snackbar.offerUndo("Marked ${marked.termIds.size} words as known", SnackbarDuration.Long) {
+        snackbar.offerUndo(AppText.get(R.string.marked_words_as_known, marked.termIds.size), SnackbarDuration.Long) {
             viewModel.undoMarkKnown(marked)
         }
     }
@@ -162,8 +163,8 @@ fun ReaderScreen(
         if (!state.noVoice) return@LaunchedEffect
         viewModel.noVoiceShown()
         val result = snackbar.showSnackbar(
-            "No voice for this language on the phone",
-            actionLabel = "Get a voice",
+            AppText.get(R.string.no_voice_for_this_language),
+            actionLabel = AppText.get(R.string.get_a_voice_2),
             withDismissAction = true,
         )
         if (result == SnackbarResult.ActionPerformed) openTtsSettings(context)
@@ -375,7 +376,7 @@ private fun SentenceRow(
         IconButton(onClick = onSpeak, modifier = Modifier.size(40.dp)) {
             Icon(
                 if (playing) StopIcon else Icons.Default.PlayArrow,
-                contentDescription = if (playing) "Stop reading" else "Read the sentence aloud",
+                contentDescription = if (playing) AppText.get(R.string.stop_reading) else AppText.get(R.string.read_the_sentence_aloud),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -400,7 +401,7 @@ private fun TranslateButton(shown: Boolean, onClick: () -> Unit) {
                 "文A",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.semantics { contentDescription = "Translate the sentence" },
+                modifier = Modifier.semantics { contentDescription = AppText.get(R.string.translate_the_sentence) },
             )
         }
     }
@@ -513,16 +514,16 @@ private fun ChapterEnd(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(stringResource(R.string.end_of_chapter, chapterNumber), style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                ChapterStat(summary.saved, "words saved")
-                ChapterStat(summary.raised, "levels raised")
-                ChapterStat(summary.stillNew, "still new")
+                ChapterStat(summary.saved, AppText.get(R.string.words_saved))
+                ChapterStat(summary.raised, AppText.get(R.string.levels_raised))
+                ChapterStat(summary.stillNew, AppText.get(R.string.still_new))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (summary.stillNew > 0) {
                     OutlinedButton(onClick = onMarkKnown) { Text(stringResource(R.string.mark_as_known, summary.stillNew)) }
                 }
                 Spacer(Modifier.weight(1f))
-                Button(onClick = onNext, enabled = canGoOn) { Text(if (canGoOn) "Next chapter ›" else "Last chapter") }
+                Button(onClick = onNext, enabled = canGoOn) { Text(if (canGoOn) AppText.get(R.string.next_chapter) else AppText.get(R.string.last_chapter)) }
             }
             if (canGoBack) {
                 TextButton(onClick = onPrevious, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.previous_chapter)) }
@@ -541,7 +542,7 @@ private fun ChapterStat(value: Int, label: String) {
 
 /** Shows `message` with an Undo button, and runs `onUndo` if it is tapped. */
 private suspend fun SnackbarHostState.offerUndo(message: String, duration: SnackbarDuration, onUndo: () -> Unit) {
-    if (showSnackbar(message, actionLabel = "Undo", duration = duration) == SnackbarResult.ActionPerformed) onUndo()
+    if (showSnackbar(message, actionLabel = AppText.get(R.string.undo), duration = duration) == SnackbarResult.ActionPerformed) onUndo()
 }
 
 /** Opens Android's text-to-speech settings, where voices are downloaded. */
@@ -610,7 +611,7 @@ fun ReaderContent(
                     title = {
                         Column {
                             val number = state.chapterIndex.toInt() + 1
-                            Text(state.chapterTitle ?: "Chapter $number", maxLines = 1)
+                            Text(state.chapterTitle ?: AppText.get(R.string.chapter, number), maxLines = 1)
                             // The chapter's share of new words, next to the book's title.
                             val newShare = remember(state.rows) { chapterNewPercent(state.rows) }
                             state.book?.let {

@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.words
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.material3.TextButton
@@ -101,7 +102,7 @@ fun WordsScreen(viewModel: WordsViewModel, services: Services? = null) {
     LaunchedEffect(state.undo) {
         val undo = state.undo ?: return@LaunchedEffect
         viewModel.undoShown()
-        val result = snackbar.showSnackbar(undo.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+        val result = snackbar.showSnackbar(undo.message, actionLabel = AppText.get(R.string.undo), duration = SnackbarDuration.Short)
         if (result == SnackbarResult.ActionPerformed) viewModel.undo(undo)
     }
     LaunchedEffect(state.message) {
@@ -228,7 +229,7 @@ private fun SwipeableTermRow(term: SavedTerm, onClick: () -> Unit, onRaise: () -
                     }
                 } else if (raising) {
                     Text(
-                        if ((term.status as? WordStatus.Learning)?.level == 5.toUByte()) "Known ›" else "Level up ›",
+                        if ((term.status as? WordStatus.Learning)?.level == 5.toUByte()) AppText.get(R.string.known) else AppText.get(R.string.level_up),
                         color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -276,7 +277,7 @@ private fun TermEditor(
             Button(
                 onClick = { onSave(status, translation, notes) },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            ) { Text(if (status == WordStatus.New) "Forget this word" else "Save") }
+            ) { Text(if (status == WordStatus.New) AppText.get(R.string.forget_this_word) else AppText.get(R.string.save_2)) }
         }
     }
 }
@@ -318,8 +319,7 @@ fun WordsContent(
             title = { Text(stringResource(R.string.forget_2, term.displayText)) },
             text = {
                 Text(
-                    "It is removed from your words and shows as new again. " +
-                        "If it has a card in AnkiDroid, the card is suspended after a minute.",
+                    AppText.get(R.string.it_is_removed_from_your),
                 )
             },
             confirmButton = {
@@ -337,7 +337,7 @@ fun WordsContent(
         topBar = {
             Column(Modifier.statusBarsPadding().padding(top = 8.dp, bottom = 8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    SearchPill(state.query, "Search words or translations", onQuery = onSearch, modifier = Modifier.weight(1f))
+                    SearchPill(state.query, AppText.get(R.string.search_words_or_translations), onQuery = onSearch, modifier = Modifier.weight(1f))
                     onImport?.let { WordsMenu(it) }
                 }
                 Row(
@@ -373,8 +373,8 @@ fun WordsContent(
         if (visible.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text(
-                    if (state.terms.isEmpty()) "No saved words yet. Tap a word while reading to save it."
-                    else "No words match.",
+                    if (state.terms.isEmpty()) AppText.get(R.string.no_saved_words_yet_tap)
+                    else AppText.get(R.string.no_words_match),
                     modifier = Modifier.padding(24.dp),
                 )
             }

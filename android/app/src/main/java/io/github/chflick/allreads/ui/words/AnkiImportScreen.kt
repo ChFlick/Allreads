@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.words
 
+import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -81,7 +82,7 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
                 if (state.groups.isNotEmpty() && state.summary == null) {
                     HorizontalDivider()
                     SettingsDropdown(
-                        label = "Language of the words",
+                        label = AppText.get(R.string.language_of_the_words),
                         selected = state.language?.let(::languageName) ?: "",
                         options = state.languages.map { languageName(it) to it },
                         onSelect = viewModel::chooseLanguage,
@@ -105,12 +106,11 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
                 state.summary?.let { summary ->
                     Text(stringResource(R.string.done), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "${summary.added} words added · ${summary.upgraded} upgraded · " +
-                            "${summary.unchanged} already known as well · ${summary.skipped} skipped",
+                        AppText.get(R.string.words_added_upgraded_already_known, summary.added, summary.upgraded, summary.unchanged, summary.skipped),
                     )
                     Text(
-                        "Imported words show the badge “${state.source}”." +
-                            if (state.fromAnki) " They already have cards in Anki, so Allreads makes none for them." else "",
+                        AppText.get(R.string.imported_words_show_the_badge, state.source.orEmpty()) +
+                            if (state.fromAnki) AppText.get(R.string.they_already_have_cards_in) else "",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -135,8 +135,8 @@ private fun ImportSourceSection(
     when (state.access) {
         null -> Unit
         AnkiAccess.Connected -> SettingsDropdown(
-            label = "A deck in AnkiDroid",
-            selected = state.source?.takeIf { it.startsWith("Anki · ") && state.fromAnki }?.removePrefix("Anki · ") ?: "",
+            label = AppText.get(R.string.a_deck_in_ankidroid),
+            selected = state.source?.takeIf { it.startsWith(AppText.get(R.string.anki)) && state.fromAnki }?.removePrefix(AppText.get(R.string.anki)) ?: "",
             options = state.decks.map { it.name to it },
             onSelect = onDeck,
         )
@@ -165,16 +165,16 @@ private fun GroupCard(
             Text(stringResource(R.string.notes_2, group.name, "%,d".format(group.notes.size)), style = MaterialTheme.typography.titleSmall)
             val fields = group.fields.mapIndexed { i, name -> name to i }
             SettingsDropdown(
-                label = "Word",
-                selected = choice.word?.let { group.fields.getOrNull(it) } ?: "Skip these notes",
-                options = listOf<Pair<String, Int?>>("Skip these notes" to null) + fields,
+                label = AppText.get(R.string.word),
+                selected = choice.word?.let { group.fields.getOrNull(it) } ?: AppText.get(R.string.skip_these_notes),
+                options = listOf<Pair<String, Int?>>(AppText.get(R.string.skip_these_notes) to null) + fields,
                 onSelect = onWord,
             )
             if (choice.word != null) {
                 SettingsDropdown(
-                    label = "Meaning (optional)",
-                    selected = choice.meaning?.let { group.fields.getOrNull(it) } ?: "None",
-                    options = listOf<Pair<String, Int?>>("None" to null) + fields,
+                    label = AppText.get(R.string.meaning_optional),
+                    selected = choice.meaning?.let { group.fields.getOrNull(it) } ?: AppText.get(R.string.none),
+                    options = listOf<Pair<String, Int?>>(AppText.get(R.string.none) to null) + fields,
                     onSelect = onMeaning,
                 )
                 samples.forEach { sample ->

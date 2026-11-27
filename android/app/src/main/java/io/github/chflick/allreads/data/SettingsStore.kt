@@ -1,26 +1,44 @@
 package io.github.chflick.allreads.data
 
+import androidx.annotation.StringRes
+import io.github.chflick.allreads.R
+import io.github.chflick.allreads.ui.AppText
 import android.content.Context
 import android.content.SharedPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class ThemeMode { System, Light, Dark }
+enum class ThemeMode(@StringRes private val labelId: Int) {
+    System(R.string.theme_system), Light(R.string.theme_light), Dark(R.string.theme_dark);
+
+    val label: String get() = AppText.get(labelId)
+}
 
 /** The reader's font. */
-enum class ReadingFont(val label: String) { Literata("Literata"), Serif("Serif"), Sans("Sans-serif") }
+enum class ReadingFont(@StringRes private val labelId: Int) {
+    Literata(R.string.font_literata), Serif(R.string.font_serif), Sans(R.string.font_sans);
+
+    val label: String get() = AppText.get(labelId)
+}
 
 /** How the library is ordered (a setting, so the choice is remembered). */
-enum class BookSort(val label: String) {
-    Recent("Recently read"),
-    Added("Recently added"),
-    Title("Title"),
-    Author("Author"),
+enum class BookSort(@StringRes private val labelId: Int) {
+    Recent(R.string.sort_recent),
+    Added(R.string.sort_added),
+    Title(R.string.sort_title),
+    Author(R.string.sort_author),
+    ;
+
+    val label: String get() = AppText.get(labelId)
 }
 
 /** The reader's page colours: the app's light or dark theme, or warm sepia. */
-enum class ReaderPage(val label: String) { App("Same as the app"), Sepia("Sepia"), Black("Black") }
+enum class ReaderPage(@StringRes private val labelId: Int) {
+    App(R.string.page_app), Sepia(R.string.page_sepia), Black(R.string.page_black);
+
+    val label: String get() = AppText.get(labelId)
+}
 
 /** Reading and app preferences. API keys are kept apart, in [ApiKeyStore]. */
 data class AppSettings(
