@@ -97,10 +97,11 @@ class AnkiDroidBridge(context: Context) : AnkiBridge {
 
     /** Whether AnkiDroid has the note, or `null` when it did not answer. */
     private fun noteExists(noteId: Long): Boolean? = runCatching {
-        // A search, because a search for a missing note answers with no rows,
-        // while the note's own URI may throw for it.
-        context.contentResolver.query(FlashCardsContract.Note.CONTENT_URI, arrayOf(FlashCardsContract.Note._ID), "nid:$noteId", null, null)
-            ?.use { it.count > 0 }
+        // The note's own URI, not a search: AnkiDroid answers a search with no
+        // matches with no cursor at all, like a failure, while the note's URI is
+        // a plain lookup that answers a missing note with zero rows.
+        val uri = Uri.withAppendedPath(FlashCardsContract.Note.CONTENT_URI, noteId.toString())
+        context.contentResolver.query(uri, arrayOf(FlashCardsContract.Note._ID), null, null, null)?.use { it.count > 0 }
     }.getOrNull()
 
     override fun deleteNotes(noteIds: Collection<Long>): Int = noteIds.sumOf { id ->
