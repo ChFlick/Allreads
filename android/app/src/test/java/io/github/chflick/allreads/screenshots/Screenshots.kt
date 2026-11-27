@@ -27,6 +27,7 @@ import io.github.chflick.allreads.ui.library.LibraryContent
 import io.github.chflick.allreads.ui.library.LibraryState
 import io.github.chflick.allreads.ui.reader.PhraseChoice
 import io.github.chflick.allreads.ui.reader.ReaderActions
+import io.github.chflick.allreads.ui.reader.ContentsList
 import io.github.chflick.allreads.ui.reader.ReaderContent
 import io.github.chflick.allreads.ui.reader.ReaderState
 import io.github.chflick.allreads.ui.reader.SelectedWord
@@ -94,6 +95,15 @@ class Screenshots(private val dark: Boolean) {
             onImport = {},
             onOpen = {},
             onLongPress = {},
+        )
+    }
+
+    @Test
+    fun contents() = shot {
+        ContentsList(
+            titles = listOf(null, "I. Le château", "II. La pierre précieuse", "III. Une longue nuit au bord de la rivière, sous la pluie", "IV. Le départ", null),
+            current = 2,
+            onOpen = {},
         )
     }
 

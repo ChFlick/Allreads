@@ -308,4 +308,6 @@
     <string name="note_type">Note type %1$s</string>
     <string name="could_not_load_dictionaries">Could not load the list of dictionaries.</string>
     <string name="field_n">Field %1$s</string>
+    <string name="contents">Contents</string>
+    <string name="reading_now">Reading</string>
 </resources>

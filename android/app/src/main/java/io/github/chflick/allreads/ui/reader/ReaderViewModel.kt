@@ -71,6 +71,8 @@ data class ReaderState(
     val book: BookSummary? = null,
     val chapterIndex: UInt = 0u,
     val chapterTitle: String? = null,
+    /** Every chapter's title, for the table of contents; null for chapters without one. */
+    val chapterTitles: List<String?> = emptyList(),
     val rows: List<ReaderRow> = emptyList(),
     /** The block to scroll to when a chapter opens (the saved position). */
     val startBlock: Int = 0,
@@ -140,7 +142,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             val language = runCatching { repository.languageInfo(book.languageCode) }.getOrNull()
             dictionaryTemplate = language?.dictionaryUrl.orEmpty()
             ttsLocale = language?.ttsLocale?.ifBlank { null } ?: book.languageCode
-            _state.update { it.copy(book = book) }
+            _state.update { it.copy(book = book, chapterTitles = titles) }
             load(book.chapterIndex, startBlock = book.paragraphIndex.toInt())
             // A book not counted yet (just imported, or a new dictionary) gets its
             // names and word forms in the background; the marks follow once done.
@@ -167,14 +169,15 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             .onFailure { e -> _state.update { it.copy(message = describe(e)) } }
     }
 
-    fun nextChapter() = goToChapter(_state.value.chapterIndex + 1u)
+    fun nextChapter() = openChapter(_state.value.chapterIndex + 1u)
 
     fun previousChapter() {
         val index = _state.value.chapterIndex
-        if (index > 0u) goToChapter(index - 1u)
+        if (index > 0u) openChapter(index - 1u)
     }
 
-    private fun goToChapter(index: UInt) {
+    /** Opens chapter `index` at its start, e.g. from the table of contents. */
+    fun openChapter(index: UInt) {
         val count = _state.value.book?.chapterCount ?: return
         if (index >= count) return
         viewModelScope.launch {

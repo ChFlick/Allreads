@@ -30,6 +30,10 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.text.style.TextOverflow
 import android.provider.Settings
 import android.content.Intent
 import android.content.Context
@@ -120,6 +124,7 @@ fun ReaderScreen(
     textSettings: (@Composable () -> Unit)? = null,
 ) {
     var showTextSettings by rememberSaveable { mutableStateOf(false) }
+    var showContents by rememberSaveable { mutableStateOf(false) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val speaking by viewModel.speaking.collectAsStateWithLifecycle()
     val downloads by viewModel.dictionaryDownloads.collectAsStateWithLifecycle()
@@ -189,6 +194,7 @@ fun ReaderScreen(
             onBack = onBack,
             onMarkRestKnown = viewModel::markRestKnown,
             onTextSettings = if (textSettings != null) { { showTextSettings = true } } else null,
+            onContents = { showContents = true },
             onWord = viewModel::select,
             onRaise = viewModel::raiseLevel,
             onSelectRange = viewModel::selectRange,
@@ -200,6 +206,17 @@ fun ReaderScreen(
         ),
     )
 
+    if (showContents) {
+        ContentsSheet(
+            titles = state.chapterTitles,
+            current = state.chapterIndex.toInt(),
+            onOpen = { index ->
+                showContents = false
+                if (index != state.chapterIndex.toInt()) viewModel.openChapter(index.toUInt())
+            },
+            onDismiss = { showContents = false },
+        )
+    }
     if (showTextSettings && textSettings != null) {
         ModalBottomSheet(onDismissRequest = { showTextSettings = false }) {
             Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp).verticalScroll(rememberScrollState())) {
@@ -576,6 +593,8 @@ data class ReaderActions(
     val onMarkRestKnown: (block: Int) -> Unit = {},
     /** Opens the "Text and page" sheet; null hides the menu item. */
     val onTextSettings: (() -> Unit)? = null,
+    /** Opens the table of contents. */
+    val onContents: () -> Unit = {},
     val onWord: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
     val onRaise: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
     val onSelectRange: (ReaderRow, IntRange) -> Unit = { _, _ -> },
@@ -636,6 +655,15 @@ fun ReaderContent(
                             Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_2))
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            if ((state.book?.chapterCount ?: 0u) > 1u) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.contents)) },
+                                    onClick = {
+                                        menuOpen = false
+                                        actions.onContents()
+                                    },
+                                )
+                            }
                             actions.onTextSettings?.let { open ->
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.text_and_page)) },
@@ -711,6 +739,65 @@ fun ReaderContent(
                         onMarkKnown = { actions.onMarkRestKnown(0) },
                         onPrevious = actions.onPreviousChapter,
                         onNext = actions.onNextChapter,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The table of contents: every chapter by title ("Chapter 4" when it has none),
+ * the current one marked. It opens scrolled to the current chapter.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ContentsSheet(titles: List<String?>, current: Int, onOpen: (Int) -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Text(
+            stringResource(R.string.contents),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
+        )
+        ContentsList(titles, current, onOpen)
+    }
+}
+
+/** The chapters of [ContentsSheet], apart so screenshots can show them. */
+@Composable
+fun ContentsList(titles: List<String?>, current: Int, onOpen: (Int) -> Unit) {
+    val list = rememberLazyListState(initialFirstVisibleItemIndex = (current - 2).coerceAtLeast(0))
+    LazyColumn(state = list, contentPadding = PaddingValues(bottom = 32.dp)) {
+        itemsIndexed(titles) { index, title ->
+            val here = index == current
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpen(index) }
+                    .background(if (here) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    "${index + 1}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(min = 24.dp),
+                )
+                Text(
+                    title ?: stringResource(R.string.chapter, index + 1),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (here) FontWeight.SemiBold else null,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (here) {
+                    Text(
+                        stringResource(R.string.reading_now),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
