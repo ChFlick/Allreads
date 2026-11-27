@@ -363,4 +363,8 @@
     <string name="waiting_count">Waiting %1$d</string>
     <string name="imported_count">Imported %1$d</string>
     <string name="not_in_ankidroid_yet">Not in AnkiDroid yet</string>
+    <string name="lexique_credit" translatable="false">Lexique 3 (New, Pallier et al.)</string>
+    <string name="french_word_frequencies_cc_by_sa">French word frequencies · CC BY-SA 4.0</string>
+    <string name="frequencywords_credit" translatable="false">FrequencyWords (Hermit Dave, OpenSubtitles 2018)</string>
+    <string name="other_word_frequencies_cc_by_sa">word frequencies for other languages · CC BY-SA 4.0</string>
 </resources>

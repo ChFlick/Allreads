@@ -258,7 +258,9 @@ impl VocabCheck {
         let (start, end) = BANDS[band];
         let end = end.min(self.ranked.len());
         let asked: Vec<usize> = self.answers.iter().map(|(rank, _)| *rank).collect();
-        let mut pool: Vec<usize> = (start..end).filter(|rank| !asked.contains(rank)).collect();
+        let mut pool: Vec<usize> = (start..end)
+            .filter(|rank| !asked.contains(rank) && askable(&self.ranked[*rank]))
+            .collect();
         let mut words = Vec::new();
         while words.len() < count && !pool.is_empty() {
             let rank = pool.swap_remove(self.rng.below(pool.len()));
@@ -411,6 +413,12 @@ impl VocabCheck {
             },
         }
     }
+}
+
+/// Whether a word makes a sensible question: not a single letter or an
+/// elided bit ("l", "d", "l'un"). Such words still get marked with their band.
+fn askable(word: &str) -> bool {
+    word.chars().count() >= 2 && word.chars().all(|c| c.is_alphabetic() || c == '-')
 }
 
 /// The closest falling sequence to `values` (weighted): each value no higher

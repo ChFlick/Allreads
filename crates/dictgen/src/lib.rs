@@ -2,6 +2,7 @@
 //! extracts. The file format is defined in `allreads_core::dictionary`.
 
 pub mod catalog;
+pub mod frequency;
 pub mod kaikki;
 pub mod writer;
 

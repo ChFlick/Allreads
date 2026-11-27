@@ -350,9 +350,12 @@ private fun AppearanceSettings(services: Services) {
 }
 
 /** What Allreads builds on, and under which licence. */
-private val credits = listOf(
+/** The credits on About, read each time, so they follow the phone's language. */
+private fun credits() = listOf(
     AppText.get(R.string.literata) to AppText.get(R.string.reading_font_sil_open_font),
     AppText.get(R.string.wiktionary_via_kaikki_org) to AppText.get(R.string.dictionary_data_cc_by_sa),
+    AppText.get(R.string.lexique_credit) to AppText.get(R.string.french_word_frequencies_cc_by_sa),
+    AppText.get(R.string.frequencywords_credit) to AppText.get(R.string.other_word_frequencies_cc_by_sa),
     AppText.get(R.string.lukaisu) to AppText.get(R.string.language_rules_mit_unlicense),
     AppText.get(R.string.deepl_2) to AppText.get(R.string.translations_with_your_own_key),
     AppText.get(R.string.ankidroid_api) to AppText.get(R.string.the_connection_to_ankidroid),
@@ -375,7 +378,7 @@ private fun AboutSettings() {
     }
     HorizontalDivider()
     Text(stringResource(R.string.built_with), style = MaterialTheme.typography.titleSmall)
-    credits.forEach { (name, what) ->
+    credits().forEach { (name, what) ->
         Column {
             Text(name, style = MaterialTheme.typography.bodyMedium)
             Text(what, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

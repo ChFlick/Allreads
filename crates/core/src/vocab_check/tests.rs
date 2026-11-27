@@ -302,3 +302,24 @@ fn a_falling_curve_pools_values_out_of_order() {
     assert!(close(&falling(&[0.5, 0.7], &[1.0, 3.0]), &[0.65, 0.65]));
     assert!(falling(&[], &[]).is_empty());
 }
+
+#[test]
+fn single_letters_and_elided_bits_are_not_asked() {
+    assert!(askable("table") && askable("homme-grenouille") && askable("oh"));
+    assert!(!askable("l") && !askable("l'un") && !askable("d"));
+    let mut words = vec!["l".to_string(), "d".to_string(), "l'un".to_string()];
+    words.extend(ranked());
+    let mut check = VocabCheck::new(words, &|_| false, 4);
+    let mut asked = Vec::new();
+    loop {
+        let batch = check.next_words();
+        if batch.is_empty() {
+            break;
+        }
+        for word in &batch {
+            asked.push(word.word.clone());
+            check.answer(word, true);
+        }
+    }
+    assert!(!asked.iter().any(|w| w == "l" || w == "d" || w == "l'un"));
+}

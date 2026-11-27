@@ -23,6 +23,26 @@ pub const SCHEMA: &str = include_str!("schema.sql");
 /// (`form` needs none: its primary key starts with `key`.)
 pub const INDEXES: &str = "CREATE INDEX entry_key ON entry (key);";
 
+/// Optional word-frequency tables for the vocabulary check, added by
+/// `dictgen` from a frequency source (its name in `meta` as
+/// `frequency_source`). Added without a format bump: older files have none,
+/// older apps ignore them.
+pub const FREQUENCY_SCHEMA: &str = "
+-- Dictionary forms by how common they are: rank 0 is the most common.
+CREATE TABLE frequency (
+    rank        INTEGER PRIMARY KEY,
+    key         TEXT NOT NULL,
+    per_million REAL NOT NULL
+);
+-- The word forms counted under each ranked dictionary form, the dictionary
+-- form itself included (\"lire\": \"lire\", \"lisait\", \"lu\", ...).
+CREATE TABLE frequency_form (
+    rank INTEGER NOT NULL,
+    key  TEXT NOT NULL,
+    PRIMARY KEY (rank, key)
+) WITHOUT ROWID;
+";
+
 /// Bumped whenever [`SCHEMA`] changes; stored in `meta` as `format`.
 pub const FORMAT_VERSION: u32 = 1;
 

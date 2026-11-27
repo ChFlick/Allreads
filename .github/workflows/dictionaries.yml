@@ -1,7 +1,9 @@
 name: Dictionaries
 
-# Builds the offline dictionaries from kaikki.org's Wiktionary extracts and
-# uploads them, with a manifest the app reads, to the `dictionaries` release.
+# Builds the offline dictionaries from kaikki.org's Wiktionary extracts, adds
+# word frequencies for the vocabulary check (Lexique 3 for French,
+# FrequencyWords for other languages), and uploads them, with a manifest the
+# app reads, to the `dictionaries` release.
 # Run by hand from the Actions tab; Wiktionary changes slowly.
 on:
   workflow_dispatch:
@@ -33,6 +35,7 @@ jobs:
       - name: Build the dictionaries
         env:
           LANGUAGES: ${{ inputs.languages }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p out
@@ -44,10 +47,24 @@ jobs:
             esac
             curl -fsSL --retry 3 -o "extract-$code.jsonl.gz" \
               "https://kaikki.org/dictionary/$name/kaikki.org-dictionary-$name.jsonl.gz"
+            # Word frequencies: Lexique 3 for French (CC BY-SA 4.0), else
+            # FrequencyWords' 50,000 most common words (CC BY-SA 4.0).
+            if [ "$code" = fr ]; then
+              curl -fsSL --retry 3 -o lexique.zip https://www.lexique.org/databases/Lexique383/Lexique383.zip
+              unzip -p lexique.zip Lexique383/Lexique383.tsv > "frequencies-$code.txt"
+              source=lexique
+            else
+              curl -fsSL --retry 3 -o "frequencies-$code.txt" \
+                "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/$code/${code}_50k.txt"
+              source=frequencywords
+            fi
             target/release/allreads-dictgen --input "extract-$code.jsonl.gz" --language "$code" \
-              --output "out/$code-en.sqlite" --built "$built"
+              --output "out/$code-en.sqlite" --built "$built" \
+              --frequencies "frequencies-$code.txt" --frequency-source "$source"
             gzip -9 "out/$code-en.sqlite" --keep
           done
+          # Keep the book lists ("catalogs") the published manifest already lists.
+          gh release download dictionaries --pattern dictionaries.json --output published.json 2>/dev/null || echo '{}' > published.json
           python3 - "$built" $LANGUAGES <<'PY'
           import hashlib, json, os, sys
           built, codes = sys.argv[1], sys.argv[2:]
@@ -64,7 +81,8 @@ jobs:
                   "installed_bytes": os.path.getsize(f"out/{code}-en.sqlite"),
                   "sha256": hashlib.sha256(open(gz, "rb").read()).hexdigest(),
               })
-          json.dump({"format": 1, "dictionaries": entries}, open("out/dictionaries.json", "w"), indent=2)
+          catalogs = json.load(open("published.json")).get("catalogs", [])
+          json.dump({"format": 1, "dictionaries": entries, "catalogs": catalogs}, open("out/dictionaries.json", "w"), indent=2)
           PY
           cat out/dictionaries.json
 
@@ -87,5 +105,6 @@ jobs:
             done
             return 1
           }
+          gh release edit dictionaries --notes "Offline dictionaries for Allreads, downloaded from the app's Settings. Built from Wiktionary data via kaikki.org; word frequencies from Lexique 3 (New, Pallier et al.) for French and FrequencyWords (Hermit Dave, from OpenSubtitles 2018) for other languages. All licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)."
           for file in out/*.sqlite.gz; do upload "$file"; done
           upload out/dictionaries.json

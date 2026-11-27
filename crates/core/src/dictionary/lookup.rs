@@ -222,6 +222,70 @@ impl Dictionary {
         })
     }
 
+    /// The frequency source's name, if the file has word frequencies.
+    ///
+    /// # Errors
+    /// Returns `Sqlite` if the query fails.
+    pub fn frequency_source(&self) -> Result<Option<String>, DictionaryError> {
+        if !self.has_frequencies()? {
+            return Ok(None);
+        }
+        self.meta("frequency_source")
+    }
+
+    /// Dictionary forms by how common they are, most common first; empty for
+    /// a file without word frequencies.
+    ///
+    /// # Errors
+    /// Returns `Sqlite` if a query fails.
+    pub fn ranked_words(&self) -> Result<Vec<String>, DictionaryError> {
+        if !self.has_frequencies()? {
+            return Ok(Vec::new());
+        }
+        let mut statement = self
+            .conn
+            .prepare("SELECT key FROM frequency ORDER BY rank")?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The word forms counted under each ranked dictionary form, by rank
+    /// (as in [`Dictionary::ranked_words`]), the dictionary form included.
+    ///
+    /// # Errors
+    /// Returns `Sqlite` if a query fails.
+    pub fn ranked_forms(&self) -> Result<Vec<Vec<String>>, DictionaryError> {
+        if !self.has_frequencies()? {
+            return Ok(Vec::new());
+        }
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM frequency", [], |row| row.get(0))?;
+        let mut forms = vec![Vec::new(); usize::try_from(count).unwrap_or(0)];
+        let mut statement = self
+            .conn
+            .prepare("SELECT rank, key FROM frequency_form ORDER BY rank, key")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            let rank: i64 = row.get(0)?;
+            if let Some(slot) = usize::try_from(rank)
+                .ok()
+                .and_then(|rank| forms.get_mut(rank))
+            {
+                slot.push(row.get(1)?);
+            }
+        }
+        Ok(forms)
+    }
+
+    fn has_frequencies(&self) -> Result<bool, DictionaryError> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'frequency'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )? > 0)
+    }
+
     /// Entries and form links for a term key (as the reader's tokens carry).
     ///
     /// # Errors
