@@ -18,6 +18,7 @@ import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.CatalogBook
 import uniffi.allreads_ffi.CatalogWord
 import uniffi.allreads_ffi.InstalledCatalog
+import uniffi.allreads_ffi.VocabApplied
 import uniffi.allreads_ffi.VocabCheckSession
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.InstalledDictionary
@@ -217,8 +218,8 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles,
         io { app.startVocabularyCheck(languageCode) }
 
     /** Marks the words of a check's choice known; returns how many were added. */
-    suspend fun applyVocabularyCheck(session: VocabCheckSession, choice: Int): Int =
-        io { app.applyVocabularyCheck(session, choice.toUInt()).toInt() }
+    suspend fun applyVocabularyCheck(session: VocabCheckSession, choice: Int): VocabApplied =
+        io { app.applyVocabularyCheck(session, choice.toUInt()) }
 
     suspend fun undoVocabularyCheck(languageCode: String): Int = io { app.undoVocabularyCheck(languageCode).toInt() }
 

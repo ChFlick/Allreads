@@ -32,6 +32,7 @@ import io.github.chflick.allreads.data.Catalogs
 import io.github.chflick.allreads.data.Dictionaries
 import io.github.chflick.allreads.data.Services
 import io.github.chflick.allreads.data.DownloadState
+import io.github.chflick.allreads.ui.describe
 import io.github.chflick.allreads.ui.megabytes
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -223,6 +224,7 @@ fun VocabCheckSection(services: Services, refresh: Int, onStart: (String) -> Uni
     // Language → words the check marked (still untouched), for dictionaries with frequencies.
     var checks by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var askUndo by remember { mutableStateOf<String?>(null) }
+    var undoError by remember { mutableStateOf<String?>(null) }
     suspend fun reload() {
         checks = list.installed.map { it.pair.substringBefore('-') }.distinct()
             .filter { runCatching { services.repository.vocabularyCheckAvailable(it) }.getOrDefault(false) }
@@ -249,6 +251,7 @@ fun VocabCheckSection(services: Services, refresh: Int, onStart: (String) -> Uni
             }
         }
     }
+    undoError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     askUndo?.let { language ->
         AlertDialog(
             onDismissRequest = { askUndo = null },
@@ -258,7 +261,9 @@ fun VocabCheckSection(services: Services, refresh: Int, onStart: (String) -> Uni
                 TextButton(onClick = {
                     askUndo = null
                     scope.launch {
-                        runCatching { services.repository.undoVocabularyCheck(language) }
+                        undoError = runCatching { services.repository.undoVocabularyCheck(language) }
+                            .exceptionOrNull()
+                            ?.let { AppText.get(R.string.undo_failed, describe(it)) }
                         reload()
                     }
                 }) { Text(stringResource(R.string.undo)) }

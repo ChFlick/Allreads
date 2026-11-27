@@ -146,6 +146,13 @@ impl VocabCheck {
         Vec::new()
     }
 
+    /// Whether the check could make up words to catch guessing. Without
+    /// them no result is trusted, so a check should not be offered.
+    #[must_use]
+    pub fn can_catch_guessing(&self) -> bool {
+        !self.made_up.is_empty() || !self.made_up_answers.is_empty()
+    }
+
     /// Records the answer to a word from [`VocabCheck::next_words`].
     pub fn answer(&mut self, word: &CheckWord, yes: bool) {
         match word.rank {
@@ -158,7 +165,8 @@ impl VocabCheck {
     #[must_use]
     pub fn result(&self) -> CheckResult {
         let false_yes = self.false_yes();
-        let reliable = false_yes <= MAX_FALSE_YES;
+        // Without made-up words nothing catches guessing, so nothing is trusted.
+        let reliable = !self.made_up_answers.is_empty() && false_yes <= MAX_FALSE_YES;
         let curve = self.curve(false_yes);
         let estimated_known = BANDS
             .iter()
@@ -172,9 +180,11 @@ impl VocabCheck {
         if reliable {
             for level in [SAFE_LEVEL, MORE_LEVEL] {
                 let choice = self.choice(&curve, level);
-                if choices
-                    .last()
-                    .is_none_or(|last: &MarkChoice| choice.words > last.words)
+                // A choice that marks nothing, or no more than the one before, is left out.
+                if choice.words > 0
+                    && choices
+                        .last()
+                        .is_none_or(|last: &MarkChoice| choice.words > last.words)
                 {
                     choices.push(choice);
                 }
@@ -368,7 +378,12 @@ impl VocabCheck {
     /// at the very top. Ranks past the last asked band count as unknown.
     fn chance_at(curve: &[Option<f64>], rank: usize) -> f64 {
         let x = ((rank + 1) as f64).ln();
-        let mut previous = (0.0_f64, 1.0_f64);
+        // Flat from the very top to the first band asked: a reader who did
+        // not know that band is not taken to know even its most common words.
+        let Some(first) = curve.iter().flatten().next() else {
+            return 0.0;
+        };
+        let mut previous = (0.0_f64, *first);
         for (&(start, end), p) in BANDS.iter().zip(curve) {
             let Some(p) = *p else { continue };
             let middle = (((start + end) / 2) as f64).ln();

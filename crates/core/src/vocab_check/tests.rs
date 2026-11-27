@@ -145,7 +145,12 @@ fn simulated_readers_get_at_least_97_percent_right_with_the_safe_choice() {
                     untrusted += 1;
                     continue;
                 }
-                let safe = result.choices[0];
+                // Nothing offered (a near-beginner): nothing marked, nothing wrong.
+                let safe = result.choices.first().copied().unwrap_or(MarkChoice {
+                    up_to_rank: 0,
+                    words: 0,
+                    expected_accuracy: 1.0,
+                });
                 accuracy += true_accuracy(&check, &safe, &mut learner);
                 predicted += safe.expected_accuracy;
                 marked += safe.words as f64;
@@ -366,4 +371,41 @@ fn made_up_words_use_only_common_letter_sequences_and_are_not_near_a_word() {
         assert!(spelling.one_letter_from_a_word(&near), "{near}");
     }
     assert!(!spelling.one_letter_from_a_word("zzzzzzzz"));
+}
+
+#[test]
+fn a_check_without_made_up_words_trusts_nothing() {
+    // Too few words to make up any from.
+    let words: Vec<String> = (0..300).map(word_at).collect();
+    let mut check = VocabCheck::new(words, &|_| false, 1);
+    assert!(!check.can_catch_guessing());
+    loop {
+        let batch = check.next_words();
+        if batch.is_empty() {
+            break;
+        }
+        for word in &batch {
+            check.answer(word, true);
+        }
+    }
+    let result = check.result();
+    assert!(!result.reliable);
+    assert!(result.choices.is_empty());
+}
+
+#[test]
+fn a_reader_who_knows_none_of_the_first_band_gets_nothing_marked() {
+    let mut check = VocabCheck::new(ranked(), &|_| false, 8);
+    loop {
+        let batch = check.next_words();
+        if batch.is_empty() {
+            break;
+        }
+        for word in &batch {
+            check.answer(word, false);
+        }
+    }
+    let result = check.result();
+    assert!(result.reliable);
+    assert!(result.choices.is_empty(), "{:?}", result.choices);
 }

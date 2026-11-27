@@ -46,11 +46,14 @@ class VocabQuizTest {
             val word = again.current() ?: break
             again.answer(word.rank?.let { it < 1_500u } ?: false)
         }
-        val added = repository.applyVocabularyCheck(session, 0)
+        val applied = repository.applyVocabularyCheck(session, 0)
+        val added = applied.formsAdded.toInt()
         val words = repository.listTerms("fr")
         assertEquals(added, words.size)
         assertTrue(words.all { it.status == WordStatus.WellKnown && it.importedFrom == "Vocabulary check" })
-        assertTrue(words.any { it.termKey == "mobas" })
+        assertTrue(words.any { it.termKey == "extraform" })
+        // The option's count is dictionary forms; the extra form comes on top.
+        assertEquals(applied.words.toInt() + 1, added)
 
         assertEquals(added, repository.vocabularyCheckCount("fr"))
         assertEquals(added, repository.undoVocabularyCheck("fr"))

@@ -175,7 +175,7 @@ private fun AllreadsNavigation(services: Services) {
         exit = slideOutVertically(tween(250)) { it / 8 } + fadeOut(tween(200)),
     ) {
         // One view model for every check; open() starts a fresh one per opening.
-        val check = viewModel(key = "vocab-check") { VocabCheckViewModel(services.repository) }
+        val check = viewModel(key = "vocab-check") { VocabCheckViewModel(services.repository, services.settings) }
         vocabCheck?.let { language -> remember(language, vocabChecks) { check.open(language, vocabChecks) } }
         VocabCheckScreen(check, onClose = {
             vocabCheck = null

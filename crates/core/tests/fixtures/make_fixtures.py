@@ -148,20 +148,27 @@ CREATE TABLE frequency_form (rank INTEGER NOT NULL, key TEXT NOT NULL, PRIMARY K
 """
 
 
-def stand_in_word(rank):
-    """A made-up French-looking word for a frequency rank: letters only, unique."""
-    consonants, vowels = "bdflmnprstv", "aeiou"
-    n, word = rank, "mo"
-    while True:
-        word += consonants[n % 11] + vowels[(n // 11) % 5]
-        n //= 55
-        if n == 0:
-            return word
+def stand_in_words(count):
+    """Made-up French-looking words of two to four random syllables: a sparse
+    sample like a real vocabulary, so the check can splice made-up words from
+    them (as it does from real ones)."""
+    import random
+    onsets = ["b", "d", "f", "g", "l", "m", "n", "p", "r", "s", "t", "v", "ch", "br", "tr", "pl"]
+    vowels = ["a", "e", "i", "o", "u", "ou", "ai"]
+    codas = ["", "", "", "r", "n", "s", "l"]
+    rng = random.Random(2026)
+    words, seen = [], set()
+    while len(words) < count:
+        word = "".join(rng.choice(onsets) + rng.choice(vowels) + rng.choice(codas) for _ in range(rng.randint(2, 4)))
+        if word not in seen:
+            seen.add(word)
+            words.append(word)
+    return words
 
 
 def write_frequency_dictionary(name, words=3000):
     """A French dictionary (the app's format) of made-up words ranked by
-    frequency; the most common has an extra form, its word plus "s"."""
+    frequency; the most common has the extra form "extraform"."""
     path = HERE / name
     path.unlink(missing_ok=True)
     schema = (HERE / "../../src/dictionary/schema.sql").read_text(encoding="utf-8")
@@ -171,12 +178,11 @@ def write_frequency_dictionary(name, words=3000):
         "INSERT INTO meta (key, value) VALUES (?, ?)",
         [("format", "1"), ("pair", "fr-en"), ("built", "2026-11-27"), ("frequency_source", "Test words")],
     )
-    for rank in range(words):
-        key = stand_in_word(rank)
+    for rank, key in enumerate(stand_in_words(words)):
         conn.execute("INSERT INTO entry (key, word, pos, ipa) VALUES (?, ?, 'noun', '')", (key, key))
         conn.execute("INSERT INTO frequency (rank, key, per_million) VALUES (?, ?, ?)", (rank, key, 1000.0 / (rank + 1)))
         conn.execute("INSERT INTO frequency_form (rank, key) VALUES (?, ?)", (rank, key))
-    conn.execute("INSERT INTO frequency_form (rank, key) VALUES (0, ?)", (stand_in_word(0) + "s",))
+    conn.execute("INSERT INTO frequency_form (rank, key) VALUES (0, 'extraform')")
     conn.execute("CREATE INDEX entry_key ON entry (key)")
     conn.commit()
     conn.execute("VACUUM")

@@ -110,10 +110,13 @@ fun VocabCheckContent(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Text(
-                            pluralStringResource(R.plurals.words_marked_known, state.added, "%,d".format(state.added)),
+                            pluralStringResource(R.plurals.words_marked_known, state.words, "%,d".format(state.words)),
                             style = MaterialTheme.typography.headlineSmall,
                         )
-                        Text(stringResource(R.string.vocab_done_explained), style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            pluralStringResource(R.plurals.vocab_done_explained, state.forms, "%,d".format(state.forms)),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                         Button(onClick = onClose, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                             Text(stringResource(R.string.done))
                         }

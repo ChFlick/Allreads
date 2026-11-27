@@ -404,9 +404,13 @@
         <item quantity="one">%1$s word marked as known</item>
         <item quantity="other">%1$s words marked as known</item>
     </plurals>
-    <plurals name="marked_by_the_check">
-        <item quantity="one">%1$s word marked by the check</item>
-        <item quantity="other">%1$s words marked by the check</item>
+    <plurals name="vocab_done_explained">
+        <item quantity="one">With their other forms, %1$s spelling is no longer underlined in your books, and their share of new words is lower now. While reading, tap any word to set it back.</item>
+        <item quantity="other">With their other forms, %1$s spellings are no longer underlined in your books, and their share of new words is lower now. While reading, tap any word to set it back.</item>
     </plurals>
-    <string name="vocab_done_explained">They are no longer underlined in your books, and the books\' share of new words is lower now. While reading, tap any word to set it back.</string>
+    <plurals name="marked_by_the_check">
+        <item quantity="one">%1$s word form marked by the check</item>
+        <item quantity="other">%1$s word forms marked by the check</item>
+    </plurals>
+    <string name="undo_failed">Undo did not work: %1$s</string>
 </resources>

@@ -3,6 +3,7 @@ package io.github.chflick.allreads.ui.vocab
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.chflick.allreads.data.Repository
+import io.github.chflick.allreads.data.SettingsStore
 import io.github.chflick.allreads.ui.describe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -23,8 +24,8 @@ sealed interface VocabCheckState {
     /** The result; `chosen` is the index of the selected choice. */
     data class Result(val result: VocabResult, val chosen: Int = 0, val applying: Boolean = false) : VocabCheckState
 
-    /** Words were marked known. */
-    data class Done(val added: Int) : VocabCheckState
+    /** Words were marked known: `words` as the chosen option counted them, `forms` saved with their other forms. */
+    data class Done(val words: Int, val forms: Int) : VocabCheckState
 
     data class Failed(val message: String) : VocabCheckState
 }
@@ -33,7 +34,11 @@ sealed interface VocabCheckState {
  * The vocabulary check, from the first word to marking the result. One
  * instance serves every check: [open] starts a fresh one per opening.
  */
-class VocabCheckViewModel(private val repository: Repository) : ViewModel() {
+class VocabCheckViewModel(
+    private val repository: Repository,
+    /** Remembers which languages were checked, so the library stops offering it; null in tests. */
+    private val settings: SettingsStore? = null,
+) : ViewModel() {
     private val _state = MutableStateFlow<VocabCheckState>(VocabCheckState.Starting)
     val state: StateFlow<VocabCheckState> = _state.asStateFlow()
 
@@ -102,6 +107,9 @@ class VocabCheckViewModel(private val repository: Repository) : ViewModel() {
             val progress = (quiz.answered.toFloat() / VocabQuiz.TYPICAL_LENGTH).coerceAtMost(0.95f)
             VocabCheckState.Asking(word.word, progress)
         } else {
+            // A finished check counts as done, whatever the reader marks.
+            val language = languageCode
+            settings?.update { it.copy(vocabChecked = it.vocabChecked + language) }
             VocabCheckState.Result(quiz.result())
         }
     }
@@ -119,7 +127,7 @@ class VocabCheckViewModel(private val repository: Repository) : ViewModel() {
         _state.value = current.copy(applying = true)
         viewModelScope.launch {
             runCatching { repository.applyVocabularyCheck(session, current.chosen) }
-                .onSuccess { _state.value = VocabCheckState.Done(it) }
+                .onSuccess { _state.value = VocabCheckState.Done(it.words.toInt(), it.formsAdded.toInt()) }
                 .onFailure { _state.value = VocabCheckState.Failed(describe(it)) }
         }
     }

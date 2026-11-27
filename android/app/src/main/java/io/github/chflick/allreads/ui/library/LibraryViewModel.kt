@@ -106,12 +106,18 @@ class LibraryViewModel(
 
     /**
      * The language to offer the vocabulary check for: that of the book read
-     * last, when its dictionary has word frequencies, no check was done there,
+     * last (or most books, before any was read), when its dictionary has word
+     * frequencies, no check was finished there,
      * few words are known yet, and the card was not dismissed.
      */
     private suspend fun vocabCheckOffer(books: List<BookSummary>): String? {
-        if (settings?.settings?.value?.vocabCheckDismissed != false) return null
-        val language = books.maxByOrNull { it.lastReadAt ?: 0 }?.languageCode ?: return null
+        val current = settings?.settings?.value ?: return null
+        if (current.vocabCheckDismissed) return null
+        // The book read last; with none read yet, the language most books are in.
+        val language = books.filter { it.lastReadAt != null }.maxByOrNull { it.lastReadAt ?: 0 }?.languageCode
+            ?: books.groupingBy { it.languageCode }.eachCount().maxByOrNull { it.value }?.key
+            ?: return null
+        if (language in current.vocabChecked) return null
         if (!repository.vocabularyCheckAvailable(language)) return null
         if (repository.vocabularyCheckCount(language) > 0) return null
         val known = repository.listTerms(language).count { it.status == WordStatus.WellKnown }
