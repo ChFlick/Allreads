@@ -26,6 +26,7 @@ If the code and the docs disagree, flag it and ask before changing direction. Re
 - **Finish a step only when its Done-when check passes.** Run `cargo fmt`, `cargo clippy -- -D warnings` and `cargo test` before saying a step is done. Then tick it in `docs/PROGRESS.md` and suggest a commit message.
 - **Small commits,** one per step or sub-step, using conventional commits (`feat(core): ...`, `fix(android): ...`).
 - **Commit and push without asking** once a piece of work is finished and its checks pass: commit to `main` with a conventional commit message, then push. Don't commit half-done work or failing checks.
+- **Bigger features live on a `feature/…` branch** (e.g. `feature/find-books`), with the same commit rules, and are merged into `main` when done. CI runs on every push and keeps the APK as a workflow artifact; it builds "Allreads Preview", which installs next to the normal app with its own data. Pushing a tag like `preview-find-books-1` publishes that build as a preview pre-release; only tag when asked.
 - If something needs to be checked on a real phone (taps, performance, AnkiDroid), say so clearly instead of claiming it works.
 
 ## Christoph is learning Rust
@@ -45,7 +46,7 @@ Learning Rust is a goal of this project, so:
 - **Licences:** Lukaisu (https://github.com/HugoFara/lukaisu) is MIT/Unlicense and may be used as a reference for parser rules, language presets and test cases. Keep attribution when porting. Don't use AGPL code (for example Anki's own `rslib`).
 - minSdk 26; ABIs arm64-v8a, armeabi-v7a, x86_64.
 - **The repository is public:** never commit secrets, keys, personal data or copyrighted books (test fixtures included).
-- **`main` ships:** every green push to `main` publishes a pre-release APK on GitHub Releases, so keep it working. Offline dictionaries are published separately by the hand-run Dictionaries workflow.
+- **`main` ships:** every green push to `main` publishes a pre-release APK on GitHub Releases, so keep it working. Feature branches don't publish anything unless a `preview-*` tag is pushed. Offline dictionaries are published separately by the hand-run Dictionaries workflow.
 
 ## Layout
 

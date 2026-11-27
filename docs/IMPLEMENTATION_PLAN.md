@@ -54,6 +54,7 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 - **Sentence cards** (planned 2026-11-26, first after v1; see the plan below): a word can have several cards, one per sentence and meaning.
 - **Import words from Anki** (planned 2026-11-26; see the plan below): words studied in Anki show as known or learning in the reader, without duplicate cards.
   - Later (2026-11-27): recent AnkiDroid versions expose each card's interval, queue (suspended) and FSRS stability in the provider's card columns (`FlashCardsContract.Card.INTERVAL`, `RAW_QUEUE`, `FSRS_STABILITY`). Reading those would give exact levels instead of the `prop:ivl>=…` search buckets. Older versions lack the columns, so keep the searches as the fallback.
+- **Find a book** (planned 2026-11-27, in progress on `feature/find-books`; see the plan below): search public-domain books by title, author and subject, filtered by language, ranked by how well they fit the words you know.
 - **TalkBack support** (2026-11-27): make the app usable with Android's screen reader. Today the menus, buttons and lists read out, but the reader's words do not: a sentence is one drawn text, so there is nothing for TalkBack to tap, and swipes and double taps have no spoken equivalent. Plan: give each sentence row TalkBack actions ("Look up a word…" opening a list of its words, Read aloud, Translate); speak a word's level with it ("perle, level 3"); offer menu actions for the Words swipes (raise a level, forget) and for the double-tap raise; then a pass over labels, heading semantics and 48 dp touch targets, checked with TalkBack on a phone.
 - **Word families** (2026-11-26): treat the forms of a word as one word, so "lisait", "lis" and "lu" share the status of "lire" in the reader, can be marked known together, and do not each make their own card. Builds on the dictionary's form → lemma links (already used for the book difficulty) and on sentence cards (a form met in a new sentence adds a card to the family instead of a new word). Open questions: whether a form keeps its own status once saved on its own, how a family shows in Words, and what happens to forms already saved separately.
 
@@ -262,6 +263,26 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 27. **Release.** Set up a release keystore and signing, reproducible-build settings, and fastlane metadata with screenshots.
     - Publish signed APKs on GitHub releases. F-Droid was dropped on 2026-11-24.
     - **Done when** the app installs from a GitHub release APK. M5 is complete, and v1.0 is out.
+
+### Find a book (planned 2026-11-27)
+
+**Why.** Finding something to read at the right level is the hardest part of learning by reading. Allreads already knows every word's status and can count a book's new words, but only for books already imported.
+
+**How.** A catalog file per language, built by a hand-run workflow and downloaded in the app like a dictionary. It lists public-domain books (title, author, subjects, length, source link) and, for each, its word counts made with the core's own counting. The app compares those counts with the saved words locally: no search service, nothing leaves the phone.
+
+**Fit to the reader.** For each book: the share of its running words that are new (names left out, forms counted with a saved dictionary form, as for library books), and the words worth learning (new words that occur five or more times). "Fits me" is at most 5 % new and "A stretch" 5–12 %, the same thresholds and dots as the library cards. Until the reader knows about 1,000 words, "Best fit" ranks by how common a book's words are in general.
+
+**Size.** Words that occur once in a book are kept only as a total (counted as new), which keeps most of the accuracy. Aim: 5–15 MB per language for the 500 most-downloaded books; to be measured in step 1.
+
+**Sources.** Project Gutenberg first, through its catalog file and a mirror (Gutenberg asks automated tools not to crawl its website); the app downloads a chosen book's EPUB from Gutenberg like a browser would. Later: French Wikisource and the Bibliothèque numérique romande for 20th-century authors (check their terms), Standard Ebooks for English, and a reader's own OPDS feed.
+
+Steps, each with its check:
+
+1. **Spike: catalog size and counting.** Count 20 French Gutenberg books with `word_tally`, store them in the planned format, and measure. **Done when** the numbers give a size estimate for 500 books and the format is fixed in DECISIONS.
+2. **Core: catalog format and `catalog_fit`.** Open a catalog file, search title, author and subjects (accent-insensitive), and compute each book's fit against the saved words in one query. **Done when** core tests on a small generated catalog give the expected new shares, words worth learning and "fits me" order.
+3. **Catalog builder.** A `catalog` mode (in `dictgen` or a new crate): reads Gutenberg's catalog, picks the most-downloaded books in a language, downloads them from a mirror politely (cached, one at a time), counts them with the French dictionary, and writes the catalog. Published by a hand-run workflow next to the dictionaries. **Done when** the workflow publishes a French catalog and its listing.
+4. **App: download and the screen.** The catalog download in Settings (with the dictionaries), and Library → ＋ Import → Find a book: search pill, language, Fits me / A stretch / length / subject chips, sort, rows with the difficulty dot and words worth learning, and a detail sheet with the most frequent new words. Get downloads the EPUB and imports it. **Done when** screenshots show the screen and a JVM test imports a book from a fake catalog.
+5. **Phone check and merge.** On a phone: find, get and read a book, and compare the predicted share with the library card's after import. **Done when** the two numbers roughly agree and the branch is merged into `main`.
 
 ### Import words from Anki (planned 2026-11-26)
 

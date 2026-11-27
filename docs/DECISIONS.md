@@ -106,8 +106,16 @@ Import is for colouring the reader and avoiding duplicate cards, not for managin
 
 ## 2026-11-27: design review
 
-The changes from the design review were all taken (see POLISH). Words list swipes: left raises a level (as the reader's double tap), right forgets the word (its AnkiDroid card stays); both need half the row's width and offer Undo. Undo after a forget restores the word's level, translation, notes and dictionary form, but not its card sentence or import badge.
+The changes from the design review were all taken (see POLISH). Words list swipes: left raises a level (as the reader's double tap), right forgets the word (its AnkiDroid card stays); both need half the row's width and offer Undo. Undo after a forget restores the word's level, translation, notes and dictionary form, but not its card sentence or import badge. (Changed later on 2026-11-27: the core keeps a forgotten word for a day, and Undo brings it back whole, card link included.)
 
 ## 2026-11-27: forgetting a word suspends its Anki card
 
 Forgetting a word in Allreads (drawer or Words swipe) suspends the cards Allreads made for it in AnkiDroid and tags the note `allreads-forgotten`, so it stops coming up in reviews but keeps its history. Cards of words imported from Anki are never touched. The suspension waits a minute (the Undo window) and goes through the sync queue, so Undo or saving the word again in that time leaves the card alone. AnkiDroid's API can suspend and delete but not un-suspend (checked in its `CardContentProvider`), so a word saved again after its card was suspended gets a fresh card and the suspended one is deleted. Settings → AnkiDroid offers "Delete them from AnkiDroid…" for all forgotten cards at once, with a confirmation. No "delete instead of suspend" setting for now.
+
+## 2026-11-27: feature branches and preview builds
+
+Bigger features (starting with "Find a book") are built on `feature/…` branches and merged into `main` when done, so `main` keeps shipping. CI checks every branch push and keeps its APK as a workflow artifact. Branch builds are "Allreads Preview" (`io.github.chflick.allreads.preview`), which installs next to the normal app with its own library, so a branch's database migrations never touch the real data; it shares AnkiDroid's note types and cards. Only a pushed `preview-*` tag publishes a GitHub pre-release, to keep the Releases page tidy.
+
+## 2026-11-27: finding new books
+
+A "Find a book" screen searches a per-language catalog of public-domain books, built by a hand-run workflow and downloaded like the dictionaries, so searching and the difficulty comparison work offline and nothing about the reader's vocabulary leaves the phone. Live search through a web service was rejected for that reason. Each catalog book carries word counts made with the core's own counting (names left out, forms grouped under their dictionary form), so the app can say how much of a book is new to the reader without downloading it. French first, from Project Gutenberg; newer public-domain sources (for France, authors who died before 1956: French Wikisource, the Bibliothèque numérique romande) to be checked for their terms later. A catalog of 5–15 MB per language is fine. Plan: IMPLEMENTATION_PLAN, "Find a book".
