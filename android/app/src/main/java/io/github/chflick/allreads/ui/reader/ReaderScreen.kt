@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ModalBottomSheet
@@ -200,7 +202,7 @@ fun ReaderScreen(
     if (showTextSettings && textSettings != null) {
         ModalBottomSheet(onDismissRequest = { showTextSettings = false }) {
             Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp).verticalScroll(rememberScrollState())) {
-                Text("Text and page", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+                Text(stringResource(R.string.text_and_page), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
                 textSettings()
             }
         }
@@ -366,7 +368,7 @@ private fun SentenceRow(
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onRetryTranslation) { Text("Retry") }
+                    TextButton(onClick = onRetryTranslation) { Text(stringResource(R.string.retry)) }
                 }
             }
         }
@@ -387,7 +389,7 @@ private fun TranslateButton(shown: Boolean, onClick: () -> Unit) {
         IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
             Icon(
                 Icons.Default.KeyboardArrowUp,
-                contentDescription = "Hide the translation",
+                contentDescription = stringResource(R.string.hide_the_translation),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -509,7 +511,7 @@ private fun ChapterEnd(
         modifier = Modifier.fillMaxWidth().padding(top = 28.dp, end = 12.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("End of chapter $chapterNumber", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.end_of_chapter, chapterNumber), style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 ChapterStat(summary.saved, "words saved")
                 ChapterStat(summary.raised, "levels raised")
@@ -517,13 +519,13 @@ private fun ChapterEnd(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (summary.stillNew > 0) {
-                    OutlinedButton(onClick = onMarkKnown) { Text("Mark ${summary.stillNew} as known") }
+                    OutlinedButton(onClick = onMarkKnown) { Text(stringResource(R.string.mark_as_known, summary.stillNew)) }
                 }
                 Spacer(Modifier.weight(1f))
                 Button(onClick = onNext, enabled = canGoOn) { Text(if (canGoOn) "Next chapter ›" else "Last chapter") }
             }
             if (canGoBack) {
-                TextButton(onClick = onPrevious, contentPadding = PaddingValues(0.dp)) { Text("‹ Previous chapter") }
+                TextButton(onClick = onPrevious, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.previous_chapter)) }
             }
         }
     }
@@ -532,7 +534,7 @@ private fun ChapterEnd(
 @Composable
 private fun ChapterStat(value: Int, label: String) {
     Column {
-        Text("$value", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.text, value), style = MaterialTheme.typography.headlineSmall)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -613,11 +615,11 @@ fun ReaderContent(
                             val newShare = remember(state.rows) { chapterNewPercent(state.rows) }
                             state.book?.let {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("${it.title}${if (newShare != null) " · " else ""}", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    Text(stringResource(R.string.text_5, it.title, if (newShare != null) " · " else ""), style = MaterialTheme.typography.labelMedium, maxLines = 1)
                                     // The same green, amber or red dot as on the library card.
                                     newShare?.let { p ->
                                         Box(Modifier.padding(end = 4.dp).size(7.dp).background(difficultyColour(p), CircleShape))
-                                        Text("${newPercentText(p)} new", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                        Text(stringResource(R.string.new_label, newPercentText(p)), style = MaterialTheme.typography.labelMedium, maxLines = 1)
                                     }
                                 }
                             }
@@ -625,17 +627,17 @@ fun ReaderContent(
                     },
                     navigationIcon = {
                         IconButton(onClick = actions.onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to the library")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back_to_the_library))
                         }
                     },
                     actions = {
                         IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "More")
+                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_2))
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             actions.onTextSettings?.let { open ->
                                 DropdownMenuItem(
-                                    text = { Text("Text and page") },
+                                    text = { Text(stringResource(R.string.text_and_page)) },
                                     onClick = {
                                         menuOpen = false
                                         open()
@@ -643,7 +645,7 @@ fun ReaderContent(
                                 )
                             }
                             DropdownMenuItem(
-                                text = { Text("Mark the rest of this chapter as known") },
+                                text = { Text(stringResource(R.string.mark_the_rest_of_this)) },
                                 onClick = {
                                     menuOpen = false
                                     val block = state.rows.getOrNull(listState.firstVisibleItemIndex)?.blockIndex ?: 0

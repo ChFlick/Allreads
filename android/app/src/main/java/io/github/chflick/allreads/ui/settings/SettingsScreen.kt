@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
+import io.github.chflick.allreads.R
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -79,17 +82,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Translation, AnkiDroid, reading, read-aloud and appearance settings. */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 /** The pages Settings opens from its overview. */
-private enum class SettingsPage(val title: String) {
-    Translation("Translation"),
-    Anki("AnkiDroid"),
-    Dictionaries("Dictionaries"),
-    Text("Text and page"),
-    ReadAloud("Read aloud"),
-    Appearance("Appearance"),
-    About("About Allreads"),
+private enum class SettingsPage(@StringRes val title: Int) {
+    Translation(R.string.translation),
+    Anki(R.string.ankidroid),
+    Dictionaries(R.string.dictionaries),
+    Text(R.string.text_and_page),
+    ReadAloud(R.string.read_aloud),
+    Appearance(R.string.appearance),
+    About(R.string.about_allreads),
 }
 
 /**
@@ -110,10 +111,10 @@ fun SettingsScreen(services: Services) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(open.title) },
+                title = { Text(stringResource(open.title)) },
                 navigationIcon = {
                     IconButton(onClick = { page = null }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Settings")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back_to_settings))
                     }
                 },
             )
@@ -147,7 +148,7 @@ private fun SettingsOverview(services: Services, onOpen: (SettingsPage) -> Unit)
     val ankiAccess by produceState<AnkiAccess?>(null) { value = withContext(Dispatchers.IO) { services.anki.access() } }
     LaunchedEffect(Unit) { services.dictionaries.refresh() }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Settings") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
             GroupLabel("Words and cards")
             OverviewRow("文A", "Translation", onClick = { onOpen(SettingsPage.Translation) },
@@ -269,7 +270,7 @@ fun ReadingSettings(services: Services) {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    "Il était une fois un renard qui errait dans la forêt la nuit.",
+                    stringResource(R.string.il_tait_une_fois_un),
                     fontFamily = settings.readingFont.family(),
                     fontSize = 19.sp * fontScale,
                     lineHeight = lineSpacing.em,
@@ -278,7 +279,7 @@ fun ReadingSettings(services: Services) {
                 )
             }
         }
-        Text("Text size: ${(fontScale * 100).toInt()} %", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.text_size, (fontScale * 100).toInt()), style = MaterialTheme.typography.labelLarge)
         Slider(
             value = fontScale,
             onValueChange = { fontScale = it },
@@ -286,7 +287,7 @@ fun ReadingSettings(services: Services) {
             valueRange = AppSettings.fontScales,
             colors = calmSliderColors(),
         )
-        Text("Line spacing: ${"%.1f".format(lineSpacing)}", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.line_spacing, "%.1f".format(lineSpacing)), style = MaterialTheme.typography.labelLarge)
         Slider(
             value = lineSpacing,
             onValueChange = { lineSpacing = it },
@@ -294,7 +295,7 @@ fun ReadingSettings(services: Services) {
             valueRange = AppSettings.lineSpacings,
             colors = calmSliderColors(),
         )
-        Text("Font", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.font), style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
             choices = ReadingFont.entries,
             selected = settings.readingFont,
@@ -302,7 +303,7 @@ fun ReadingSettings(services: Services) {
             onSelect = { font -> services.settings.update { it.copy(readingFont = font) } },
             font = { it.family() },
         )
-        Text("Page", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.page), style = MaterialTheme.typography.labelLarge)
         ChoiceChips(
             choices = ReaderPage.entries,
             selected = settings.readerPage,
@@ -353,24 +354,24 @@ private fun AboutSettings() {
     val uri = LocalUriHandler.current
     val context = LocalContext.current
     var showOfl by remember { mutableStateOf(false) }
-    Text("Allreads ${BuildConfig.VERSION_NAME} · MIT licence", style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.allreads_mit_licence, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.titleMedium)
     Text(
         "Privacy: translations go to DeepL with your own key, and cards go to AnkiDroid on this phone. " +
             "Nothing else leaves it.",
         style = MaterialTheme.typography.bodyMedium,
     )
     TextButton(onClick = { uri.openUri("https://github.com/ChFlick/Allreads") }, contentPadding = PaddingValues(0.dp)) {
-        Text("Source code and issues on GitHub")
+        Text(stringResource(R.string.source_code_and_issues_on))
     }
     HorizontalDivider()
-    Text("Built with", style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(R.string.built_with), style = MaterialTheme.typography.titleSmall)
     credits.forEach { (name, what) ->
         Column {
             Text(name, style = MaterialTheme.typography.bodyMedium)
             Text(what, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    TextButton(onClick = { showOfl = true }, contentPadding = PaddingValues(0.dp)) { Text("Read the Literata licence") }
+    TextButton(onClick = { showOfl = true }, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.read_the_literata_licence)) }
     if (showOfl) {
         val text = remember {
             runCatching { context.assets.open("licences/Literata-OFL.txt").bufferedReader().use { it.readText() } }
@@ -378,9 +379,9 @@ private fun AboutSettings() {
         }
         AlertDialog(
             onDismissRequest = { showOfl = false },
-            title = { Text("SIL Open Font License") },
+            title = { Text(stringResource(R.string.sil_open_font_license)) },
             text = { Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.verticalScroll(rememberScrollState())) },
-            confirmButton = { TextButton(onClick = { showOfl = false }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { showOfl = false }) { Text(stringResource(R.string.close)) } },
         )
     }
 }
@@ -451,26 +452,26 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
         style = MaterialTheme.typography.bodyMedium,
     )
     if (hint == null) {
-        TextButton(onClick = { uri.openUri("https://www.deepl.com/pro-api") }) { Text("Get a free key at deepl.com") }
+        TextButton(onClick = { uri.openUri("https://www.deepl.com/pro-api") }) { Text(stringResource(R.string.get_a_free_key_at)) }
     }
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
-            title = { Text("Remove the DeepL key?") },
-            text = { Text("Translations stop working until you add a key again.") },
+            title = { Text(stringResource(R.string.remove_the_deepl_key)) },
+            text = { Text(stringResource(R.string.translations_stop_working_until_you)) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRemove = false
                     services.apiKeys.clearDeeplKey()
                     check = null
-                }) { Text("Remove") }
+                }) { Text(stringResource(R.string.remove)) }
             },
-            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
     when (val result = check) {
         null -> Unit
-        KeyCheck.Checking -> Text("Checking the key with DeepL…", style = MaterialTheme.typography.bodySmall)
+        KeyCheck.Checking -> Text(stringResource(R.string.checking_the_key_with_deepl), style = MaterialTheme.typography.bodySmall)
         is KeyCheck.Works -> Text(
             if (result.used != null && result.limit != null) {
                 "✓ The key works · ${"%,d".format(result.used.toLong())} of " +
@@ -503,10 +504,10 @@ private fun DeeplKeyField(services: Services, hasKey: Boolean) {
                 input = ""
                 runCheck(key)
             },
-        ) { Text("Save key") }
+        ) { Text(stringResource(R.string.save_key)) }
         if (hasKey) {
-            OutlinedButton(onClick = { runCheck(null) }) { Text("Check key") }
-            OutlinedButton(onClick = { confirmRemove = true }) { Text("Remove") }
+            OutlinedButton(onClick = { runCheck(null) }) { Text(stringResource(R.string.check_key)) }
+            OutlinedButton(onClick = { confirmRemove = true }) { Text(stringResource(R.string.remove)) }
         }
     }
 }

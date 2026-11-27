@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -59,9 +61,9 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Import from Anki") },
+                    title = { Text(stringResource(R.string.import_from_anki_2)) },
                     navigationIcon = {
-                        IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                        IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.close)) }
                     },
                 )
             },
@@ -84,7 +86,7 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
                         options = state.languages.map { languageName(it) to it },
                         onSelect = viewModel::chooseLanguage,
                     )
-                    Text("Which field holds the word?", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.which_field_holds_the_word), style = MaterialTheme.typography.titleSmall)
                     state.groups.forEachIndexed { index, group ->
                         GroupCard(
                             group = group,
@@ -97,11 +99,11 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
                     StatusSection(state, onFollow = viewModel::followReviews, onLevel = viewModel::chooseLevel)
                     if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth())
                     Button(onClick = viewModel::import, enabled = state.canImport, modifier = Modifier.fillMaxWidth()) {
-                        Text("Import ${"%,d".format(state.noteCount)} notes")
+                        Text(stringResource(R.string.import_notes, "%,d".format(state.noteCount)))
                     }
                 }
                 state.summary?.let { summary ->
-                    Text("Done", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.done), style = MaterialTheme.typography.titleMedium)
                     Text(
                         "${summary.added} words added · ${summary.upgraded} upgraded · " +
                             "${summary.unchanged} already known as well · ${summary.skipped} skipped",
@@ -112,7 +114,7 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Button(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                    Button(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.done)) }
                 }
             }
         }
@@ -127,7 +129,7 @@ private fun ImportSourceSection(
     onFile: () -> Unit,
 ) {
     Text(
-        "Words you study in Anki show as known or learning in the reader. Your Anki cards are not changed.",
+        stringResource(R.string.words_you_study_in_anki),
         style = MaterialTheme.typography.bodyMedium,
     )
     when (state.access) {
@@ -139,13 +141,13 @@ private fun ImportSourceSection(
             onSelect = onDeck,
         )
         else -> Text(
-            "To read decks from AnkiDroid, connect it in Settings first.",
+            stringResource(R.string.to_read_decks_from_ankidroid),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
     OutlinedButton(onClick = onFile, modifier = Modifier.fillMaxWidth()) {
-        Text("Or a file: .apkg deck, text or CSV export")
+        Text(stringResource(R.string.or_a_file_apkg_deck))
     }
 }
 
@@ -160,7 +162,7 @@ private fun GroupCard(
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("${group.name} · ${"%,d".format(group.notes.size)} notes", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.notes_2, group.name, "%,d".format(group.notes.size)), style = MaterialTheme.typography.titleSmall)
             val fields = group.fields.mapIndexed { i, name -> name to i }
             SettingsDropdown(
                 label = "Word",
@@ -177,7 +179,7 @@ private fun GroupCard(
                 )
                 samples.forEach { sample ->
                     Text(
-                        "${sample.raw.take(40)}  →  ${sample.word ?: "(skipped)"}",
+                        stringResource(R.string.text_7, sample.raw.take(40), sample.word ?: "(skipped)"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -192,7 +194,7 @@ private fun GroupCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatusSection(state: AnkiImportState, onFollow: (Boolean) -> Unit, onLevel: (WordStatus) -> Unit) {
-    Text("How well do you know them?", style = MaterialTheme.typography.titleSmall)
+    Text(stringResource(R.string.how_well_do_you_know), style = MaterialTheme.typography.titleSmall)
     if (state.hasProgress) {
         Row(
             Modifier.fillMaxWidth().selectable(selected = state.followReviews, onClick = { onFollow(true) }),
@@ -200,9 +202,9 @@ private fun StatusSection(state: AnkiImportState, onFollow: (Boolean) -> Unit, o
         ) {
             RadioButton(selected = state.followReviews, onClick = { onFollow(true) })
             Column {
-                Text("Follow Anki's review progress")
+                Text(stringResource(R.string.follow_anki_s_review_progress))
                 Text(
-                    "New cards → 1, then 2–5 by interval, mature cards (21 days or more) → Known. Suspended cards are skipped.",
+                    stringResource(R.string.new_cards_1_then_2),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -213,7 +215,7 @@ private fun StatusSection(state: AnkiImportState, onFollow: (Boolean) -> Unit, o
             verticalAlignment = Alignment.CenterVertically,
         ) {
             RadioButton(selected = !state.followReviews, onClick = { onFollow(false) })
-            Text("One level for all")
+            Text(stringResource(R.string.one_level_for_all))
         }
     }
     if (!state.followReviews || !state.hasProgress) {
@@ -224,7 +226,7 @@ private fun StatusSection(state: AnkiImportState, onFollow: (Boolean) -> Unit, o
         }
     }
     Text(
-        "A word you already have keeps the better known of the two levels; nothing is downgraded.",
+        stringResource(R.string.a_word_you_already_have),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.library
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.HorizontalDivider
@@ -123,15 +125,15 @@ fun LibraryScreen(viewModel: LibraryViewModel, onOpen: (BookSummary) -> Unit, on
     toDelete?.let { book ->
         AlertDialog(
             onDismissRequest = { toDelete = null },
-            title = { Text("Delete “${book.title}”?") },
-            text = { Text("The book and its reading position are removed. Saved words stay.") },
+            title = { Text(stringResource(R.string.delete_2, book.title)) },
+            text = { Text(stringResource(R.string.the_book_and_its_reading)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.delete(book)
                     toDelete = null
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { toDelete = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -189,23 +191,23 @@ private fun FirstSteps(onImport: () -> Unit, onPaste: () -> Unit, onSettings: ()
         modifier.padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text("Start reading", style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.start_reading), style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Allreads colours every word by how well you know it. Three steps to begin:",
+            stringResource(R.string.allreads_colours_every_word_by),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         FirstStep(1, "Add something to read", "An EPUB or TXT book, a web article, or pasted text.") {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onImport) { Text("Import a book") }
-                OutlinedButton(onClick = onPaste) { Text("Paste text") }
+                Button(onClick = onImport) { Text(stringResource(R.string.import_a_book)) }
+                OutlinedButton(onClick = onPaste) { Text(stringResource(R.string.paste_text)) }
             }
         }
         FirstStep(2, "Add a DeepL key", "For translations of words and sentences. DeepL's free plan is enough.") {
-            OutlinedButton(onClick = onSettings) { Text("Open Settings") }
+            OutlinedButton(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
         }
         FirstStep(3, "Choose an AnkiDroid deck", "Optional: words you save become flashcards there.") {
-            OutlinedButton(onClick = onSettings) { Text("Open Settings") }
+            OutlinedButton(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
         }
     }
 }
@@ -216,7 +218,7 @@ private fun FirstStep(number: Int, title: String, text: String, actions: @Compos
         Box(
             Modifier.size(30.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
-        ) { Text("$number", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+        ) { Text(stringResource(R.string.text, number), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer) }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -231,13 +233,13 @@ private fun ArticleDialog(onImport: (String) -> Unit, onDismiss: () -> Unit) {
     var url by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Import a web article") },
+        title = { Text(stringResource(R.string.import_a_web_article)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("Address") },
+                    label = { Text(stringResource(R.string.address)) },
                     placeholder = { Text("https://…") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
@@ -245,14 +247,14 @@ private fun ArticleDialog(onImport: (String) -> Unit, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "Tip: in your browser, Share → Allreads imports the page you are on.",
+                    stringResource(R.string.tip_in_your_browser_share),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
-        confirmButton = { TextButton(enabled = url.isNotBlank(), onClick = { onImport(url) }) { Text("Fetch") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(enabled = url.isNotBlank(), onClick = { onImport(url) }) { Text(stringResource(R.string.fetch)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -263,20 +265,20 @@ private fun TextDialog(onImport: (String?, String) -> Unit, onDismiss: () -> Uni
     var text by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Paste text") },
+        title = { Text(stringResource(R.string.paste_text)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Title (optional)") },
+                    label = { Text(stringResource(R.string.title_optional)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    label = { Text("Text") },
+                    label = { Text(stringResource(R.string.text_2)) },
                     minLines = 4,
                     maxLines = 10,
                     modifier = Modifier.fillMaxWidth(),
@@ -284,9 +286,9 @@ private fun TextDialog(onImport: (String?, String) -> Unit, onDismiss: () -> Uni
             }
         },
         confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = { onImport(title.ifBlank { null }, text) }) { Text("Import") }
+            TextButton(enabled = text.isNotBlank(), onClick = { onImport(title.ifBlank { null }, text) }) { Text(stringResource(R.string.import_label)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -298,13 +300,13 @@ private fun BookMenu(book: BookSummary, onDelete: () -> Unit) {
         IconButton(onClick = { menu = true }) {
             Icon(
                 Icons.Default.MoreVert,
-                contentDescription = "More for “${book.title}”",
+                contentDescription = stringResource(R.string.more_for, book.title),
                 // Half strength: present on every row, so it should not compete with the titles.
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            DropdownMenuItem(text = { Text("Delete") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = {
                 menu = false
                 onDelete()
             })
@@ -379,7 +381,7 @@ private fun ContinueCard(book: BookSummary, difficulty: BookDifficulty?, onOpen:
                 book.author?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 MetaLine(book, difficulty, short = false)
                 BookProgressBar(book, Modifier.padding(vertical = 4.dp))
-                Button(onClick = onOpen) { Text("Continue") }
+                Button(onClick = onOpen) { Text(stringResource(R.string.continue_label)) }
             }
         }
     }
@@ -390,7 +392,7 @@ private fun LanguageDialog(pending: PendingImport, onConfirm: (String) -> Unit, 
     var chosen by rememberSaveable(pending.file.path) { mutableStateOf(pending.suggested) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Language of “${pending.title}”") },
+        title = { Text(stringResource(R.string.language_of, pending.title)) },
         text = {
             Column {
                 pending.languages.forEach { code ->
@@ -405,9 +407,9 @@ private fun LanguageDialog(pending: PendingImport, onConfirm: (String) -> Unit, 
             }
         },
         confirmButton = {
-            TextButton(enabled = chosen != null, onClick = { chosen?.let(onConfirm) }) { Text("Import") }
+            TextButton(enabled = chosen != null, onClick = { chosen?.let(onConfirm) }) { Text(stringResource(R.string.import_label)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -438,7 +440,7 @@ fun LibraryContent(
     if (state.fetching) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Fetching the article…") },
+            title = { Text(stringResource(R.string.fetching_the_article)) },
             text = { LinearProgressIndicator(Modifier.fillMaxWidth()) },
             confirmButton = {},
         )
@@ -458,7 +460,7 @@ fun LibraryContent(
                 }
             } else {
                 Box(Modifier.statusBarsPadding().padding(start = 20.dp, top = 16.dp, bottom = 8.dp)) {
-                    Text("Allreads", style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge)
                 }
             }
         },
@@ -470,12 +472,12 @@ fun LibraryContent(
                 ExtendedFloatingActionButton(
                     onClick = { menu = true },
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Import") },
+                    text = { Text(stringResource(R.string.import_label)) },
                 )
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("Book file (EPUB or TXT)") }, onClick = { menu = false; onImport() })
-                    DropdownMenuItem(text = { Text("Web article") }, onClick = { menu = false; askFor = ImportKind.Article })
-                    DropdownMenuItem(text = { Text("Paste text") }, onClick = { menu = false; askFor = ImportKind.Text })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.book_file_epub_or_txt)) }, onClick = { menu = false; onImport() })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.web_article)) }, onClick = { menu = false; askFor = ImportKind.Article })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.paste_text)) }, onClick = { menu = false; askFor = ImportKind.Text })
                 }
             }
         },
@@ -492,7 +494,7 @@ fun LibraryContent(
         val shown = state.shown
         if (shown.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("No books match.", modifier = Modifier.padding(24.dp))
+                Text(stringResource(R.string.no_books_match), modifier = Modifier.padding(24.dp))
             }
             return@Scaffold
         }

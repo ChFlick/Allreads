@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,7 +51,7 @@ fun SpeechSection(services: Services) {
     }
 
     var rate by remember(settings.speechRate) { mutableFloatStateOf(settings.speechRate) }
-    Text("Speed: ${"%.2f".format(rate)}×", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.speed, "%.2f".format(rate)), style = MaterialTheme.typography.labelLarge)
     Slider(
         value = rate,
         onValueChange = { rate = it },
@@ -73,8 +75,8 @@ private fun VoiceChoice(services: Services, language: LanguageVoices, settings: 
     val scope = rememberCoroutineScope()
     var problem by remember { mutableStateOf<String?>(null) }
     if (language.voices.isEmpty()) {
-        Text("No ${language.name} voice on this phone.", style = MaterialTheme.typography.bodyMedium)
-        OutlinedButton(onClick = { openTtsSettings(context) }) { Text("Get a ${language.name} voice") }
+        Text(stringResource(R.string.no_voice_on_this_phone, language.name), style = MaterialTheme.typography.bodyMedium)
+        OutlinedButton(onClick = { openTtsSettings(context) }) { Text(stringResource(R.string.get_a_voice, language.name)) }
         return
     }
     val chosen = settings.voices[language.code]
@@ -93,11 +95,11 @@ private fun VoiceChoice(services: Services, language: LanguageVoices, settings: 
                 )
                 problem = if (result == SpeakResult.Started) null else "The voice could not speak."
             }
-        }) { Text("Test") }
+        }) { Text(stringResource(R.string.test)) }
         if (chosen != null) {
             OutlinedButton(onClick = {
                 services.settings.update { it.copy(voices = it.voices - language.code) }
-            }) { Text("Use default") }
+            }) { Text(stringResource(R.string.use_default)) }
         }
     }
     problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }

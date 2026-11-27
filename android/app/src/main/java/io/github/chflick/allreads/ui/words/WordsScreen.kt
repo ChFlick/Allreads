@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -222,7 +224,7 @@ private fun SwipeableTermRow(term: SavedTerm, onClick: () -> Unit, onRaise: () -
                 if (forgetting) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onError)
-                        Text("Forget", color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
+                        Text(stringResource(R.string.forget), color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelLarge)
                     }
                 } else if (raising) {
                     Text(
@@ -259,7 +261,7 @@ private fun TermEditor(
             OutlinedTextField(
                 value = translation,
                 onValueChange = { translation = it },
-                label = { Text("Translation") },
+                label = { Text(stringResource(R.string.translation)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -267,7 +269,7 @@ private fun TermEditor(
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                label = { Text("Notes") },
+                label = { Text(stringResource(R.string.notes)) },
                 minLines = 2,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -284,9 +286,9 @@ private fun TermEditor(
 private fun WordsMenu(onImport: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.padding(end = 8.dp)) {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_2)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Import from Anki…") }, onClick = {
+            DropdownMenuItem(text = { Text(stringResource(R.string.import_from_anki)) }, onClick = {
                 open = false
                 onImport()
             })
@@ -313,7 +315,7 @@ fun WordsContent(
     toForget?.let { term ->
         AlertDialog(
             onDismissRequest = { toForget = null },
-            title = { Text("Forget “${term.displayText}”?") },
+            title = { Text(stringResource(R.string.forget_2, term.displayText)) },
             text = {
                 Text(
                     "It is removed from your words and shows as new again. " +
@@ -324,9 +326,9 @@ fun WordsContent(
                 TextButton(onClick = {
                     toForget = null
                     onForget(term)
-                }) { Text("Forget") }
+                }) { Text(stringResource(R.string.forget)) }
             },
-            dismissButton = { TextButton(onClick = { toForget = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { toForget = null }) { Text(stringResource(R.string.cancel)) } },
         )
     }
     Scaffold(
@@ -357,7 +359,7 @@ fun WordsContent(
                         FilterChip(
                             selected = filter == state.filter,
                             onClick = { onFilter(filter) },
-                            label = { Text("${filter.label} ${state.count(filter)}") },
+                            label = { Text(stringResource(R.string.text_6, filter.label, state.count(filter))) },
                         )
                     }
                 }

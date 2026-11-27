@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -50,7 +52,7 @@ fun ProgressCard(progress: WordProgress, modifier: Modifier = Modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("%,d".format(now.known.toInt()), style = MaterialTheme.typography.headlineMedium)
-                Text("known words", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp))
+                Text(stringResource(R.string.known_words), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp))
                 if (progress.knownThisWeek > 0u) {
                     Text(
                         "+%,d this week".format(progress.knownThisWeek.toInt()),
@@ -117,7 +119,7 @@ fun ProgressStrip(progress: WordProgress, modifier: Modifier = Modifier) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("%,d".format(now.known.toInt()), style = MaterialTheme.typography.headlineSmall)
             Column(Modifier.weight(1f)) {
-                Text("known words", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.known_words), style = MaterialTheme.typography.labelMedium)
                 if (progress.knownThisWeek > 0u) {
                     Text(
                         "+%,d this week".format(progress.knownThisWeek.toInt()),

@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
@@ -35,7 +37,7 @@ fun SearchPill(query: String, placeholder: String, onQuery: (String) -> Unit, mo
                 IconButton(onClick = {
                     onQuery("")
                     focus.clearFocus()
-                }) { Icon(Icons.Default.Close, contentDescription = "Clear the search") }
+                }) { Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_the_search)) }
             }
         } else {
             null

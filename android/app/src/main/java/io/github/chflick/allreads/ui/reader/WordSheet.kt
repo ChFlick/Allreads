@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
@@ -224,7 +226,7 @@ fun WordSheetContent(
         var editing by rememberSaveable(word.text) { mutableStateOf(false) }
         if (!revealed) {
             FilledTonalButton(onClick = { revealed = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Reveal translation")
+                Text(stringResource(R.string.reveal_translation))
             }
         } else if (editing) {
             val focus = remember { FocusRequester() }
@@ -235,7 +237,7 @@ fun WordSheetContent(
                     draft.translation = it
                     draft.typed = true
                 },
-                label = { Text("Translation") },
+                label = { Text(stringResource(R.string.translation)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { editing = false }),
@@ -250,7 +252,7 @@ fun WordSheetContent(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { editing = true }) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit the translation", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit_the_translation), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -262,10 +264,10 @@ fun WordSheetContent(
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onTranslate) { Text("Retry") }
+                TextButton(onClick = onTranslate) { Text(stringResource(R.string.retry)) }
             }
             word.machineTranslation != null && word.machineTranslation != translation && translation.isNotBlank() -> Text(
-                "DeepL: ${word.machineTranslation}",
+                stringResource(R.string.deepl, word.machineTranslation),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -301,12 +303,12 @@ fun WordSheetContent(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
                     Text(
-                        "Tip: to save a phrase, long-press its first word and drag to its last.",
+                        stringResource(R.string.tip_to_save_a_phrase),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onPhraseHintSeen) { Text("Got it") }
+                    TextButton(onClick = onPhraseHintSeen) { Text(stringResource(R.string.got_it)) }
                 }
             }
         }
@@ -315,7 +317,7 @@ fun WordSheetContent(
         OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary, revealed)
 
         // --- Pull the drawer up for more context ---
-        Text("In this sentence", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+        Text(stringResource(R.string.in_this_sentence), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
         val dark = LocalDarkTheme.current
         val mark = (draft.status.takeIf { draft.lastSaved != null } ?: WordStatus.New).highlight(dark)
             ?: MaterialTheme.colorScheme.surfaceContainerHighest
@@ -346,7 +348,7 @@ fun WordSheetContent(
                     }
                 },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            ) { Text("Look up in the web dictionary") }
+            ) { Text(stringResource(R.string.look_up_in_the_web)) }
         }
     }
 }
@@ -384,7 +386,7 @@ private fun PhraseRow(choice: PhraseChoice, showGloss: Boolean, onClick: () -> U
                 maxLines = 2,
                 modifier = Modifier.weight(1f),
             )
-            Text("Save ›", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+            Text(stringResource(R.string.save), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
         }
     }
 }
@@ -421,7 +423,7 @@ private fun EditableRow(label: String, value: String, placeholder: String, singl
                 color = if (value.isBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
-            Icon(Icons.Default.Edit, contentDescription = "Edit $label", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.edit, label), tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -444,15 +446,15 @@ private fun OfflineDictionary(
         if (confirm) {
             AlertDialog(
                 onDismissRequest = { confirm = false },
-                title = { Text("Download on mobile data?") },
-                text = { Text("The dictionary is a ${megabytes(offer.downloadBytes.toLong())} download.") },
+                title = { Text(stringResource(R.string.download_on_mobile_data)) },
+                text = { Text(stringResource(R.string.the_dictionary_is_a_download, megabytes(offer.downloadBytes.toLong()))) },
                 confirmButton = {
                     TextButton(onClick = {
                         confirm = false
                         onDownload()
-                    }) { Text("Download") }
+                    }) { Text(stringResource(R.string.download)) }
                 },
-                dismissButton = { TextButton(onClick = { confirm = false }) { Text("Not now") } },
+                dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.not_now)) } },
             )
         }
         when (download) {
@@ -462,16 +464,16 @@ private fun OfflineDictionary(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
-                    "Downloading the dictionary: ${megabytes(download.bytes)} of ${megabytes(download.total)}",
+                    stringResource(R.string.downloading_the_dictionary_of, megabytes(download.bytes), megabytes(download.total)),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             is DownloadState.Failed -> Column {
                 Text(download.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                TextButton(onClick = start) { Text("Try the download again") }
+                TextButton(onClick = start) { Text(stringResource(R.string.try_the_download_again)) }
             }
             null -> TextButton(onClick = start) {
-                Text("Get the offline dictionary (${megabytes(offer.downloadBytes.toLong())})")
+                Text(stringResource(R.string.get_the_offline_dictionary, megabytes(offer.downloadBytes.toLong())))
             }
         }
         return
@@ -494,9 +496,9 @@ private fun OfflineDictionary(
             entry.entries.forEach { DictionaryEntryText(it, revealed) }
         }
         if (lookup.entries.isEmpty() && lookup.forms.isEmpty()) {
-            Text("Not in the offline dictionary.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.not_in_the_offline_dictionary), style = MaterialTheme.typography.bodySmall)
         } else if (!revealed && (lookup.entries + word.lemmaEntry?.second?.entries.orEmpty()).all { it.synonyms.isEmpty() }) {
-            Text("No synonyms in the dictionary.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.no_synonyms_in_the_dictionary), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -515,7 +517,7 @@ private fun DictionaryEntryText(entry: DictionaryEntry, revealed: Boolean, showH
     )
     if (entry.synonyms.isNotEmpty()) {
         Text(
-            "≈ ${entry.synonyms.joinToString(", ")}",
+            stringResource(R.string.text_3, entry.synonyms.joinToString(", ")),
             style = MaterialTheme.typography.bodyMedium,
             fontStyle = FontStyle.Italic,
         )
@@ -523,11 +525,11 @@ private fun DictionaryEntryText(entry: DictionaryEntry, revealed: Boolean, showH
     if (!revealed) return
     val shown = if (all) entry.senses else entry.senses.take(3)
     shown.forEachIndexed { index, sense ->
-        Text("${index + 1}. $sense", style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.text_4, index + 1, sense), style = MaterialTheme.typography.bodyMedium)
     }
     if (!all && entry.senses.size > 3) {
         TextButton(onClick = { all = true }, contentPadding = PaddingValues(0.dp)) {
-            Text("${entry.senses.size - 3} more")
+            Text(stringResource(R.string.more, entry.senses.size - 3))
         }
     }
 }

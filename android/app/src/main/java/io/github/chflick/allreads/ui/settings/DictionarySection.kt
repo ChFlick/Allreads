@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import android.content.Context
 import android.net.ConnectivityManager
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +62,7 @@ fun DictionarySection(dictionaries: Dictionaries) {
         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
     }
     Text(
-        "Definitions from Wiktionary, via kaikki.org, under CC BY-SA 4.0. Looked up on the phone; nothing is sent anywhere.",
+        stringResource(R.string.definitions_from_wiktionary_via_kaikki),
         style = MaterialTheme.typography.bodySmall,
     )
 }
@@ -88,20 +90,20 @@ private fun DictionaryRow(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Downloading ${megabytes(download.bytes)} of ${megabytes(download.total)}",
+                        stringResource(R.string.downloading_of, megabytes(download.bytes), megabytes(download.total)),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { dictionaries.cancel(pair) }) { Text("Cancel") }
+                    TextButton(onClick = { dictionaries.cancel(pair) }) { Text(stringResource(R.string.cancel)) }
                 }
             }
             installed != null -> {
                 Text(
-                    "Installed · ${megabytes(installed.bytes.toLong())} · built ${installed.built}",
+                    stringResource(R.string.installed_built, megabytes(installed.bytes.toLong()), installed.built),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedButton(onClick = { scope.launch { runCatching { dictionaries.remove(pair) } } }) {
-                    Text("Remove")
+                    Text(stringResource(R.string.remove))
                 }
             }
             available != null -> {
@@ -123,15 +125,15 @@ private fun DictionaryRow(
     if (confirmMobileData && available != null) {
         AlertDialog(
             onDismissRequest = { confirmMobileData = false },
-            title = { Text("Download on mobile data?") },
-            text = { Text("${pairName(pair)} is a ${megabytes(available.downloadBytes.toLong())} download.") },
+            title = { Text(stringResource(R.string.download_on_mobile_data)) },
+            text = { Text(stringResource(R.string.is_a_download, pairName(pair), megabytes(available.downloadBytes.toLong()))) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmMobileData = false
                     dictionaries.download(available)
-                }) { Text("Download") }
+                }) { Text(stringResource(R.string.download)) }
             },
-            dismissButton = { TextButton(onClick = { confirmMobileData = false }) { Text("Not now") } },
+            dismissButton = { TextButton(onClick = { confirmMobileData = false }) { Text(stringResource(R.string.not_now)) } },
         )
     }
 }

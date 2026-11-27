@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.compose.ui.res.stringResource
+import io.github.chflick.allreads.R
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
 import io.github.chflick.allreads.anki.FORGOTTEN_TAG
@@ -139,31 +141,31 @@ fun AnkiSection(services: Services) {
     }
 
     when (state.access) {
-        null -> Text("Looking for AnkiDroid…", style = MaterialTheme.typography.bodyMedium)
+        null -> Text(stringResource(R.string.looking_for_ankidroid), style = MaterialTheme.typography.bodyMedium)
         AnkiAccess.NotInstalled -> {
             Text(
-                "Saved words become flashcards in AnkiDroid, a free app. Install it to start.",
+                stringResource(R.string.saved_words_become_flashcards_in),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Button(onClick = { openStore(context) }) { Text("Install AnkiDroid") }
+            Button(onClick = { openStore(context) }) { Text(stringResource(R.string.install_ankidroid)) }
         }
         AnkiAccess.NeedsPermission -> {
             Text(
-                "AnkiDroid is installed. Allow Allreads to add cards to it.",
+                stringResource(R.string.ankidroid_is_installed_allow_allreads),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Button(onClick = { permission.launch(AnkiDroidBridge.PERMISSION) }) { Text("Grant access") }
+            Button(onClick = { permission.launch(AnkiDroidBridge.PERMISSION) }) { Text(stringResource(R.string.grant_access)) }
         }
         AnkiAccess.Connected -> {
             Text(
-                "✓ Connected to AnkiDroid",
+                stringResource(R.string.connected_to_ankidroid),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             DeckPicker(state, onChoose = ::chooseDeck, onCreate = ::createDeck)
             if (state.noteTypesReady.isNotEmpty()) {
                 Text(
-                    "Card types in AnkiDroid: ${state.noteTypesReady.joinToString()}",
+                    stringResource(R.string.card_types_in_ankidroid, state.noteTypesReady.joinToString()),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -197,13 +199,13 @@ private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (St
 
     var creating by remember { mutableStateOf(false) }
     if (!creating) {
-        OutlinedButton(onClick = { creating = true }) { Text("New deck…") }
+        OutlinedButton(onClick = { creating = true }) { Text(stringResource(R.string.new_deck)) }
         return
     }
     var name by remember { mutableStateOf(SUGGESTED_DECK) }
     // null means a top-level deck.
     var parent by remember { mutableStateOf<String?>(null) }
-    Text("New deck", style = MaterialTheme.typography.labelLarge)
+    Text(stringResource(R.string.new_deck_2), style = MaterialTheme.typography.labelLarge)
     SettingsDropdown(
         label = "Inside",
         selected = parent ?: TOP_LEVEL,
@@ -213,7 +215,7 @@ private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (St
     OutlinedTextField(
         value = name,
         onValueChange = { name = it },
-        label = { Text("Name") },
+        label = { Text(stringResource(R.string.name)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -234,8 +236,8 @@ private fun DeckPicker(state: AnkiState, onChoose: (Long) -> Unit, onCreate: (St
                 fullName?.let(onCreate)
                 creating = false
             },
-        ) { Text("Create and use") }
-        OutlinedButton(onClick = { creating = false }) { Text("Cancel") }
+        ) { Text(stringResource(R.string.create_and_use)) }
+        OutlinedButton(onClick = { creating = false }) { Text(stringResource(R.string.cancel)) }
     }
 }
 
@@ -273,15 +275,15 @@ private fun ForgottenCards(services: Services) {
     if (forgotten == 0) return
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            "$forgotten ${if (forgotten == 1) "card" else "cards"} of forgotten words, suspended in AnkiDroid",
+            stringResource(R.string.of_forgotten_words_suspended_in, forgotten, if (forgotten == 1) "card" else "cards"),
             style = MaterialTheme.typography.bodyMedium,
         )
-        OutlinedButton(onClick = { confirming = true }) { Text("Delete them from AnkiDroid…") }
+        OutlinedButton(onClick = { confirming = true }) { Text(stringResource(R.string.delete_them_from_ankidroid)) }
     }
     if (confirming) {
         AlertDialog(
             onDismissRequest = { confirming = false },
-            title = { Text("Delete $forgotten forgotten ${if (forgotten == 1) "card" else "cards"}?") },
+            title = { Text(stringResource(R.string.delete_forgotten, forgotten, if (forgotten == 1) "card" else "cards")) },
             text = {
                 Text(
                     "They are deleted from AnkiDroid with their review history. This cannot be undone. " +
@@ -297,9 +299,9 @@ private fun ForgottenCards(services: Services) {
                         }
                         recount()
                     }
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.delete)) }
             },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 }
@@ -316,7 +318,7 @@ private fun WaitingWords(services: Services, access: AnkiAccess?) {
     val count = waiting ?: return
     if (count == 0) {
         if (access == AnkiAccess.Connected) {
-            Text("All saved words are in AnkiDroid.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.all_saved_words_are_in), style = MaterialTheme.typography.bodySmall)
         }
         return
     }
@@ -327,7 +329,7 @@ private fun WaitingWords(services: Services, access: AnkiAccess?) {
             modifier = Modifier.weight(1f),
         )
         if (access == AnkiAccess.Connected) {
-            OutlinedButton(onClick = services::syncAnki) { Text("Send now") }
+            OutlinedButton(onClick = services::syncAnki) { Text(stringResource(R.string.send_now)) }
         }
     }
 }
