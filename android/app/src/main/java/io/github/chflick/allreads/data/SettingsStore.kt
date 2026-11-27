@@ -79,6 +79,8 @@ data class AppSettings(
     val voices: Map<String, String> = emptyMap(),
     val librarySort: BookSort = BookSort.Recent,
     val wordSort: WordSort = WordSort.Recent,
+    /** The library's vocabulary-check card was dismissed. */
+    val vocabCheckDismissed: Boolean = false,
 ) {
     companion object {
         /** DeepL target languages offered in Settings. */
@@ -106,6 +108,7 @@ class SettingsStore(context: Context) {
             .putString("reader_page", next.readerPage.name)
             .putString("library_sort", next.librarySort.name)
             .putString("word_sort", next.wordSort.name)
+            .putBoolean("vocab_check_dismissed", next.vocabCheckDismissed)
             .putBoolean("wallpaper_colors", next.wallpaperColors)
             .putBoolean("anki_word_card", next.ankiWordCard)
             .putFloat("speech_rate", next.speechRate)
@@ -129,6 +132,7 @@ class SettingsStore(context: Context) {
             wallpaperColors = prefs.getBoolean("wallpaper_colors", defaults.wallpaperColors),
             librarySort = prefs.getEnum("library_sort", defaults.librarySort),
             wordSort = prefs.getEnum("word_sort", defaults.wordSort),
+            vocabCheckDismissed = prefs.getBoolean("vocab_check_dismissed", defaults.vocabCheckDismissed),
             readingFont = prefs.getEnum("reading_font", defaults.readingFont),
             readerPage = prefs.getEnum("reader_page", defaults.readerPage),
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),

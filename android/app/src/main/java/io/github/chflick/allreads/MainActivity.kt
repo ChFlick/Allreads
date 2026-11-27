@@ -1,5 +1,7 @@
 package io.github.chflick.allreads
 
+import io.github.chflick.allreads.ui.vocab.VocabCheckViewModel
+import io.github.chflick.allreads.ui.vocab.VocabCheckScreen
 import io.github.chflick.allreads.ui.books.FindBooksViewModel
 import io.github.chflick.allreads.ui.books.FindBooksScreen
 import io.github.chflick.allreads.data.Repository
@@ -113,6 +115,15 @@ private fun AllreadsNavigation(services: Services) {
     // Counts book opens, so each open gets a fresh reader at the saved position.
     var opens by rememberSaveable { mutableIntStateOf(0) }
     var tab by rememberSaveable { mutableStateOf(Tab.Library) }
+    // The vocabulary check's language while it is open; it covers everything.
+    var vocabCheck by rememberSaveable { mutableStateOf<String?>(null) }
+    var vocabChecks by rememberSaveable { mutableIntStateOf(0) }
+    // Changes when a check closes, so the library and Settings read their counts again.
+    var vocabClosed by rememberSaveable { mutableIntStateOf(0) }
+    val startVocabCheck: (String) -> Unit = { language ->
+        vocabChecks += 1
+        vocabCheck = language
+    }
 
     // Something shared to the app opens the library, which imports it.
     val shared by services.sharedImport.collectAsStateWithLifecycle()
@@ -143,12 +154,33 @@ private fun AllreadsNavigation(services: Services) {
             }
         } else {
             saved.SaveableStateProvider("tabs") {
-                AllreadsTabs(services, tab, onTab = { tab = it }, shared = shared, onOpenBook = {
-                    opens += 1
-                    openBookId = it
-                })
+                AllreadsTabs(
+                    services,
+                    tab,
+                    onTab = { tab = it },
+                    shared = shared,
+                    onOpenBook = {
+                        opens += 1
+                        openBookId = it
+                    },
+                    onVocabCheck = startVocabCheck,
+                    vocabClosed = vocabClosed,
+                )
             }
         }
+    }
+    AnimatedVisibility(
+        visible = vocabCheck != null,
+        enter = slideInVertically(tween(300)) { it / 8 } + fadeIn(tween(200)),
+        exit = slideOutVertically(tween(250)) { it / 8 } + fadeOut(tween(200)),
+    ) {
+        // One view model for every check; open() starts a fresh one per opening.
+        val check = viewModel(key = "vocab-check") { VocabCheckViewModel(services.repository) }
+        vocabCheck?.let { language -> remember(language, vocabChecks) { check.open(language, vocabChecks) } }
+        VocabCheckScreen(check, onClose = {
+            vocabCheck = null
+            vocabClosed += 1
+        })
     }
 }
 
@@ -160,6 +192,8 @@ private fun AllreadsTabs(
     onTab: (Tab) -> Unit,
     shared: SharedImport?,
     onOpenBook: (Long) -> Unit,
+    onVocabCheck: (String) -> Unit,
+    vocabClosed: Int,
 ) {
     // Back from Words or Settings goes to the Library first; back there leaves the app.
     BackHandler(enabled = tab != Tab.Library) { onTab(Tab.Library) }
@@ -190,8 +224,9 @@ private fun AllreadsTabs(
                     when (shown) {
                         Tab.Library -> {
                             val library = viewModel { LibraryViewModel(services.repository, services.settings) }
-                            // Reading changes progress, so refresh whenever the library is shown.
-                            LaunchedEffect(Unit) { library.refresh() }
+                            // Reading changes progress, so refresh whenever the library is shown,
+                            // and after a vocabulary check marked words known.
+                            LaunchedEffect(vocabClosed) { library.refresh() }
                             LaunchedEffect(shared) {
                                 shared?.let {
                                     services.sharedImport.value = null
@@ -205,6 +240,7 @@ private fun AllreadsTabs(
                                 library,
                                 onOpen = { onOpenBook(it.id) },
                                 onOpenSettings = { onTab(Tab.Settings) },
+                                onVocabCheck = onVocabCheck,
                                 onFindBooks = {
                                     findOpens += 1
                                     finding = true
@@ -238,7 +274,7 @@ private fun AllreadsTabs(
                             }
                         }
                         Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki, services.settings) }, services)
-                        Tab.Settings -> SettingsScreen(services)
+                        Tab.Settings -> SettingsScreen(services, onVocabCheck = onVocabCheck, refresh = vocabClosed)
                     }
                 }
             }

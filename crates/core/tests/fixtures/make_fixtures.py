@@ -2,11 +2,13 @@
 
 Run from anywhere: python3 make_fixtures.py
 Outputs: tiny.epub (simple French book), layout.epub (tricky markup, creator
-roles and a cover image), broken.epub (not a zip, for error handling) and
-sample.txt (a plain-text book).
+roles and a cover image), broken.epub (not a zip, for error handling),
+sample.txt (a plain-text book) and frequencies.sqlite (a French dictionary
+of made-up words with word frequencies, for the vocabulary check).
 """
 import base64
 import pathlib
+import sqlite3
 import zipfile
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -139,6 +141,48 @@ LAYOUT_FILES = {
     "OEBPS/chapter2.xhtml": xhtml("Fin", "  <div>Fin.</div>"),
 }
 
+# The dictionary's frequency tables, as allreads_core::dictionary::FREQUENCY_SCHEMA.
+FREQUENCY_SCHEMA = """
+CREATE TABLE frequency (rank INTEGER PRIMARY KEY, key TEXT NOT NULL, per_million REAL NOT NULL);
+CREATE TABLE frequency_form (rank INTEGER NOT NULL, key TEXT NOT NULL, PRIMARY KEY (rank, key)) WITHOUT ROWID;
+"""
+
+
+def stand_in_word(rank):
+    """A made-up French-looking word for a frequency rank: letters only, unique."""
+    consonants, vowels = "bdflmnprstv", "aeiou"
+    n, word = rank, "mo"
+    while True:
+        word += consonants[n % 11] + vowels[(n // 11) % 5]
+        n //= 55
+        if n == 0:
+            return word
+
+
+def write_frequency_dictionary(name, words=3000):
+    """A French dictionary (the app's format) of made-up words ranked by
+    frequency; the most common has an extra form, its word plus "s"."""
+    path = HERE / name
+    path.unlink(missing_ok=True)
+    schema = (HERE / "../../src/dictionary/schema.sql").read_text(encoding="utf-8")
+    conn = sqlite3.connect(path)
+    conn.executescript(schema + FREQUENCY_SCHEMA)
+    conn.executemany(
+        "INSERT INTO meta (key, value) VALUES (?, ?)",
+        [("format", "1"), ("pair", "fr-en"), ("built", "2026-11-27"), ("frequency_source", "Test words")],
+    )
+    for rank in range(words):
+        key = stand_in_word(rank)
+        conn.execute("INSERT INTO entry (key, word, pos, ipa) VALUES (?, ?, 'noun', '')", (key, key))
+        conn.execute("INSERT INTO frequency (rank, key, per_million) VALUES (?, ?, ?)", (rank, key, 1000.0 / (rank + 1)))
+        conn.execute("INSERT INTO frequency_form (rank, key) VALUES (?, ?)", (rank, key))
+    conn.execute("INSERT INTO frequency_form (rank, key) VALUES (0, ?)", (stand_in_word(0) + "s",))
+    conn.execute("CREATE INDEX entry_key ON entry (key)")
+    conn.commit()
+    conn.execute("VACUUM")
+    conn.close()
+
+
 if __name__ == "__main__":
     write_epub("tiny.epub", TINY_FILES)
     write_epub("layout.epub", LAYOUT_FILES)
@@ -148,4 +192,5 @@ if __name__ == "__main__":
         encoding="utf-8",
         newline="",
     )
+    write_frequency_dictionary("frequencies.sqlite")
     print("fixtures written to", HERE)

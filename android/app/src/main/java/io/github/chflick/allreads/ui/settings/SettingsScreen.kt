@@ -103,7 +103,7 @@ private enum class SettingsPage(@StringRes val title: Int) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(services: Services) {
+fun SettingsScreen(services: Services, onVocabCheck: (String) -> Unit = {}, refresh: Int = 0) {
     var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
     BackHandler(enabled = page != null) { page = null }
     // A page slides in from the overview and back out to it.
@@ -111,7 +111,7 @@ fun SettingsScreen(services: Services) {
         if (open == null) {
             SettingsOverview(services, onOpen = { page = it })
         } else {
-            SettingsPageScreen(services, open, onBack = { page = null })
+            SettingsPageScreen(services, open, onBack = { page = null }, onVocabCheck = onVocabCheck, refresh = refresh)
         }
     }
 }
@@ -119,7 +119,13 @@ fun SettingsScreen(services: Services) {
 /** One settings page, with a back arrow to the overview. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsPageScreen(services: Services, open: SettingsPage, onBack: () -> Unit) {
+private fun SettingsPageScreen(
+    services: Services,
+    open: SettingsPage,
+    onBack: () -> Unit,
+    onVocabCheck: (String) -> Unit,
+    refresh: Int,
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -139,7 +145,7 @@ private fun SettingsPageScreen(services: Services, open: SettingsPage, onBack: (
             when (open) {
                 SettingsPage.Translation -> TranslationSettings(services)
                 SettingsPage.Anki -> AnkiSection(services)
-                SettingsPage.Dictionaries -> DictionarySettings(services)
+                SettingsPage.Dictionaries -> DictionarySettings(services, onVocabCheck, refresh)
                 SettingsPage.Text -> ReadingSettings(services)
                 SettingsPage.ReadAloud -> SpeechSection(services)
                 SettingsPage.Appearance -> AppearanceSettings(services)
@@ -250,7 +256,7 @@ private fun TranslationSettings(services: Services) {
 }
 
 @Composable
-private fun DictionarySettings(services: Services) {
+private fun DictionarySettings(services: Services, onVocabCheck: (String) -> Unit, refresh: Int) {
     val settings by services.settings.settings.collectAsStateWithLifecycle()
     DictionarySection(services.dictionaries)
     SwitchSetting(
@@ -259,6 +265,7 @@ private fun DictionarySettings(services: Services) {
         checked = settings.hideTranslations,
         onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
     )
+    VocabCheckSection(services, refresh, onStart = onVocabCheck)
     CatalogSection(services.catalogs)
 }
 

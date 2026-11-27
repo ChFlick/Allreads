@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chflick.allreads.data.Catalogs
 import io.github.chflick.allreads.data.Dictionaries
+import io.github.chflick.allreads.data.Services
 import io.github.chflick.allreads.data.DownloadState
 import io.github.chflick.allreads.ui.megabytes
 import java.util.Locale
@@ -209,3 +210,60 @@ fun pairName(pair: String): String =
 /** True on a metered connection (usually mobile data). */
 fun onMobileData(context: Context): Boolean =
     context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered ?: false
+
+/**
+ * The vocabulary check per installed dictionary with word frequencies: start
+ * it, and once done, how many words it marked and Undo. `refresh` changes
+ * when a check closes, so the counts are read again.
+ */
+@Composable
+fun VocabCheckSection(services: Services, refresh: Int, onStart: (String) -> Unit) {
+    val list by services.dictionaries.list.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    // Language → words the check marked (still untouched), for dictionaries with frequencies.
+    var checks by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var askUndo by remember { mutableStateOf<String?>(null) }
+    suspend fun reload() {
+        checks = list.installed.map { it.pair.substringBefore('-') }.distinct()
+            .filter { runCatching { services.repository.vocabularyCheckAvailable(it) }.getOrDefault(false) }
+            .associateWith { runCatching { services.repository.vocabularyCheckCount(it) }.getOrDefault(0) }
+    }
+    LaunchedEffect(list.installed, refresh) { reload() }
+    if (checks.isEmpty()) return
+    Text(stringResource(R.string.vocabulary_check), style = MaterialTheme.typography.titleMedium)
+    checks.forEach { (language, marked) ->
+        val name = Locale.forLanguageTag(language).getDisplayLanguage(Locale.ENGLISH)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.vocab_check_settings_explained, name), style = MaterialTheme.typography.bodySmall)
+            if (marked > 0) {
+                Text(
+                    pluralStringResource(R.plurals.marked_by_the_check, marked, "%,d".format(marked)),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onStart(language) }) { Text(stringResource(R.string.check_your_vocabulary)) }
+                if (marked > 0) {
+                    TextButton(onClick = { askUndo = language }) { Text(stringResource(R.string.undo)) }
+                }
+            }
+        }
+    }
+    askUndo?.let { language ->
+        AlertDialog(
+            onDismissRequest = { askUndo = null },
+            title = { Text(stringResource(R.string.undo_vocabulary_check_question)) },
+            text = { Text(stringResource(R.string.undo_vocabulary_check_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    askUndo = null
+                    scope.launch {
+                        runCatching { services.repository.undoVocabularyCheck(language) }
+                        reload()
+                    }
+                }) { Text(stringResource(R.string.undo)) }
+            },
+            dismissButton = { TextButton(onClick = { askUndo = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
+}

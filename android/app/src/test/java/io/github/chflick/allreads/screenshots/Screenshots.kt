@@ -39,6 +39,10 @@ import io.github.chflick.allreads.ui.words.WordsState
 import org.junit.After
 import io.github.chflick.allreads.ui.books.FindBooksContent
 import io.github.chflick.allreads.ui.books.FindBooksState
+import io.github.chflick.allreads.ui.vocab.VocabCheckContent
+import io.github.chflick.allreads.ui.vocab.VocabCheckState
+import uniffi.allreads_ffi.VocabChoice
+import uniffi.allreads_ffi.VocabResult
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -161,6 +165,36 @@ class Screenshots(private val dark: Boolean) {
             onSearch = {},
             onFilter = {},
             onEdit = {},
+        )
+    }
+
+    @Test
+    fun vocabQuestion() = shot {
+        VocabCheckContent(VocabCheckState.Asking("chuchoter", 0.4f), language = "French")
+    }
+
+    @Test
+    fun vocabResult() = shot {
+        VocabCheckContent(
+            VocabCheckState.Result(
+                VocabResult(
+                    reliable = true,
+                    estimatedKnown = 2_430u,
+                    choices = listOf(VocabChoice(820u, 0.983), VocabChoice(1_570u, 0.952)),
+                ),
+            ),
+            language = "French",
+        )
+    }
+
+    @Test
+    fun libraryVocabCard() = shot {
+        LibraryContent(
+            state = LibraryState(books = Samples.books.take(2), loading = false, vocabCheckOffer = "fr"),
+            snackbar = SnackbarHostState(),
+            onImport = {},
+            onOpen = {},
+            onLongPress = {},
         )
     }
 

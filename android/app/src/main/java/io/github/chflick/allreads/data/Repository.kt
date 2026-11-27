@@ -18,6 +18,7 @@ import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.CatalogBook
 import uniffi.allreads_ffi.CatalogWord
 import uniffi.allreads_ffi.InstalledCatalog
+import uniffi.allreads_ffi.VocabCheckSession
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.InstalledDictionary
 import uniffi.allreads_ffi.PhraseSuggestion
@@ -207,6 +208,22 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles,
 
     override suspend fun catalogNewWords(languageCode: String, bookId: Long, limit: Int): List<CatalogWord> =
         io { app.catalogNewWords(languageCode, bookId, limit.toUInt()) }
+
+    /** Whether the language's dictionary has the word frequencies the vocabulary check needs. */
+    suspend fun vocabularyCheckAvailable(languageCode: String): Boolean =
+        io { app.vocabularyCheckAvailable(languageCode) }
+
+    suspend fun startVocabularyCheck(languageCode: String): VocabCheckSession =
+        io { app.startVocabularyCheck(languageCode) }
+
+    /** Marks the words of a check's choice known; returns how many were added. */
+    suspend fun applyVocabularyCheck(session: VocabCheckSession, choice: Int): Int =
+        io { app.applyVocabularyCheck(session, choice.toUInt()).toInt() }
+
+    suspend fun undoVocabularyCheck(languageCode: String): Int = io { app.undoVocabularyCheck(languageCode).toInt() }
+
+    /** Words a check marked that are still as it left them. */
+    suspend fun vocabularyCheckCount(languageCode: String): Int = io { app.vocabularyCheckCount(languageCode).toInt() }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 

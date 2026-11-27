@@ -98,6 +98,7 @@ fun LibraryScreen(
     onOpen: (BookSummary) -> Unit,
     onOpenSettings: () -> Unit = {},
     onFindBooks: (() -> Unit)? = null,
+    onVocabCheck: (String) -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val resolver = LocalContext.current.contentResolver
@@ -125,6 +126,8 @@ fun LibraryScreen(
         onImportText = viewModel::importText,
         onOpenSettings = onOpenSettings,
         onFindBooks = onFindBooks,
+        onVocabCheck = onVocabCheck,
+        onDismissVocabCheck = viewModel::dismissVocabCheck,
     )
 
     state.pending?.let { pending ->
@@ -435,6 +438,8 @@ fun LibraryContent(
     onOpenSettings: () -> Unit = {},
     /** Opens "Find a book"; null hides the menu item. */
     onFindBooks: (() -> Unit)? = null,
+    onVocabCheck: (String) -> Unit = {},
+    onDismissVocabCheck: () -> Unit = {},
 ) {
     val view = state.view
     // Most people read in one language; only books in another say theirs.
@@ -519,6 +524,11 @@ fun LibraryContent(
             // With nothing searched, filtered or re-sorted, the last book read
             // comes first and gets the big card.
             val current = shown.firstOrNull()?.takeIf { view.isDefault && it.lastReadAt != null }
+            state.vocabCheckOffer?.takeIf { view.isDefault }?.let { language ->
+                item(key = "vocab-check") {
+                    VocabCheckCard(language, onStart = { onVocabCheck(language) }, onDismiss = onDismissVocabCheck)
+                }
+            }
             current?.let { book ->
                 item(key = "continue") {
                     ContinueCard(book, state.difficulty[book.id], onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
@@ -573,3 +583,23 @@ private fun FilterRow(state: LibraryState, onView: (LibraryView) -> Unit) {
     }
 }
 
+/** "Already know some French?": offers the vocabulary check to a new reader. */
+@Composable
+private fun VocabCheckCard(language: String, onStart: () -> Unit, onDismiss: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                stringResource(R.string.vocab_card_title, languageName(language)),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(stringResource(R.string.vocab_card_text), style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onStart) { Text(stringResource(R.string.check_your_vocabulary)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+            }
+        }
+    }
+}

@@ -367,4 +367,46 @@
     <string name="french_word_frequencies_cc_by_sa">French word frequencies · CC BY-SA 4.0</string>
     <string name="frequencywords_credit" translatable="false">FrequencyWords (Hermit Dave, OpenSubtitles 2018)</string>
     <string name="other_word_frequencies_cc_by_sa">word frequencies for other languages · CC BY-SA 4.0</string>
+    <string name="vocabulary_check">Vocabulary check</string>
+    <string name="do_you_know_this_word">Do you know this %1$s word?</string>
+    <string name="only_yes_if_you_know_the_meaning">Only say yes if you know what it means. Some words are made up, to catch guesses.</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="vocab_result_explained">Allreads can mark the most common of them as known, so they are not underlined in your books. The fewer it marks, the surer it is.</string>
+    <string name="vocab_result_unsure">Hard to tell this time</string>
+    <string name="vocab_result_unsure_explained">You said yes to several made-up words, so only words you are likely to know are offered. A retake, answering only for words you know, gives a better result.</string>
+    <string name="vocab_result_fine_print">Words you said no to stay new. Known words get no Anki cards, and you can undo this in Settings → Dictionaries.</string>
+    <string name="retake_the_check">Retake</string>
+    <string name="about_percent_right">About %1$d %% of them right</string>
+    <string name="recommended">Recommended</string>
+    <string name="check_your_vocabulary">Check your vocabulary</string>
+    <string name="vocab_card_title">Already know some %1$s?</string>
+    <string name="vocab_card_text">A two-minute check marks the common words you know, so your first book is not full of underlines.</string>
+    <string name="start_check">Start</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="vocab_check_settings_explained">Marks the common %1$s words you know as known, from a two-minute yes/no test.</string>
+    <string name="undo_vocabulary_check">Undo the vocabulary check</string>
+    <string name="undo_vocabulary_check_question">Undo the vocabulary check?</string>
+    <string name="undo_vocabulary_check_text">The words it marked go back to new, unless you changed them since.</string>
+    <plurals name="you_know_about_words">
+        <item quantity="one">You know about %1$s common %2$s word</item>
+        <item quantity="other">You know about %1$s common %2$s words</item>
+    </plurals>
+    <plurals name="mark_words_known">
+        <item quantity="one">Mark %1$s word as known</item>
+        <item quantity="other">Mark %1$s words as known</item>
+    </plurals>
+    <plurals name="mark_n_words">
+        <item quantity="one">Mark %1$s word</item>
+        <item quantity="other">Mark %1$s words</item>
+    </plurals>
+    <plurals name="words_marked_known">
+        <item quantity="one">%1$s word marked as known</item>
+        <item quantity="other">%1$s words marked as known</item>
+    </plurals>
+    <plurals name="marked_by_the_check">
+        <item quantity="one">%1$s word marked by the check</item>
+        <item quantity="other">%1$s words marked by the check</item>
+    </plurals>
+    <string name="vocab_done_explained">They are no longer underlined in your books, and the books\' share of new words is lower now. While reading, tap any word to set it back.</string>
 </resources>

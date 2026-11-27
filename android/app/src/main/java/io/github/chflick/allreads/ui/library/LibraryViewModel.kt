@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.allreads_ffi.BookSummary
+import uniffi.allreads_ffi.WordStatus
 import uniffi.allreads_ffi.PreparedText
 import uniffi.allreads_ffi.BookDifficulty
 
@@ -47,6 +48,8 @@ data class LibraryState(
     val difficulty: Map<Long, BookDifficulty> = emptyMap(),
     /** True while a web article is being fetched. */
     val fetching: Boolean = false,
+    /** A language to offer the vocabulary check for, or null. */
+    val vocabCheckOffer: String? = null,
 ) {
     // Worked out once per state, not on every recomposition.
     val shown: List<BookSummary> by lazy { arrange(books, view) }
@@ -96,7 +99,34 @@ class LibraryViewModel(
                 )
             }
             if (counting?.isActive != true) counting = viewModelScope.launch { countMissing() }
+            val offer = runCatching { vocabCheckOffer(books.getOrDefault(emptyList())) }.getOrNull()
+            _state.update { it.copy(vocabCheckOffer = offer) }
         }
+    }
+
+    /**
+     * The language to offer the vocabulary check for: that of the book read
+     * last, when its dictionary has word frequencies, no check was done there,
+     * few words are known yet, and the card was not dismissed.
+     */
+    private suspend fun vocabCheckOffer(books: List<BookSummary>): String? {
+        if (settings?.settings?.value?.vocabCheckDismissed != false) return null
+        val language = books.maxByOrNull { it.lastReadAt ?: 0 }?.languageCode ?: return null
+        if (!repository.vocabularyCheckAvailable(language)) return null
+        if (repository.vocabularyCheckCount(language) > 0) return null
+        val known = repository.listTerms(language).count { it.status == WordStatus.WellKnown }
+        return language.takeIf { known < FEW_KNOWN_WORDS }
+    }
+
+    /** Hides the vocabulary-check card for good (it stays in Settings). */
+    fun dismissVocabCheck() {
+        settings?.update { it.copy(vocabCheckDismissed = true) }
+        _state.update { it.copy(vocabCheckOffer = null) }
+    }
+
+    private companion object {
+        /** Below this many known words, the check is worth offering. */
+        const val FEW_KNOWN_WORDS = 300
     }
 
     /** Counts the listed books without a difficulty, reading the list again after each, so new imports join in. */
