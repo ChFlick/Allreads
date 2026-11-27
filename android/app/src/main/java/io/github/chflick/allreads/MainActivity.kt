@@ -216,11 +216,13 @@ private fun AllreadsTabs(
                                 exit = slideOutVertically(tween(250)) { it / 8 } + fadeOut(tween(200)),
                             ) {
                                 val context = LocalContext.current
-                                val finder = viewModel(key = "find-books-$findOpens") {
+                                // One view model for every opening, as for the reader; open() starts afresh.
+                                val finder = viewModel(key = "find-books") {
                                     FindBooksViewModel(services.repository, services.bookFetcher, context.cacheDir) {
                                         installedBookLists(services.repository)
                                     }
                                 }
+                                remember(findOpens) { finder.open(findOpens) }
                                 FindBooksScreen(
                                     finder,
                                     services.catalogs,

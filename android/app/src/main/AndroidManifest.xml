@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- DeepL translations and dictionary downloads. Nothing else goes online. -->
+    <!-- DeepL translations, dictionary and book-list downloads, and books from "Find a book". Nothing else goes online. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- To ask before a dictionary download on mobile data. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

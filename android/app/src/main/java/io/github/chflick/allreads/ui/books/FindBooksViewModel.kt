@@ -9,7 +9,10 @@ import io.github.chflick.allreads.ui.AppText
 import io.github.chflick.allreads.ui.describe
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -55,15 +58,28 @@ class FindBooksViewModel(
     val state: StateFlow<FindBooksState> = _state.asStateFlow()
 
     private var searchJob: Job? = null
+    private var loadJob: Job? = null
     private val getter = BookGetter(catalog, fetcher, cacheDir)
 
-    init {
-        reload()
+    /** The opening of the screen the state belongs to (see [open]). */
+    private var session: Int? = null
+
+    /**
+     * Starts a fresh state for a new opening of the screen; repeat calls for
+     * the same opening (e.g. on rotation) keep it. The books load on [reload].
+     */
+    fun open(session: Int) {
+        if (session == this.session) return
+        this.session = session
+        searchJob?.cancel()
+        loadJob?.cancel()
+        _state.value = FindBooksState()
     }
 
     /** Reads the installed book lists again, e.g. after one was downloaded. */
     fun reload() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             val languages = runCatching { installedLanguages() }.getOrDefault(emptyList())
             val language = _state.value.language?.takeIf { it in languages } ?: languages.firstOrNull()
             _state.update { it.copy(languages = languages, language = language) }
@@ -73,8 +89,12 @@ class FindBooksViewModel(
 
     fun chooseLanguage(code: String) {
         if (code == _state.value.language) return
-        _state.update { it.copy(language = code, matches = null, view = it.view.copy(query = "")) }
-        viewModelScope.launch { load(code) }
+        searchJob?.cancel()
+        _state.update {
+            it.copy(language = code, matches = null, selected = null, newWords = emptyList(), view = it.view.copy(query = ""))
+        }
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch { load(code) }
     }
 
     private suspend fun load(language: String?) {
@@ -84,6 +104,9 @@ class FindBooksViewModel(
         }
         _state.update { it.copy(loading = true) }
         val books = runCatching { catalog.catalogBooks(language) }
+        // The core call cannot be interrupted: drop its result if another
+        // language was chosen (or the screen reopened) meanwhile.
+        if (!currentCoroutineContext().isActive || _state.value.language != language) return
         _state.update {
             it.copy(
                 loading = false,
@@ -165,9 +188,16 @@ class BookGetter(private val catalog: BookCatalog, private val fetcher: Fetcher,
         val download = File(cacheDir, "catalog-book-${book.id}.epub.download")
         try {
             withContext(Dispatchers.IO) { fetcher.download(book.url, download) {} }
-            val path = catalog.newBookPath(book.title, "epub")
+            // Named like a picked file, so a title with a dot ("Mme. Bovary") is kept whole.
+            val path = catalog.newBookPath("${book.title}.epub", "epub")
             withContext(Dispatchers.IO) { download.copyTo(File(path), overwrite = true) }
-            return catalog.importBook(path, languageCode)
+            try {
+                return catalog.importBook(path, languageCode)
+            } catch (e: Exception) {
+                // As for a picked file: a copy that could not be imported is not kept.
+                withContext(NonCancellable + Dispatchers.IO) { File(path).delete() }
+                throw e
+            }
         } finally {
             download.delete()
         }

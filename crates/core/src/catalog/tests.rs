@@ -80,7 +80,8 @@ fn a_catalog_lists_its_books_most_popular_first() {
     let dir = tempfile::tempdir().unwrap();
     let catalog = sample_catalog(&dir);
     assert_eq!(catalog.language_code(), "fr");
-    assert_eq!(catalog.count_stamp(), "1.3/fr-en 2026-11-25", "2026-12-01");
+    assert_eq!(catalog.count_stamp(), "1.3/fr-en 2026-11-25");
+    assert_eq!(catalog.built(), "2026-12-01");
     let titles: Vec<&str> = catalog.books().iter().map(|b| b.title.as_str()).collect();
     assert_eq!(titles, ["Les Misérables", "Contes du lundi"]);
     let novel = &catalog.books()[0];

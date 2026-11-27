@@ -24,13 +24,13 @@ class BookGetterTest {
     private val fixtures = File(System.getProperty("allreads.fixtures") ?: error("allreads.fixtures not set"))
 
     /** Serves the fixture EPUB for any link, or fails like a lost connection. */
-    private inner class FixtureFetcher(private val fail: Boolean = false) : Fetcher {
+    private inner class FixtureFetcher(private val fail: Boolean = false, private val junk: Boolean = false) : Fetcher {
         val asked = mutableListOf<String>()
         override fun text(url: String) = error("not used")
         override fun download(url: String, target: File, progress: (Long) -> Unit) {
             asked += url
             if (fail) throw IOException("connection lost")
-            File(fixtures, "tiny.epub").copyTo(target, overwrite = true)
+            if (junk) target.writeText("<html>Not found</html>") else File(fixtures, "tiny.epub").copyTo(target, overwrite = true)
         }
     }
 
@@ -66,6 +66,17 @@ class BookGetterTest {
             assertEquals("connection lost", e.message)
         }
         assertTrue(repository.library().isEmpty())
+        assertFalse(cache.listFiles().orEmpty().any())
+    }
+
+    @Test
+    fun aDownloadThatIsNoBookLeavesNoCopyInTheBooksFolder() = runBlocking {
+        val repository = Repository(temp.newFolder("data"))
+        val cache = temp.newFolder("cache")
+        val result = runCatching { BookGetter(repository, FixtureFetcher(junk = true), cache).get(catalogBook, "fr") }
+        assertTrue(result.isFailure)
+        assertTrue(repository.library().isEmpty())
+        assertFalse(repository.booksDir.listFiles().orEmpty().any())
         assertFalse(cache.listFiles().orEmpty().any())
     }
 }

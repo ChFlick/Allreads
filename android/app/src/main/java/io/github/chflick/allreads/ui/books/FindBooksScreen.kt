@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +43,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -70,6 +73,7 @@ import io.github.chflick.allreads.ui.library.DrawnCover
 import io.github.chflick.allreads.ui.library.difficultyColour
 import io.github.chflick.allreads.ui.library.newPercentText
 import io.github.chflick.allreads.ui.megabytes
+import io.github.chflick.allreads.ui.settings.onMobileData
 import io.github.chflick.allreads.ui.theme.Literata
 import uniffi.allreads_ffi.AvailableCatalog
 import uniffi.allreads_ffi.CatalogBook
@@ -96,6 +100,8 @@ fun FindBooksScreen(
             viewModel.messageShown()
         }
     }
+    val context = LocalContext.current
+    var confirmDownload by remember { mutableStateOf<AvailableCatalog?>(null) }
     val installed = list.installed.map { it.languageCode }.toSet()
     val offers = list.available.orEmpty().filter { it.languageCode !in installed }
     FindBooksContent(
@@ -110,8 +116,25 @@ fun FindBooksScreen(
         onSelect = viewModel::select,
         onGet = viewModel::get,
         onOpenBook = onOpenBook,
-        onDownloadList = catalogs::download,
+        // As in Settings: ask first on mobile data.
+        onDownloadList = { offer -> if (onMobileData(context)) confirmDownload = offer else catalogs.download(offer) },
     )
+    confirmDownload?.let { offer ->
+        AlertDialog(
+            onDismissRequest = { confirmDownload = null },
+            title = { Text(stringResource(R.string.download_on_mobile_data)) },
+            text = {
+                Text(stringResource(R.string.is_a_download, languageName(offer.languageCode), megabytes(offer.downloadBytes.toLong())))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDownload = null
+                    catalogs.download(offer)
+                }) { Text(stringResource(R.string.download)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDownload = null }) { Text(stringResource(R.string.not_now)) } },
+        )
+    }
 }
 
 /** "Find a book" without its view model, for screenshots. */
@@ -148,6 +171,9 @@ fun FindBooksContent(
                 )
                 if (state.books.isNotEmpty()) {
                     SearchPill(view.query, AppText.get(R.string.search_books_authors_subjects), onQuery = { onView(view.copy(query = it)) })
+                }
+                // With several lists, the languages stay reachable even if this one shows no books.
+                if (state.books.isNotEmpty() || state.languages.size > 1) {
                     FilterRow(state, onView, onLanguage)
                 }
             }

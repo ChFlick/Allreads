@@ -130,17 +130,17 @@ impl App {
         sha256: String,
         language_code: String,
     ) -> Result<InstalledCatalog, AllreadsError> {
-        // Close an open copy first, so the new file is opened on next use.
-        self.catalogs
-            .lock()
-            .map_err(|_| poisoned())?
-            .remove(&language_code);
+        // Close an open copy, and hold the lock until the new file is in
+        // place, so no other call opens the old file in between.
+        let mut open = self.catalogs.lock().map_err(|_| poisoned())?;
+        open.remove(&language_code);
         let info = catalog::install(
             Path::new(&download_path),
             &sha256,
             &language_code,
             &self.catalogs_dir(),
         )?;
+        drop(open);
         Ok(info.into())
     }
 
@@ -149,11 +149,12 @@ impl App {
     /// # Errors
     /// Returns `CatalogInvalid` for a bad language code, `Storage` if deleting fails.
     pub fn remove_catalog(&self, language_code: String) -> Result<bool, AllreadsError> {
-        self.catalogs
-            .lock()
-            .map_err(|_| poisoned())?
-            .remove(&language_code);
-        Ok(catalog::remove(&self.catalogs_dir(), &language_code)?)
+        // Held until the file is gone, so no other call reopens it in between.
+        let mut open = self.catalogs.lock().map_err(|_| poisoned())?;
+        open.remove(&language_code);
+        let removed = catalog::remove(&self.catalogs_dir(), &language_code)?;
+        drop(open);
+        Ok(removed)
     }
 }
 
