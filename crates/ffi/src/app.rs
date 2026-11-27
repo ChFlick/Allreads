@@ -191,13 +191,8 @@ impl App {
     /// installed dictionary's pair and build date, if any.
     fn count_stamp(&self, language_code: &str) -> Result<String, AllreadsError> {
         let dictionary = self.with_dictionary(language_code, |d| d.meta("built"))?;
-        let identity = dictionary.map(|built| {
-            format!(
-                "{}-en {}",
-                language_code.to_lowercase(),
-                built.unwrap_or_default()
-            )
-        });
+        let identity = dictionary
+            .map(|built| word_tally::dictionary_identity(language_code, built.as_deref()));
         Ok(word_tally::count_stamp(identity.as_deref()))
     }
 

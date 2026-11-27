@@ -23,6 +23,18 @@ pub fn count_stamp(dictionary: Option<&str>) -> String {
     )
 }
 
+/// How [`count_stamp`] names an offline dictionary: its pair and build date,
+/// e.g. `fr-en 2026-11-25`. Shared by the app and the catalog builder, so a
+/// catalog says whether it was counted like the reader's library books.
+#[must_use]
+pub fn dictionary_identity(language_code: &str, built: Option<&str>) -> String {
+    format!(
+        "{}-en {}",
+        language_code.to_lowercase(),
+        built.unwrap_or_default()
+    )
+}
+
 /// Why a book could not be counted.
 #[derive(Debug, thiserror::Error)]
 pub enum CountError {

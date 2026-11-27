@@ -1,6 +1,7 @@
 //! Builds Allreads' offline dictionary files from kaikki.org's Wiktionary
 //! extracts. The file format is defined in `allreads_core::dictionary`.
 
+pub mod catalog;
 pub mod kaikki;
 pub mod writer;
 
