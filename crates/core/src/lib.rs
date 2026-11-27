@@ -15,6 +15,7 @@ pub mod reader;
 pub mod text;
 pub mod translate;
 pub mod txt;
+pub mod vocab_check;
 pub mod word_tally;
 
 /// Returns the version of the core library.

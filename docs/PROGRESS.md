@@ -60,3 +60,11 @@ First run of the CI APK on Christoph's phone. Working: all screens, EPUB import.
 - [ ] 6. Phone check (needs step 5; on the roadmap)
 
 Merged into `main` on 2026-11-27 after a code review (fixes: Get cleans up after a failed import, one view model per screen, no load races, the catalog lock held while installing, the mobile-data prompt). Open items are on the roadmap under "Find a book".
+
+## Vocabulary check (branch `feature/vocab-check`, plan: IMPLEMENTATION_PLAN "Vocabulary check")
+
+- [x] 1. Core: building and scoring the test (2026-11-27: `vocab_check::VocabCheck`, a session the app asks one band at a time: 6 dictionary forms per frequency band, 10 made-up words spliced from real ones and checked against the dictionary, a stop after two mostly-unknown bands, then 12 words around the reader's boundary. Scoring: corrected for false "yes", a falling fitted curve, and two choices with the accuracy they expect, "safe" (chance of knowing at least 95 %) and "more" (85 %). Words answered "no" are never marked; a "yes" beyond the cut-off only when at least 90 % likely real. Simulated readers knowing 300 to 15,000 words, honest or over-claiming 10 %: the safe choice is 98–99 % right in 41–88 questions, and the accuracy it shows is within a point of the real one. Tuned first on Lexique 3.83's real ranks in Python)
+- [ ] 2. dictgen: frequency sources into the dictionary
+- [ ] 3. Core and FFI: marking and undo
+- [ ] 4. App: the check
+- [ ] 5. Phone check
