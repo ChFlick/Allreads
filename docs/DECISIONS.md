@@ -129,3 +129,7 @@ The catalog keeps every word exactly, as one packed blob of word counts per book
 ## 2026-11-27: Find a book merged before its book list exists
 
 The app side of Find a book (book lists, the screen, Get) is merged into `main` now, although no book list is published yet: the real French list needs the books downloaded and counted, which waits. Until a list is published, the screen says so, and Settings shows no "Book lists" part. Left for the roadmap with the list itself: the phone check, what to do when a list was counted with other rules or another dictionary than the app has (the count stamp), subject chips, and ranking by common words for beginners. "Best fit" for now: books at most 5 % new first, those teaching the most words ahead, then the rest by share of new words.
+
+## 2026-11-27: vocabulary check from Lexique, tuned against wrong "known" marks
+
+The vocabulary check uses Lexique 3.82 (CC BY-SA 4.0) for French word frequencies, packed into the dictionary download; other languages need their own source later. It aims at few wrong marks rather than many marks: made-up words correct for over-claiming, only bands known at 90 % or more are marked, "no" answers stay new, and an unreliable result marks only the words answered "yes". Marked words are known (no Anki cards), carry the source "Vocabulary check", and can be undone. Plan: IMPLEMENTATION_PLAN, "Vocabulary check".

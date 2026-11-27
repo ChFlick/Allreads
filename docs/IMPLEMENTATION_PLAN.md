@@ -276,6 +276,31 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
     - Publish signed APKs on GitHub releases. F-Droid was dropped on 2026-11-24.
     - **Done when** the app installs from a GitHub release APK. M5 is complete, and v1.0 is out.
 
+### Vocabulary check (planned 2026-11-27)
+
+**Why.** On a new install every word is new, so a first book shows half its words underlined even for a reader who knows a lot. Marking the common words they know fixes the first impression, but only if the marks are right: a wrong "known" hides a word they still need.
+
+**Data.** Lexique 3.82 (CC BY-SA 4.0, New, Pallier et al.): French word forms with their dictionary forms, grammatical gender, and frequencies from books and film subtitles. dictgen adds it to the French dictionary as a frequency table (dictionary forms by rank, their forms), so it comes with the dictionary download. Credit in About, as for Wiktionary.
+
+**The test.** About 6 dictionary forms from each of about 10 frequency bands (top 250, 250–500, 500–1,000, 1,000–2,000 … up to about 24,000) and about 10 made-up French-looking words (spliced from real ones; the dictionary confirms they are not words). Yes/no, about 70 taps, 2–3 minutes; it stops once two bands in a row are mostly unknown.
+
+**Scoring, conservatively.**
+- Each band's share of yes is corrected for false yeses on made-up words.
+- Bands are marked known up to the first one below 90 % after correction.
+- Words answered "no" stay new, even inside marked bands.
+- Real words answered "yes" above the cut-off are marked one by one.
+- With more than 30 % yes on made-up words, the result is not trusted: only the yes-words are marked, and a retake is offered.
+
+**Applying.** The result says how many words it will mark before doing anything. Marked words (with their forms) are saved as known with the source "Vocabulary check", so the Imported filter finds them; known words get no Anki cards, so nothing needs cleaning up in AnkiDroid. Settings offers "Undo vocabulary check", which removes the marked words not changed since.
+
+Steps, each with its check:
+
+1. **Core: building and scoring the test.** **Done when** simulated learners (knowing the top N words, with slips and some over-claiming) get at least 97 % of their marked words right while most of what they know is marked, and over-claimers are caught.
+2. **dictgen: Lexique into the dictionary,** and the Dictionaries workflow downloads it. **Done when** a sample Lexique file builds the frequency table and the core reads ranks and forms from it.
+3. **Core and FFI: marking and undo.** **Done when** a test applies a result, the words and their forms read as known, and undo removes exactly the untouched ones.
+4. **App: the check.** A card on first run and an entry in Settings, the test screen, the result with its count, and undo. **Done when** screenshots show the screens and a JVM test runs a check against the real core.
+5. **Phone check.**
+
 ### Find a book (planned 2026-11-27)
 
 **Why.** Finding something to read at the right level is the hardest part of learning by reading. Allreads already knows every word's status and can count a book's new words, but only for books already imported.
