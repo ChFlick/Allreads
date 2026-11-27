@@ -2,6 +2,9 @@
 
 Tick a step only when its **Done when** check in `IMPLEMENTATION_PLAN.md` passes. Add the date and any notes.
 
+## Phone checks before v1.0 (2026-11-27)
+Everything built since the smoke test below, as a checklist with expected results: [`PHONE_CHECKS.md`](PHONE_CHECKS.md). It includes step 19's pending check.
+
 ## Phone smoke test (2026-11-25)
 First run of the CI APK on Christoph's phone. Working: all screens, EPUB import. Found and fixed (commit f799965): tapping a word crashed (a WordStatus in rememberSaveable); translations failed (missing INTERNET permission); image-only pages showed as empty chapters (now skipped, and old imports repair themselves); new words were too loud (now a thin, faint underline only). Added: the DeepL key is checked right after saving, with the month's usage shown. Next: re-run the smoke test with these fixes.
 
