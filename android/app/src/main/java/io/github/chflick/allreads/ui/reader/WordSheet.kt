@@ -1,5 +1,24 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.sp
+import io.github.chflick.allreads.ui.StopIcon
+import io.github.chflick.allreads.ui.theme.LevelBar
+import io.github.chflick.allreads.ui.theme.Literata
+import io.github.chflick.allreads.ui.theme.LocalDarkTheme
+import io.github.chflick.allreads.ui.theme.highlight
 import androidx.compose.material3.FilledTonalButton
 import io.github.chflick.allreads.ui.settings.onMobileData
 import androidx.compose.material3.AlertDialog
@@ -166,49 +185,106 @@ fun WordSheetContent(
     val translation = draft.translation
     val context = LocalContext.current
 
-        Column(
+    Column(
         Modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // --- What the half-open drawer shows ---
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // --- What the half-open drawer shows: the word, its meaning, its level ---
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 word.saved?.displayText ?: word.text,
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            IconButton(onClick = onSpeak) {
+            // Pronunciation and part of speech, from the dictionary's first entry.
+            word.dictionary?.entries?.firstOrNull()?.let { entry ->
+                Text(
+                    listOf(entry.ipa, entry.partOfSpeech).filter { it.isNotBlank() }.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            FilledTonalIconButton(onClick = onSpeak) {
                 Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = "Say the word",
-                    tint = if (speakingWord) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (speakingWord) StopIcon else Icons.Default.PlayArrow,
+                    contentDescription = if (speakingWord) "Stop" else "Say the word",
                 )
             }
         }
         // Where an imported word came from, e.g. "Anki · French vocabulary".
         word.saved?.importedFrom?.let { SourceBadge(it) }
-        // A chip saves straight away; "New" forgets a saved word. The line under
-        // the chips confirms what a tap just did.
-        var justSaved by remember(word.text) { mutableStateOf<WordStatus?>(null) }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            wordStatusChoices.forEach { choice ->
-                StatusChip(
-                    status = choice,
-                    selected = draft.lastSaved != null && draft.status == choice,
-                    onClick = {
-                        draft.status = choice
-                        if (choice != WordStatus.New || draft.lastSaved != null) {
-                            justSaved = choice
-                            onSave(draft.fields)
-                            draft.lastSaved = draft.fields.takeIf { choice != WordStatus.New }
-                        }
-                    },
+
+        // The meaning comes first: it is what the drawer is opened for.
+        var editing by rememberSaveable(word.text) { mutableStateOf(false) }
+        if (!revealed) {
+            FilledTonalButton(onClick = { revealed = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Reveal translation")
+            }
+        } else if (editing) {
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focus.requestFocus() }
+            OutlinedTextField(
+                value = translation,
+                onValueChange = {
+                    draft.translation = it
+                    draft.typed = true
+                },
+                label = { Text("Translation") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { editing = false }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    translation.ifBlank { if (word.translating) "Translating…" else "No translation yet" },
+                    style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Default, fontWeight = FontWeight.Normal, fontSize = 19.sp),
+                    color = if (translation.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
                 )
+                IconButton(onClick = { editing = true }) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit the translation", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
+        if (revealed) when {
+            word.translationError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    word.translationError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onTranslate) { Text("Retry") }
+            }
+            word.machineTranslation != null && word.machineTranslation != translation && translation.isNotBlank() -> Text(
+                "DeepL: ${word.machineTranslation}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // One row of levels; a tap saves straight away, "New" forgets a saved word.
+        // The line under it confirms what a tap just did.
+        var justSaved by remember(word.text) { mutableStateOf<WordStatus?>(null) }
+        LevelBar(
+            selected = draft.status.takeIf { draft.lastSaved != null },
+            onSelect = { choice ->
+                draft.status = choice
+                if (choice != WordStatus.New || draft.lastSaved != null) {
+                    justSaved = choice
+                    onSave(draft.fields)
+                    draft.lastSaved = draft.fields.takeIf { choice != WordStatus.New }
+                }
+            },
+        )
         justSaved?.let { saved ->
             Text(
                 if (saved == WordStatus.New) "Forgotten" else "✓ Saved as ${saved.longLabel().lowercase()}",
@@ -234,93 +310,32 @@ fun WordSheetContent(
                 }
             }
         }
-        // Dictionary phrases around the word come first, so they show in the half-open drawer.
-        word.phraseSuggestions.forEach { choice ->
-            FilledTonalButton(onClick = { onChoosePhrase(choice) }, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "Phrase: ${choice.suggestion.text}" +
-                        if (choice.suggestion.gloss.isBlank() || !revealed) "" else " · ${choice.suggestion.gloss}",
-                    maxLines = 2,
-                )
-            }
-        }
-        if (revealed) when {
-            word.translating -> Text("Translating…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            word.translationError != null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    word.translationError,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onTranslate) { Text("Retry") }
-            }
-            word.machineTranslation != null && word.machineTranslation != translation -> Text(
-                "DeepL: ${word.machineTranslation}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        // The translation reads as text; ✎ opens the field for the rare correction.
-        var editing by rememberSaveable(word.text) { mutableStateOf(false) }
-        if (revealed && editing) {
-            val focus = remember { FocusRequester() }
-            LaunchedEffect(Unit) { focus.requestFocus() }
-            OutlinedTextField(
-                value = translation,
-                onValueChange = {
-                    draft.translation = it
-                    draft.typed = true
-                },
-                label = { Text("Translation") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { editing = false }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
-            )
-        } else if (revealed) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    translation.ifBlank { "No translation yet" },
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (translation.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { editing = true }) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit the translation")
-                }
-            }
-        }
+        // Dictionary phrases around the word, as quiet rows: visible, but not louder than the word.
+        word.phraseSuggestions.forEach { choice -> PhraseRow(choice, showGloss = revealed, onClick = { onChoosePhrase(choice) }) }
         OfflineDictionary(word, dictionaryDownload, onShowLemma, onDownloadDictionary, revealed)
-        if (!revealed) {
-            FilledTonalButton(onClick = { revealed = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("Reveal translation")
-            }
-        }
 
         // --- Pull the drawer up for more context ---
-        HorizontalDivider(Modifier.padding(top = 8.dp))
-        Text("In this sentence", style = MaterialTheme.typography.labelLarge)
-        Text(word.sentence, style = MaterialTheme.typography.bodyLarge)
-        OutlinedTextField(
-            value = draft.notes,
-            onValueChange = {
+        Text("In this sentence", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+        val dark = LocalDarkTheme.current
+        val mark = (draft.status.takeIf { draft.lastSaved != null } ?: WordStatus.New).highlight(dark)
+            ?: MaterialTheme.colorScheme.surfaceContainerHighest
+        Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium) {
+            Text(
+                sentenceWithWord(word.sentence, word.text, mark),
+                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = Literata, lineHeight = 24.sp),
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+            )
+        }
+        Column {
+            EditableRow("Notes", draft.notes, placeholder = "Add a note", singleLine = false) {
                 draft.notes = it
                 draft.typed = true
-            },
-            label = { Text("Notes") },
-            minLines = 2,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = draft.lemma,
-            onValueChange = {
+            }
+            EditableRow("Dictionary form", draft.lemma, placeholder = "Add one") {
                 draft.lemma = it
                 draft.typed = true
-            },
-            label = { Text("Dictionary form (lemma)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+            }
+        }
         word.dictionaryUrl?.let { url ->
             OutlinedButton(
                 onClick = {
@@ -332,6 +347,81 @@ fun WordSheetContent(
                 },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             ) { Text("Look up in the web dictionary") }
+        }
+    }
+}
+
+/** The sentence with the word marked in its level colour, as on the Anki card. */
+private fun sentenceWithWord(sentence: String, word: String, colour: Color): AnnotatedString = buildAnnotatedString {
+    val at = sentence.indexOf(word, ignoreCase = true)
+    if (at < 0) {
+        append(sentence)
+        return@buildAnnotatedString
+    }
+    append(sentence.substring(0, at))
+    withStyle(SpanStyle(background = colour)) { append(sentence.substring(at, at + word.length)) }
+    append(sentence.substring(at + word.length))
+}
+
+/** A dictionary phrase around the word: "Part of perle rare · rare gem   Save ›". */
+@Composable
+private fun PhraseRow(choice: PhraseChoice, showGloss: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                buildAnnotatedString {
+                    append("Part of ")
+                    withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(choice.suggestion.text) }
+                    if (showGloss && choice.suggestion.gloss.isNotBlank()) append(" · ${choice.suggestion.gloss}")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                modifier = Modifier.weight(1f),
+            )
+            Text("Save ›", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+        }
+    }
+}
+
+/** "Notes   Add a note   ✎": a value that opens for editing in place, like the translation. */
+@Composable
+private fun EditableRow(label: String, value: String, placeholder: String, singleLine: Boolean = true, onChange: (String) -> Unit) {
+    var editing by rememberSaveable(label) { mutableStateOf(false) }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    if (editing) {
+        val focus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focus.requestFocus() }
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            label = { Text(label) },
+            singleLine = singleLine,
+            minLines = if (singleLine) 1 else 2,
+            keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default),
+            keyboardActions = KeyboardActions(onDone = { editing = false }),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).focusRequester(focus),
+        )
+    } else {
+        Row(
+            Modifier.fillMaxWidth().clickable { editing = true }.padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(118.dp))
+            Text(
+                value.ifBlank { placeholder },
+                style = MaterialTheme.typography.bodyMedium,
+                fontStyle = if (value.isBlank()) FontStyle.Italic else null,
+                color = if (value.isBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(Icons.Default.Edit, contentDescription = "Edit $label", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -396,7 +486,8 @@ private fun OfflineDictionary(
                 )
             }
         }
-        lookup.entries.forEach { DictionaryEntryText(it, revealed) }
+        // The first entry's part of speech and pronunciation are in the drawer's header already.
+        lookup.entries.forEachIndexed { i, entry -> DictionaryEntryText(entry, revealed, showHeader = i > 0) }
         word.lemmaEntry?.let { (lemma, entry) ->
             HorizontalDivider()
             Text(lemma, style = MaterialTheme.typography.titleMedium)
@@ -415,9 +506,9 @@ private fun OfflineDictionary(
  * for the rest). The meanings are English, so they wait for [revealed].
  */
 @Composable
-private fun DictionaryEntryText(entry: DictionaryEntry, revealed: Boolean) {
+private fun DictionaryEntryText(entry: DictionaryEntry, revealed: Boolean, showHeader: Boolean = true) {
     var all by remember(entry) { mutableStateOf(false) }
-    Text(
+    if (showHeader) Text(
         listOf(entry.partOfSpeech, entry.ipa).filter { it.isNotBlank() }.joinToString(" · "),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -3,6 +3,8 @@ package io.github.chflick.allreads.ui.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -120,6 +122,20 @@ fun ReaderPageTheme(page: ReaderPage, content: @Composable () -> Unit) {
 }
 
 /**
+ * Literata for display text (screen titles, the drawer's word, big numbers),
+ * so the reading font is the app's voice; controls and labels stay sans.
+ */
+private val AllreadsTypography: Typography = Typography().let { base ->
+    base.copy(
+        displaySmall = base.displaySmall.copy(fontFamily = Literata),
+        headlineLarge = base.headlineLarge.copy(fontFamily = Literata, fontWeight = FontWeight.SemiBold),
+        headlineMedium = base.headlineMedium.copy(fontFamily = Literata, fontWeight = FontWeight.SemiBold),
+        headlineSmall = base.headlineSmall.copy(fontFamily = Literata, fontWeight = FontWeight.SemiBold),
+        titleLarge = base.titleLarge.copy(fontFamily = Literata, fontWeight = FontWeight.SemiBold),
+    )
+}
+
+/**
  * The app theme: Allreads' own navy and amber, or the phone's wallpaper
  * colours on Android 12+ when chosen in Settings.
  */
@@ -138,6 +154,6 @@ fun AllreadsTheme(mode: ThemeMode, wallpaperColors: Boolean = false, content: @C
         else -> LightColors
     }
     CompositionLocalProvider(LocalDarkTheme provides dark) {
-        MaterialTheme(colorScheme = colors, content = content)
+        MaterialTheme(colorScheme = colors, typography = AllreadsTypography, content = content)
     }
 }

@@ -1,6 +1,18 @@
 package io.github.chflick.allreads.ui.theme
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -61,4 +73,45 @@ fun StatusPill(status: WordStatus) {
         color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.padding(horizontal = 8.dp, vertical = 3.dp),
     )
+}
+
+/**
+ * New · 1–5 · Known · Ignore as one row of cells in their level colours, so
+ * the half-open word drawer shows all levels at once. The selected one has a
+ * dark outline; Known and Ignore are icons, with spoken descriptions.
+ */
+@Composable
+fun LevelBar(selected: WordStatus?, onSelect: (WordStatus) -> Unit, modifier: Modifier = Modifier) {
+    val dark = LocalDarkTheme.current
+    Row(modifier.fillMaxWidth().height(40.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        wordStatusChoices.forEach { status ->
+            val weight = when (status) {
+                WordStatus.New -> 1.4f
+                WordStatus.WellKnown -> 1.2f
+                else -> 1f
+            }
+            val isSelected = status == selected
+            Surface(
+                onClick = { onSelect(status) },
+                shape = MaterialTheme.shapes.small,
+                color = status.highlight(dark) ?: MaterialTheme.colorScheme.surface,
+                border = if (isSelected) {
+                    BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface)
+                } else {
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                },
+                modifier = Modifier.weight(weight).fillMaxHeight().semantics {
+                    contentDescription = status.longLabel() + if (isSelected) ", selected" else ""
+                },
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    when (status) {
+                        WordStatus.WellKnown -> Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        WordStatus.Ignored -> Text("⊘", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> Text(status.label(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+        }
+    }
 }

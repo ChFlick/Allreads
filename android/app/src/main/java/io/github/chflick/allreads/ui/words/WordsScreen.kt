@@ -18,7 +18,7 @@ import io.github.chflick.allreads.ui.SearchPill
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.VerticalDivider
-import io.github.chflick.allreads.ui.theme.StatusChip
+import io.github.chflick.allreads.ui.theme.LevelBar
 import io.github.chflick.allreads.ui.theme.StatusPill
 
 import androidx.compose.foundation.clickable
@@ -160,11 +160,7 @@ private fun TermEditor(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                wordStatusChoices.forEach { choice ->
-                    StatusChip(choice, selected = status == choice, onClick = { status = choice })
-                }
-            }
+            LevelBar(selected = status, onSelect = { status = it })
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
