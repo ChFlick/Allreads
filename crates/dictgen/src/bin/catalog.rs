@@ -15,7 +15,7 @@ use clap::Parser;
 #[derive(Debug, Parser)]
 #[command(version)]
 struct Args {
-    /// The books, one JSON object per line (id, title, author, subjects, url, popularity).
+    /// The books, one JSON object per line (id, title, author, subjects, url, popularity, year).
     #[arg(long)]
     list: PathBuf,
     /// The folder with the books as `<id>.epub`.
@@ -30,9 +30,6 @@ struct Args {
     /// Where to write the catalog (must not exist yet).
     #[arg(long)]
     output: PathBuf,
-    /// Words met fewer times in a book are kept only in its total, as new words.
-    #[arg(long, default_value_t = 2)]
-    min_count: u32,
 }
 
 fn main() -> ExitCode {
@@ -43,7 +40,6 @@ fn main() -> ExitCode {
         args.dictionary.as_deref(),
         &args.language,
         &args.output,
-        args.min_count,
     ) {
         Ok(summary) => {
             let size = std::fs::metadata(&args.output)

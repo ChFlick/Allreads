@@ -8,6 +8,7 @@
 //! much of a book is new to the reader without downloading the book. Nothing
 //! about the reader's words leaves the phone.
 
+mod pack;
 mod write;
 
 use std::collections::{HashMap, HashSet};
@@ -34,6 +35,15 @@ CREATE TABLE info (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- Every word once, by term key. Ids follow how common a word is across the
+-- catalog (0 is the most common), so packed counts stay small. A form links
+-- to its dictionary form (\"lisait\" -> \"lire\").
+CREATE TABLE word (
+    id    INTEGER PRIMARY KEY,
+    -- Unique (the writer makes sure); no index, since the app never looks a key up.
+    key   TEXT NOT NULL,
+    lemma INTEGER
+);
 CREATE TABLE book (
     -- The source's number for the book, e.g. Gutenberg's.
     id         INTEGER PRIMARY KEY,
@@ -43,25 +53,15 @@ CREATE TABLE book (
     subjects   TEXT NOT NULL,
     -- Where the EPUB is downloaded from.
     url        TEXT NOT NULL,
-    -- Downloads at the source, for sorting by popularity.
+    -- How popular the book is at its source, for sorting.
     popularity INTEGER NOT NULL,
-    -- Running words, names left out. Rare words are counted here but have
-    -- no row in book_word; they count as new.
-    words      INTEGER NOT NULL
+    -- First published, if known.
+    year       INTEGER,
+    -- Running words, names left out.
+    words      INTEGER NOT NULL,
+    -- The book's (word id, count) pairs, packed (see pack.rs).
+    counts     BLOB NOT NULL
 );
--- Every word once, by term key, with its dictionary form's id for a form
--- (\"lisait\" -> \"lire\").
-CREATE TABLE word (
-    id    INTEGER PRIMARY KEY,
-    key   TEXT NOT NULL UNIQUE,
-    lemma INTEGER REFERENCES word (id)
-);
-CREATE TABLE book_word (
-    book_id INTEGER NOT NULL,
-    word_id INTEGER NOT NULL,
-    count   INTEGER NOT NULL,
-    PRIMARY KEY (book_id, word_id)
-) WITHOUT ROWID;
 ";
 
 /// Why a catalog could not be read or written.
@@ -82,6 +82,8 @@ pub struct CatalogBook {
     pub subjects: Vec<String>,
     pub url: String,
     pub popularity: u32,
+    /// First published, if known.
+    pub year: Option<i32>,
     /// Running words, names left out.
     pub words: u64,
 }
@@ -97,9 +99,18 @@ pub struct BookFit {
     pub worth_learning: u32,
 }
 
-/// An open catalog. Its books are read once, when it is opened.
+/// A word in the catalog's word list.
+struct CatalogWord {
+    key: String,
+    /// The id of its dictionary form, for a form.
+    lemma: Option<u32>,
+}
+
+/// An open catalog. Its books and word list are read once, when it is opened;
+/// the packed counts are read when they are needed.
 pub struct Catalog {
     conn: Connection,
+    words: Vec<CatalogWord>,
     language_code: String,
     count_stamp: String,
     books: Vec<CatalogBook>,
@@ -132,6 +143,7 @@ impl Catalog {
         let language_code = info("language")?;
         let count_stamp = info("count_stamp")?;
         let books = read_books(&conn)?;
+        let words = read_words(&conn)?;
         let search_text = books
             .iter()
             .map(|book| {
@@ -145,6 +157,7 @@ impl Catalog {
             .collect();
         Ok(Self {
             conn,
+            words,
             language_code,
             count_stamp,
             books,
@@ -192,59 +205,81 @@ impl Catalog {
     /// dictionary form's, as for library books.
     ///
     /// # Errors
-    /// Returns a database error if the catalog cannot be read.
+    /// Returns `Format` for damaged counts and `Sql` if the catalog cannot be read.
     pub fn fit(&self, statuses: &HashMap<String, Status>) -> Result<Vec<BookFit>, CatalogError> {
-        // Each word's status and the id of the word it is counted under (its
-        // dictionary form's, if it has one).
-        let mut words: HashMap<i64, (Option<Status>, i64)> = HashMap::new();
-        let mut keys: HashMap<i64, String> = HashMap::new();
-        let mut lemmas: HashMap<i64, i64> = HashMap::new();
-        {
-            let mut statement = self.conn.prepare("SELECT id, key, lemma FROM word")?;
-            let mut rows = statement.query([])?;
-            while let Some(row) = rows.next()? {
-                let id: i64 = row.get(0)?;
-                keys.insert(id, row.get(1)?);
-                if let Some(lemma) = row.get::<_, Option<i64>>(2)? {
-                    lemmas.insert(id, lemma);
-                }
+        let states = self.word_states(statuses);
+        let mut fits = Vec::with_capacity(self.books.len());
+        for book in &self.books {
+            let mut tally = Tally::default();
+            for (id, count) in self.counts(book.id)? {
+                let (status, group) = states.get(id as usize).copied().unwrap_or((None, id));
+                tally.add(status, group, count);
+            }
+            fits.push(tally.into_fit(book.id));
+        }
+        Ok(fits)
+    }
+
+    /// The new words of a book that occur most often, by dictionary form, with
+    /// how often they occur: what reading it would teach. At most `limit`.
+    ///
+    /// # Errors
+    /// Returns `Format` for an unknown book or damaged counts, and `Sql` if
+    /// the catalog cannot be read.
+    pub fn top_new_words(
+        &self,
+        book_id: i64,
+        statuses: &HashMap<String, Status>,
+        limit: usize,
+    ) -> Result<Vec<(String, u32)>, CatalogError> {
+        let states = self.word_states(statuses);
+        let mut new_groups: HashMap<u32, u32> = HashMap::new();
+        for (id, count) in self.counts(book_id)? {
+            let (status, group) = states.get(id as usize).copied().unwrap_or((None, id));
+            if status.is_none() {
+                *new_groups.entry(group).or_default() += count;
             }
         }
-        for (&id, key) in &keys {
-            let lemma = lemmas.get(&id).copied();
-            let own = statuses.get(key).copied();
-            let status = own.or_else(|| {
-                lemma
-                    .and_then(|l| keys.get(&l))
-                    .and_then(|k| statuses.get(k).copied())
-            });
-            words.insert(id, (status, lemma.unwrap_or(id)));
-        }
-
-        let mut tallies: HashMap<i64, Tally> = HashMap::new();
-        let mut statement = self
-            .conn
-            .prepare("SELECT book_id, word_id, count FROM book_word")?;
-        let mut rows = statement.query([])?;
-        while let Some(row) = rows.next()? {
-            let book_id: i64 = row.get(0)?;
-            let word_id: i64 = row.get(1)?;
-            let count: u32 = row.get(2)?;
-            let (status, group) = words.get(&word_id).copied().unwrap_or((None, word_id));
-            tallies
-                .entry(book_id)
-                .or_default()
-                .add(status, group, count);
-        }
-
-        Ok(self
-            .books
-            .iter()
-            .map(|book| {
-                let tally = tallies.remove(&book.id).unwrap_or_default();
-                tally.into_fit(book)
-            })
+        let mut top: Vec<(u32, u32)> = new_groups.into_iter().collect();
+        // Most frequent first; ties by word id, i.e. the more common word first.
+        top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        Ok(top
+            .into_iter()
+            .take(limit)
+            .filter_map(|(id, count)| self.words.get(id as usize).map(|w| (w.key.clone(), count)))
             .collect())
+    }
+
+    /// Each word's status (its own, else its dictionary form's) and the id it
+    /// is counted under (its dictionary form's, if it has one), by word id.
+    fn word_states(&self, statuses: &HashMap<String, Status>) -> Vec<(Option<Status>, u32)> {
+        self.words
+            .iter()
+            .enumerate()
+            .map(|(id, word)| {
+                let id = u32::try_from(id).unwrap_or(u32::MAX);
+                let lemma_key = word
+                    .lemma
+                    .and_then(|l| self.words.get(l as usize))
+                    .map(|l| &l.key);
+                let status = statuses
+                    .get(&word.key)
+                    .or_else(|| lemma_key.and_then(|k| statuses.get(k)))
+                    .copied();
+                (status, word.lemma.unwrap_or(id))
+            })
+            .collect()
+    }
+
+    /// A book's (word id, count) pairs.
+    fn counts(&self, book_id: i64) -> Result<Vec<(u32, u32)>, CatalogError> {
+        let bytes: Vec<u8> = self
+            .conn
+            .prepare_cached("SELECT counts FROM book WHERE id = ?1")?
+            .query_row([book_id], |row| row.get(0))
+            .optional()?
+            .ok_or_else(|| CatalogError::Format(format!("no book {book_id}")))?;
+        pack::unpack(&bytes)
     }
 }
 
@@ -254,13 +289,14 @@ struct Tally {
     words: u64,
     new_words: u64,
     learning_words: u64,
-    groups: HashSet<i64>,
+    /// The dictionary forms met.
+    groups: HashSet<u32>,
     /// Running count of each new word, by dictionary form.
-    new_groups: HashMap<i64, u32>,
+    new_groups: HashMap<u32, u32>,
 }
 
 impl Tally {
-    fn add(&mut self, status: Option<Status>, group: i64, count: u32) {
+    fn add(&mut self, status: Option<Status>, group: u32, count: u32) {
         self.words += u64::from(count);
         self.groups.insert(group);
         match status {
@@ -273,23 +309,20 @@ impl Tally {
         }
     }
 
-    fn into_fit(self, book: &CatalogBook) -> BookFit {
-        // Rare words have no rows: they count as new, each its own word
-        // (exact when only words met once are left out).
-        let rare = book.words.saturating_sub(self.words);
+    fn into_fit(self, book_id: i64) -> BookFit {
         let worth_learning = self
             .new_groups
             .values()
             .filter(|&&count| count >= WORTH_LEARNING_COUNT)
             .count();
         BookFit {
-            book_id: book.id,
+            book_id,
             difficulty: Difficulty {
-                words: self.words + rare,
-                new_words: self.new_words + rare,
+                words: self.words,
+                new_words: self.new_words,
                 learning_words: self.learning_words,
-                unique_words: self.groups.len() as u64 + rare,
-                unique_new_words: self.new_groups.len() as u64 + rare,
+                unique_words: self.groups.len() as u64,
+                unique_new_words: self.new_groups.len() as u64,
             },
             worth_learning: u32::try_from(worth_learning).unwrap_or(u32::MAX),
         }
@@ -298,7 +331,7 @@ impl Tally {
 
 fn read_books(conn: &Connection) -> Result<Vec<CatalogBook>, CatalogError> {
     let mut statement = conn.prepare(
-        "SELECT id, title, author, subjects, url, popularity, words FROM book
+        "SELECT id, title, author, subjects, url, popularity, year, words FROM book
          ORDER BY popularity DESC, title",
     )?;
     let rows = statement.query_map([], |row| {
@@ -310,11 +343,30 @@ fn read_books(conn: &Connection) -> Result<Vec<CatalogBook>, CatalogError> {
             subjects: subjects.lines().map(str::to_string).collect(),
             url: row.get(4)?,
             popularity: row.get(5)?,
+            year: row.get(6)?,
             // Stored as SQLite's signed integer; never negative.
-            words: u64::try_from(row.get::<_, i64>(6)?).unwrap_or(0),
+            words: u64::try_from(row.get::<_, i64>(7)?).unwrap_or(0),
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// The word list, by id. Ids run from 0 without gaps (see the writer).
+fn read_words(conn: &Connection) -> Result<Vec<CatalogWord>, CatalogError> {
+    let mut statement = conn.prepare("SELECT id, key, lemma FROM word ORDER BY id")?;
+    let mut rows = statement.query([])?;
+    let mut words = Vec::new();
+    while let Some(row) = rows.next()? {
+        let id: i64 = row.get(0)?;
+        if id != words.len() as i64 {
+            return Err(CatalogError::Format("gaps in the word list".into()));
+        }
+        words.push(CatalogWord {
+            key: row.get(1)?,
+            lemma: row.get(2)?,
+        });
+    }
+    Ok(words)
 }
 
 /// Text for searching: lower case, without accents ("Misérables" → "miserables").

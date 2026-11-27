@@ -37,6 +37,8 @@ struct ListedBook {
     url: String,
     #[serde(default)]
     popularity: u32,
+    #[serde(default)]
+    year: Option<i32>,
 }
 
 /// What a build did, for the log.
@@ -61,7 +63,6 @@ pub fn build_catalog(
     dictionary: Option<&Path>,
     language: &str,
     output: &Path,
-    min_count: u32,
 ) -> Result<CatalogSummary, String> {
     let preset = builtin_presets()
         .map_err(|e| e.to_string())?
@@ -88,8 +89,7 @@ pub fn build_catalog(
     };
     let lookup_ref: &dyn Fn(&str) -> Result<WordKinds, DictionaryError> = &lookup;
 
-    let mut writer =
-        CatalogWriter::create(output, language, &stamp, min_count).map_err(|e| e.to_string())?;
+    let mut writer = CatalogWriter::create(output, language, &stamp).map_err(|e| e.to_string())?;
     let mut summary = CatalogSummary::default();
     let lines = BufReader::new(File::open(list).map_err(|e| format!("{}: {e}", list.display()))?);
     for (number, line) in lines.lines().enumerate() {
@@ -121,6 +121,7 @@ pub fn build_catalog(
             subjects: listed.subjects,
             url: listed.url,
             popularity: listed.popularity,
+            year: listed.year,
         };
         writer.add_book(&book, &words).map_err(|e| e.to_string())?;
         summary.books += 1;
@@ -168,7 +169,7 @@ mod tests {
         std::fs::write(
             &list,
             concat!(
-                r#"{"id": 1, "title": "Tiny", "author": "A", "subjects": ["Tales"], "url": "https://example.org/1.epub", "popularity": 5}"#,
+                r#"{"id": 1, "title": "Tiny", "author": "A", "subjects": ["Tales"], "url": "https://example.org/1.epub", "popularity": 5, "year": 1912}"#,
                 "\n",
                 r#"{"id": 2, "title": "Layout", "url": "https://example.org/2.epub", "popularity": 9}"#,
                 "\n\n",
@@ -178,7 +179,7 @@ mod tests {
         )
         .unwrap();
         let output = dir.path().join("fr.sqlite");
-        let summary = build_catalog(&list, &books, None, "fr", &output, 1).unwrap();
+        let summary = build_catalog(&list, &books, None, "fr", &output).unwrap();
         assert_eq!(summary.books, 2);
         assert_eq!(summary.skipped.len(), 1);
         assert!(summary.skipped[0].starts_with("3 (Missing)"));
@@ -209,7 +210,6 @@ mod tests {
             None,
             "fr",
             &dir.path().join("out.sqlite"),
-            1,
         )
         .unwrap_err();
         assert!(error.contains("line 1"), "{error}");

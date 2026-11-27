@@ -19,13 +19,14 @@ fn book(id: i64, title: &str, author: &str, subjects: &[&str], popularity: u32) 
         subjects: subjects.iter().map(|s| (*s).to_string()).collect(),
         url: format!("https://example.org/{id}.epub"),
         popularity,
+        year: Some(1900 + i32::try_from(id).unwrap()),
     }
 }
 
 /// Two small French books: a tale and a novel with a name and a form.
-fn sample_catalog(dir: &tempfile::TempDir, min_count: u32) -> Catalog {
+fn sample_catalog(dir: &tempfile::TempDir) -> Catalog {
     let path = dir.path().join("fr.sqlite");
-    let mut writer = CatalogWriter::create(&path, "fr", "1.3/fr-en 2026-11-25", min_count).unwrap();
+    let mut writer = CatalogWriter::create(&path, "fr", "1.3/fr-en 2026-11-25").unwrap();
     let tale: HashMap<String, BookWord> = [
         ("le", word(10, None, false)),
         ("chat", word(6, None, false)),
@@ -76,13 +77,14 @@ fn sample_catalog(dir: &tempfile::TempDir, min_count: u32) -> Catalog {
 #[test]
 fn a_catalog_lists_its_books_most_popular_first() {
     let dir = tempfile::tempdir().unwrap();
-    let catalog = sample_catalog(&dir, 1);
+    let catalog = sample_catalog(&dir);
     assert_eq!(catalog.language_code(), "fr");
     assert_eq!(catalog.count_stamp(), "1.3/fr-en 2026-11-25");
     let titles: Vec<&str> = catalog.books().iter().map(|b| b.title.as_str()).collect();
     assert_eq!(titles, ["Les Misérables", "Contes du lundi"]);
     let novel = &catalog.books()[0];
     assert_eq!(novel.subjects, ["Historical fiction", "Paris"]);
+    assert_eq!(novel.year, Some(1902));
     // The name is left out of the running words.
     assert_eq!(novel.words, 35);
 }
@@ -90,7 +92,7 @@ fn a_catalog_lists_its_books_most_popular_first() {
 #[test]
 fn search_ignores_case_and_accents_and_needs_every_word() {
     let dir = tempfile::tempdir().unwrap();
-    let catalog = sample_catalog(&dir, 1);
+    let catalog = sample_catalog(&dir);
     let ids = |query: &str| {
         catalog
             .search(query)
@@ -108,7 +110,7 @@ fn search_ignores_case_and_accents_and_needs_every_word() {
 #[test]
 fn the_fit_counts_saved_words_and_their_dictionary_forms() {
     let dir = tempfile::tempdir().unwrap();
-    let catalog = sample_catalog(&dir, 1);
+    let catalog = sample_catalog(&dir);
     let statuses: HashMap<String, Status> = [
         ("le".to_string(), Status::WellKnown),
         ("chat".to_string(), Status::Learning(2)),
@@ -140,23 +142,38 @@ fn the_fit_counts_saved_words_and_their_dictionary_forms() {
 }
 
 #[test]
-fn rare_words_left_out_of_the_file_still_count_as_new() {
+fn the_most_frequent_new_words_come_by_dictionary_form() {
     let dir = tempfile::tempdir().unwrap();
-    // "souris" occurs once in the tale, so it has no row with min_count 2.
-    let catalog = sample_catalog(&dir, 2);
-    let fits = catalog.fit(&HashMap::new()).unwrap();
-    let tale = fits.iter().find(|f| f.book_id == 1).unwrap();
-    assert_eq!(tale.difficulty.words, 20);
-    assert_eq!(tale.difficulty.new_words, 20);
-    // le, chat, dormir (for "dort"), and the rare "souris"
-    assert_eq!(tale.difficulty.unique_new_words, 4);
+    let catalog = sample_catalog(&dir);
+    let statuses: HashMap<String, Status> = [("le".to_string(), Status::WellKnown)]
+        .into_iter()
+        .collect();
+    // "dormait" (5) and "dormir" (2) count together as "dormir".
+    assert_eq!(
+        catalog.top_new_words(2, &statuses, 5).unwrap(),
+        [("misère".to_string(), 8), ("dormir".to_string(), 7)]
+    );
+    assert_eq!(catalog.top_new_words(2, &statuses, 1).unwrap().len(), 1);
+    assert!(catalog.top_new_words(99, &statuses, 5).is_err());
+}
+
+#[test]
+fn a_book_added_twice_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut writer = CatalogWriter::create(&dir.path().join("fr.sqlite"), "fr", "x").unwrap();
+    writer
+        .add_book(&book(1, "Un", "A", &[], 1), &HashMap::new())
+        .unwrap();
+    assert!(writer
+        .add_book(&book(1, "Un", "A", &[], 1), &HashMap::new())
+        .is_err());
 }
 
 #[test]
 fn a_catalog_of_another_format_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fr.sqlite");
-    CatalogWriter::create(&path, "fr", "x", 1)
+    CatalogWriter::create(&path, "fr", "x")
         .unwrap()
         .finish()
         .unwrap();
