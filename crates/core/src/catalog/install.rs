@@ -193,7 +193,6 @@ pub fn remove(dir: &Path, language: &str) -> Result<bool, CatalogError> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::io::Write as _;
 
     use flate2::write::GzEncoder;
     use flate2::Compression;
