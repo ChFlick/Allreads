@@ -4,6 +4,9 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.material3.Shapes
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -136,6 +139,18 @@ private val AllreadsTypography: Typography = Typography().let { base ->
 }
 
 /**
+ * Three corner sizes across the app: 4 for covers and badges, 8 for chips and
+ * small controls, 16 for cards and sheets (pills and buttons stay round).
+ */
+private val AllreadsShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(16.dp),
+)
+
+/**
  * The app theme: Allreads' own navy and amber, or the phone's wallpaper
  * colours on Android 12+ when chosen in Settings.
  */
@@ -154,6 +169,6 @@ fun AllreadsTheme(mode: ThemeMode, wallpaperColors: Boolean = false, content: @C
         else -> LightColors
     }
     CompositionLocalProvider(LocalDarkTheme provides dark) {
-        MaterialTheme(colorScheme = colors, typography = AllreadsTypography, content = content)
+        MaterialTheme(colorScheme = colors, typography = AllreadsTypography, shapes = AllreadsShapes, content = content)
     }
 }

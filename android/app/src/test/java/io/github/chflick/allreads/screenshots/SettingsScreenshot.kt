@@ -34,8 +34,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
 /**
- * The whole Settings page, light and dark, on one very tall screen so every
- * section shows. Uses the real screen with fakes for AnkiDroid and speech.
+ * The Settings overview, light and dark. Uses the real screen with fakes for AnkiDroid and speech.
  */
 @RunWith(Parameterized::class)
 class SettingsScreenshot(private val dark: Boolean) {
@@ -52,7 +51,6 @@ class SettingsScreenshot(private val dark: Boolean) {
     val paparazzi = Paparazzi(
         deviceConfig = DeviceConfig.PIXEL_5.copy(
             nightMode = if (dark) NightMode.NIGHT else NightMode.NOTNIGHT,
-            screenHeight = 5600,
         ),
         environment = detectEnvironment().copy(compileSdkVersion = 34),
         maxPercentDifference = 0.1,

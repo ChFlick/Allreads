@@ -103,3 +103,7 @@ Names are left out of a book's share of new words and get no "new" underline in 
 ## 2026-11-26: importing words from Anki
 
 Import is for colouring the reader and avoiding duplicate cards, not for managing Anki cards: Allreads never edits imported notes and never sends words imported from Anki to AnkiDroid. Otherwise imported words are regular words (editable, re-levelled, forgotten as usual) with a badge saying where they came from. Sources in order: AnkiDroid on the phone, text/CSV, `.apkg`. The word field (and an optional meaning field) is picked by hand per note type with cleaned samples; cleanup strips HTML, media, brackets, anything after a separator, and a leading article. Status is one chosen level, or follows Anki's review progress (mature → Known). The more known status always wins; re-imports add and upgrade, never remove. The import sits in the Words tab's menu. Plan: IMPLEMENTATION_PLAN, "Import words from Anki".
+
+## 2026-11-27: design review
+
+The changes from the design review were all taken (see POLISH). Words list swipes: left raises a level (as the reader's double tap), right forgets the word (its AnkiDroid card stays); both need half the row's width and offer Undo. Undo after a forget restores the word's level, translation, notes and dictionary form, but not its card sentence or import badge.

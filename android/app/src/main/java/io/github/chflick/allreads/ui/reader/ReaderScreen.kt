@@ -1,5 +1,9 @@
 package io.github.chflick.allreads.ui.reader
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
@@ -101,7 +105,13 @@ import uniffi.allreads_ffi.WordStatus
 /** Step 12: a chapter, one sentence per row, each with its own translate button. */
 @OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
-fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -> Unit) {
+fun ReaderScreen(
+    viewModel: ReaderViewModel,
+    settings: AppSettings,
+    onBack: () -> Unit,
+    textSettings: (@Composable () -> Unit)? = null,
+) {
+    var showTextSettings by rememberSaveable { mutableStateOf(false) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val speaking by viewModel.speaking.collectAsStateWithLifecycle()
     val downloads by viewModel.dictionaryDownloads.collectAsStateWithLifecycle()
@@ -170,6 +180,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
         actions = ReaderActions(
             onBack = onBack,
             onMarkRestKnown = viewModel::markRestKnown,
+            onTextSettings = if (textSettings != null) { { showTextSettings = true } } else null,
             onWord = viewModel::select,
             onRaise = viewModel::raiseLevel,
             onSelectRange = viewModel::selectRange,
@@ -181,6 +192,14 @@ fun ReaderScreen(viewModel: ReaderViewModel, settings: AppSettings, onBack: () -
         ),
     )
 
+    if (showTextSettings && textSettings != null) {
+        ModalBottomSheet(onDismissRequest = { showTextSettings = false }) {
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp).verticalScroll(rememberScrollState())) {
+                Text("Text and page", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 12.dp))
+                textSettings()
+            }
+        }
+    }
     state.selected?.let { word ->
         WordSheet(
             word = word,
@@ -532,6 +551,8 @@ internal fun chapterNewPercent(rows: List<ReaderRow>): Double? {
 data class ReaderActions(
     val onBack: () -> Unit = {},
     val onMarkRestKnown: (block: Int) -> Unit = {},
+    /** Opens the "Text and page" sheet; null hides the menu item. */
+    val onTextSettings: (() -> Unit)? = null,
     val onWord: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
     val onRaise: (ReaderRow, tokenIndex: Int) -> Unit = { _, _ -> },
     val onSelectRange: (ReaderRow, IntRange) -> Unit = { _, _ -> },
@@ -587,6 +608,15 @@ fun ReaderContent(
                             Icon(Icons.Default.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            actions.onTextSettings?.let { open ->
+                                DropdownMenuItem(
+                                    text = { Text("Text and page") },
+                                    onClick = {
+                                        menuOpen = false
+                                        open()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text("Mark the rest of this chapter as known") },
                                 onClick = {

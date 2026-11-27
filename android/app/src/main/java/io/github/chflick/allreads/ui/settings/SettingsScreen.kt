@@ -1,5 +1,22 @@
 package io.github.chflick.allreads.ui.settings
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import io.github.chflick.allreads.anki.AnkiAccess
+import io.github.chflick.allreads.ui.theme.Literata
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -64,142 +81,307 @@ import kotlinx.coroutines.withContext
 
 /** Translation, AnkiDroid, reading, read-aloud and appearance settings. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+/** The pages Settings opens from its overview. */
+private enum class SettingsPage(val title: String) {
+    Translation("Translation"),
+    Anki("AnkiDroid"),
+    Dictionaries("Dictionaries"),
+    Text("Text and page"),
+    ReadAloud("Read aloud"),
+    Appearance("Appearance"),
+    About("About Allreads"),
+}
+
+/**
+ * Settings: a short overview whose rows say what is set ("DeepL · into
+ * English"), each opening its page. Problems show in the summary line, so
+ * nobody has to open a page to find them.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(services: Services) {
-    val settings by services.settings.settings.collectAsStateWithLifecycle()
-    val hasKey by services.apiKeys.hasDeeplKey.collectAsStateWithLifecycle()
-
-    Scaffold(topBar = { TopAppBar(title = { Text("Settings") }) }) { padding ->
+    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    BackHandler(enabled = page != null) { page = null }
+    val open = page
+    if (open == null) {
+        SettingsOverview(services, onOpen = { page = it })
+        return
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(open.title) },
+                navigationIcon = {
+                    IconButton(onClick = { page = null }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Settings")
+                    }
+                },
+            )
+        },
+    ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Section("Translation")
-            DeeplKeyField(services, hasKey)
-            SettingsDropdown(
-                label = "Translate into",
-                selected = languageName(settings.nativeLanguage),
-                options = AppSettings.nativeLanguages.map { languageName(it) to it },
-                onSelect = { code -> services.settings.update { it.copy(nativeLanguage = code) } },
-            )
-
-            HorizontalDivider()
-            Section("AnkiDroid")
-            AnkiSection(services)
-
-            HorizontalDivider()
-            Section("Reading")
-            // Sliders move a local value while dragging and save once on release.
-            var fontScale by remember(settings.fontScale) { mutableFloatStateOf(settings.fontScale) }
-            var lineSpacing by remember(settings.lineSpacing) { mutableFloatStateOf(settings.lineSpacing) }
-            Text("Text size: ${(fontScale * 100).toInt()} %", style = MaterialTheme.typography.labelLarge)
-            Slider(
-                value = fontScale,
-                onValueChange = { fontScale = it },
-                onValueChangeFinished = { services.settings.update { it.copy(fontScale = fontScale) } },
-                valueRange = AppSettings.fontScales,
-                colors = calmSliderColors(),
-            )
-            Text("Line spacing: ${"%.1f".format(lineSpacing)}", style = MaterialTheme.typography.labelLarge)
-            Slider(
-                value = lineSpacing,
-                onValueChange = { lineSpacing = it },
-                onValueChangeFinished = { services.settings.update { it.copy(lineSpacing = lineSpacing) } },
-                valueRange = AppSettings.lineSpacings,
-                colors = calmSliderColors(),
-            )
-            Text("Font", style = MaterialTheme.typography.labelLarge)
-            ChoiceChips(
-                choices = ReadingFont.entries,
-                selected = settings.readingFont,
-                label = { it.label },
-                onSelect = { font -> services.settings.update { it.copy(readingFont = font) } },
-                font = { it.family() },
-            )
-            Text("Page", style = MaterialTheme.typography.labelLarge)
-            ChoiceChips(
-                choices = ReaderPage.entries,
-                selected = settings.readerPage,
-                label = { it.label },
-                onSelect = { page -> services.settings.update { it.copy(readerPage = page) } },
-            )
-            SwitchSetting(
-                title = "Double-tap to raise a level",
-                description = "A double tap on a word you are learning moves it up one level (5 becomes known) " +
-                    "without opening the drawer. Single taps then wait a moment for a possible second tap.",
-                checked = settings.doubleTapRaises,
-                onCheckedChange = { on -> services.settings.update { it.copy(doubleTapRaises = on) } },
-            )
-            // The preview shows the page as the reader will: its font, size, spacing and colours.
-            ReaderPageTheme(settings.readerPage) {
-                Surface(
-                    color = MaterialTheme.colorScheme.background,
-                    shape = MaterialTheme.shapes.medium,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        "Il était une fois un renard qui errait dans la forêt la nuit.",
-                        fontFamily = settings.readingFont.family(),
-                        fontSize = 19.sp * fontScale,
-                        lineHeight = lineSpacing.em,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                }
-            }
-
-            HorizontalDivider()
-            Section("Dictionaries")
-            DictionarySection(services.dictionaries)
-            SwitchSetting(
-                title = "Meanings in the book's language",
-                description = "The word drawer shows synonyms and dictionary forms first. Translations stay hidden " +
-                    "until you tap Reveal; they still load in the background, so revealing is instant.",
-                checked = settings.hideTranslations,
-                onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
-            )
-
-            HorizontalDivider()
-            Section("Read aloud")
-            SpeechSection(services)
-
-            HorizontalDivider()
-            Section("Appearance")
-            ChoiceChips(
-                choices = ThemeMode.entries,
-                selected = settings.theme,
-                label = { it.name },
-                onSelect = { mode -> services.settings.update { it.copy(theme = mode) } },
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SwitchSetting(
-                    title = "Use the wallpaper's colours",
-                    checked = settings.wallpaperColors,
-                    onCheckedChange = { on -> services.settings.update { it.copy(wallpaperColors = on) } },
-                )
-            }
-
-            HorizontalDivider()
-            Section("About")
-            // Short lines instead of one dense paragraph.
-            val uri = LocalUriHandler.current
-            Text("Allreads ${BuildConfig.VERSION_NAME} · MIT licence", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "Privacy: translations go to DeepL with your own key, and cards go to AnkiDroid on this phone. " +
-                    "Nothing else leaves it.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                "Thanks to Lukaisu (language rules), Wiktionary via kaikki.org (dictionaries, CC BY-SA 4.0) " +
-                    "and Literata (reading font, SIL Open Font License).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(onClick = { uri.openUri("https://github.com/ChFlick/Allreads") }) {
-                Text("Source code and issues on GitHub")
+            when (open) {
+                SettingsPage.Translation -> TranslationSettings(services)
+                SettingsPage.Anki -> AnkiSection(services)
+                SettingsPage.Dictionaries -> DictionarySettings(services)
+                SettingsPage.Text -> ReadingSettings(services)
+                SettingsPage.ReadAloud -> SpeechSection(services)
+                SettingsPage.Appearance -> AppearanceSettings(services)
+                SettingsPage.About -> AboutSettings()
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsOverview(services: Services, onOpen: (SettingsPage) -> Unit) {
+    val settings by services.settings.settings.collectAsStateWithLifecycle()
+    val keyHint by services.apiKeys.deeplKeyHint.collectAsStateWithLifecycle()
+    val dictionaries by services.dictionaries.list.collectAsStateWithLifecycle()
+    val waitingOrNull by services.ankiSync.waiting.collectAsStateWithLifecycle()
+    val waiting = waitingOrNull ?: 0
+    val ankiAccess by produceState<AnkiAccess?>(null) { value = withContext(Dispatchers.IO) { services.anki.access() } }
+    LaunchedEffect(Unit) { services.dictionaries.refresh() }
+
+    Scaffold(topBar = { TopAppBar(title = { Text("Settings") }) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+            GroupLabel("Words and cards")
+            OverviewRow("文A", "Translation", onClick = { onOpen(SettingsPage.Translation) },
+                summary = if (keyHint == null) "No DeepL key yet" else "DeepL · into ${languageName(settings.nativeLanguage)}",
+                problem = keyHint == null)
+            OverviewRow("A", "AnkiDroid", onClick = { onOpen(SettingsPage.Anki) },
+                summary = when (ankiAccess) {
+                    null -> ""
+                    AnkiAccess.NotInstalled -> "AnkiDroid is not installed"
+                    AnkiAccess.NeedsPermission -> "Not connected yet"
+                    AnkiAccess.Connected -> if (waiting > 0) "Connected · $waiting words waiting" else "Connected"
+                },
+                problem = ankiAccess == AnkiAccess.NeedsPermission || waiting > 0)
+            OverviewRow("D", "Dictionaries", onClick = { onOpen(SettingsPage.Dictionaries) },
+                summary = dictionaries.installed.takeIf { it.isNotEmpty() }
+                    ?.joinToString { "${languageName(it.pair.substringBefore('-'))} → English" }
+                    ?.let { "$it installed" } ?: "None installed")
+            GroupLabel("Reading")
+            OverviewRow("Aa", "Text and page", onClick = { onOpen(SettingsPage.Text) },
+                summary = "${settings.readingFont.label} · ${(settings.fontScale * 100).toInt()} % · ${settings.readerPage.label}",
+                serif = true)
+            OverviewRow("▶", "Read aloud", onClick = { onOpen(SettingsPage.ReadAloud) },
+                summary = "${"%.1f".format(settings.speechRate)}× · speak on tap ${if (settings.speakOnTap) "on" else "off"}")
+            OverviewRow("◐", "Appearance", onClick = { onOpen(SettingsPage.Appearance) },
+                summary = "${settings.theme.name} theme · ${if (settings.wallpaperColors) "wallpaper colours" else "app colours"}")
+            GroupLabel("About")
+            OverviewRow("i", "About Allreads", onClick = { onOpen(SettingsPage.About) },
+                summary = "${BuildConfig.VERSION_NAME} · licences · source code")
+        }
+    }
+}
+
+@Composable
+private fun GroupLabel(text: String) {
+    Text(
+        text.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 4.dp),
+    )
+}
+
+/** One overview row: a small tile, the page's name, and a summary of what is set. */
+@Composable
+private fun OverviewRow(icon: String, title: String, summary: String, onClick: () -> Unit, problem: Boolean = false, serif: Boolean = false) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(38.dp).background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.medium),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                icon,
+                style = MaterialTheme.typography.titleSmall,
+                fontFamily = if (serif) Literata else null,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (summary.isNotEmpty()) {
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (problem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun TranslationSettings(services: Services) {
+    val settings by services.settings.settings.collectAsStateWithLifecycle()
+    val hasKey by services.apiKeys.hasDeeplKey.collectAsStateWithLifecycle()
+    DeeplKeyField(services, hasKey)
+    SettingsDropdown(
+        label = "Translate into",
+        selected = languageName(settings.nativeLanguage),
+        options = AppSettings.nativeLanguages.map { languageName(it) to it },
+        onSelect = { code -> services.settings.update { it.copy(nativeLanguage = code) } },
+    )
+}
+
+@Composable
+private fun DictionarySettings(services: Services) {
+    val settings by services.settings.settings.collectAsStateWithLifecycle()
+    DictionarySection(services.dictionaries)
+    SwitchSetting(
+        title = "Meanings in the book's language",
+        description = "The word drawer shows synonyms and dictionary forms first. Translations stay hidden " +
+            "until you tap Reveal; they still load in the background, so revealing is instant.",
+        checked = settings.hideTranslations,
+        onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
+    )
+}
+
+/**
+ * Text size, spacing, font, page colours and the double tap, with a preview of
+ * the page. Also the reader's "Text and page" sheet, so it can be changed while reading.
+ */
+@Composable
+fun ReadingSettings(services: Services) {
+    val settings by services.settings.settings.collectAsStateWithLifecycle()
+    // Sliders move a local value while dragging and save once on release.
+    var fontScale by remember(settings.fontScale) { mutableFloatStateOf(settings.fontScale) }
+    var lineSpacing by remember(settings.lineSpacing) { mutableFloatStateOf(settings.lineSpacing) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // The preview shows the page as the reader will: its font, size, spacing and colours.
+        ReaderPageTheme(settings.readerPage) {
+            Surface(
+                color = MaterialTheme.colorScheme.background,
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    "Il était une fois un renard qui errait dans la forêt la nuit.",
+                    fontFamily = settings.readingFont.family(),
+                    fontSize = 19.sp * fontScale,
+                    lineHeight = lineSpacing.em,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+        }
+        Text("Text size: ${(fontScale * 100).toInt()} %", style = MaterialTheme.typography.labelLarge)
+        Slider(
+            value = fontScale,
+            onValueChange = { fontScale = it },
+            onValueChangeFinished = { services.settings.update { it.copy(fontScale = fontScale) } },
+            valueRange = AppSettings.fontScales,
+            colors = calmSliderColors(),
+        )
+        Text("Line spacing: ${"%.1f".format(lineSpacing)}", style = MaterialTheme.typography.labelLarge)
+        Slider(
+            value = lineSpacing,
+            onValueChange = { lineSpacing = it },
+            onValueChangeFinished = { services.settings.update { it.copy(lineSpacing = lineSpacing) } },
+            valueRange = AppSettings.lineSpacings,
+            colors = calmSliderColors(),
+        )
+        Text("Font", style = MaterialTheme.typography.labelLarge)
+        ChoiceChips(
+            choices = ReadingFont.entries,
+            selected = settings.readingFont,
+            label = { it.label },
+            onSelect = { font -> services.settings.update { it.copy(readingFont = font) } },
+            font = { it.family() },
+        )
+        Text("Page", style = MaterialTheme.typography.labelLarge)
+        ChoiceChips(
+            choices = ReaderPage.entries,
+            selected = settings.readerPage,
+            label = { it.label },
+            onSelect = { page -> services.settings.update { it.copy(readerPage = page) } },
+        )
+        SwitchSetting(
+            title = "Double-tap to raise a level",
+            description = "A double tap on a word you are learning moves it up one level (5 becomes known) " +
+                "without opening the drawer. Single taps then wait a moment for a possible second tap.",
+            checked = settings.doubleTapRaises,
+            onCheckedChange = { on -> services.settings.update { it.copy(doubleTapRaises = on) } },
+        )
+    }
+}
+
+@Composable
+private fun AppearanceSettings(services: Services) {
+    val settings by services.settings.settings.collectAsStateWithLifecycle()
+    ChoiceChips(
+        choices = ThemeMode.entries,
+        selected = settings.theme,
+        label = { it.name },
+        onSelect = { mode -> services.settings.update { it.copy(theme = mode) } },
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        SwitchSetting(
+            title = "Use the wallpaper's colours",
+            checked = settings.wallpaperColors,
+            onCheckedChange = { on -> services.settings.update { it.copy(wallpaperColors = on) } },
+        )
+    }
+}
+
+/** What Allreads builds on, and under which licence. */
+private val credits = listOf(
+    "Literata" to "reading font · SIL Open Font License 1.1",
+    "Wiktionary, via kaikki.org" to "dictionary data · CC BY-SA 4.0",
+    "Lukaisu" to "language rules · MIT / Unlicense",
+    "DeepL" to "translations, with your own key",
+    "AnkiDroid API" to "the connection to AnkiDroid",
+    "Android Jetpack and Compose" to "Apache License 2.0",
+    "Rust libraries" to "rusqlite, scraper, rbook, zip, ruzstd, encoding_rs, ureq, uniffi · MIT / Apache 2.0",
+)
+
+@Composable
+private fun AboutSettings() {
+    val uri = LocalUriHandler.current
+    val context = LocalContext.current
+    var showOfl by remember { mutableStateOf(false) }
+    Text("Allreads ${BuildConfig.VERSION_NAME} · MIT licence", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "Privacy: translations go to DeepL with your own key, and cards go to AnkiDroid on this phone. " +
+            "Nothing else leaves it.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    TextButton(onClick = { uri.openUri("https://github.com/ChFlick/Allreads") }, contentPadding = PaddingValues(0.dp)) {
+        Text("Source code and issues on GitHub")
+    }
+    HorizontalDivider()
+    Text("Built with", style = MaterialTheme.typography.titleSmall)
+    credits.forEach { (name, what) ->
+        Column {
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+            Text(what, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    TextButton(onClick = { showOfl = true }, contentPadding = PaddingValues(0.dp)) { Text("Read the Literata licence") }
+    if (showOfl) {
+        val text = remember {
+            runCatching { context.assets.open("licences/Literata-OFL.txt").bufferedReader().use { it.readText() } }
+                .getOrDefault("The licence text is missing from this build.")
+        }
+        AlertDialog(
+            onDismissRequest = { showOfl = false },
+            title = { Text("SIL Open Font License") },
+            text = { Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { showOfl = false }) { Text("Close") } },
+        )
     }
 }
 
@@ -210,6 +392,7 @@ internal fun calmSliderColors() = SliderDefaults.colors(
     inactiveTickColor = MaterialTheme.colorScheme.onSurfaceVariant,
 )
 
+@Suppress("unused")
 @Composable
 private fun Section(title: String) {
     Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)

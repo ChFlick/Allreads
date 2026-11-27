@@ -39,6 +39,7 @@ import io.github.chflick.allreads.ui.library.LibraryScreen
 import io.github.chflick.allreads.ui.library.LibraryViewModel
 import io.github.chflick.allreads.ui.reader.ReaderScreen
 import io.github.chflick.allreads.ui.reader.ReaderViewModel
+import io.github.chflick.allreads.ui.settings.ReadingSettings
 import io.github.chflick.allreads.ui.settings.SettingsScreen
 import io.github.chflick.allreads.ui.theme.AllreadsTheme
 import io.github.chflick.allreads.ui.theme.ReaderPageTheme
@@ -111,7 +112,7 @@ private fun AllreadsNavigation(services: Services) {
         // open() ignores repeat calls for the same opening (e.g. on rotation).
         remember(bookId, opens) { reader.open(bookId, opens) }
         ReaderPageTheme(settings.readerPage) {
-            ReaderScreen(reader, settings, onBack = { openBookId = null })
+            ReaderScreen(reader, settings, onBack = { openBookId = null }, textSettings = { ReadingSettings(services) })
         }
         return
     }
