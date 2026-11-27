@@ -8,6 +8,7 @@
 //! much of a book is new to the reader without downloading the book. Nothing
 //! about the reader's words leaves the phone.
 
+mod install;
 mod pack;
 mod write;
 
@@ -20,6 +21,10 @@ use unicode_normalization::UnicodeNormalization;
 use crate::db::progress::Difficulty;
 use crate::db::term::Status;
 
+pub use install::{
+    install, installed, installed_path, parse_catalog_manifest, remove, valid_language,
+    AvailableCatalog, InstalledCatalog,
+};
 pub use write::{CatalogWriter, NewCatalogBook};
 
 /// The catalog file format. A catalog of another version is refused, so the
@@ -71,6 +76,10 @@ pub enum CatalogError {
     Sql(#[from] rusqlite::Error),
     #[error("not a usable catalog: {0}")]
     Format(String),
+    #[error("the catalog download is damaged")]
+    ChecksumMismatch,
+    #[error("catalog file error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// A book in a catalog.
@@ -113,6 +122,7 @@ pub struct Catalog {
     words: Vec<CatalogWord>,
     language_code: String,
     count_stamp: String,
+    built: String,
     books: Vec<CatalogBook>,
     /// Each book's title, author and subjects for searching: lower case, no accents.
     search_text: Vec<String>,
@@ -142,6 +152,7 @@ impl Catalog {
         }
         let language_code = info("language")?;
         let count_stamp = info("count_stamp")?;
+        let built = info("built")?;
         let books = read_books(&conn)?;
         let words = read_words(&conn)?;
         let search_text = books
@@ -160,6 +171,7 @@ impl Catalog {
             words,
             language_code,
             count_stamp,
+            built,
             books,
             search_text,
         })
@@ -176,6 +188,12 @@ impl Catalog {
     #[must_use]
     pub fn count_stamp(&self) -> &str {
         &self.count_stamp
+    }
+
+    /// When the catalog was built, e.g. `2026-12-01`.
+    #[must_use]
+    pub fn built(&self) -> &str {
+        &self.built
     }
 
     /// Every book, most popular first.

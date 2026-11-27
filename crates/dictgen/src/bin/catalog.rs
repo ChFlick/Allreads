@@ -30,6 +30,9 @@ struct Args {
     /// Where to write the catalog (must not exist yet).
     #[arg(long)]
     output: PathBuf,
+    /// The build date stored in the file, e.g. `2026-12-01`.
+    #[arg(long, default_value = "unknown")]
+    built: String,
 }
 
 fn main() -> ExitCode {
@@ -40,6 +43,7 @@ fn main() -> ExitCode {
         args.dictionary.as_deref(),
         &args.language,
         &args.output,
+        &args.built,
     ) {
         Ok(summary) => {
             let size = std::fs::metadata(&args.output)

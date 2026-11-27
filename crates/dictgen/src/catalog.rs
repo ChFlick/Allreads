@@ -63,6 +63,7 @@ pub fn build_catalog(
     dictionary: Option<&Path>,
     language: &str,
     output: &Path,
+    built: &str,
 ) -> Result<CatalogSummary, String> {
     let preset = builtin_presets()
         .map_err(|e| e.to_string())?
@@ -89,7 +90,8 @@ pub fn build_catalog(
     };
     let lookup_ref: &dyn Fn(&str) -> Result<WordKinds, DictionaryError> = &lookup;
 
-    let mut writer = CatalogWriter::create(output, language, &stamp).map_err(|e| e.to_string())?;
+    let mut writer =
+        CatalogWriter::create(output, language, &stamp, built).map_err(|e| e.to_string())?;
     let mut summary = CatalogSummary::default();
     let lines = BufReader::new(File::open(list).map_err(|e| format!("{}: {e}", list.display()))?);
     for (number, line) in lines.lines().enumerate() {
@@ -179,7 +181,7 @@ mod tests {
         )
         .unwrap();
         let output = dir.path().join("fr.sqlite");
-        let summary = build_catalog(&list, &books, None, "fr", &output).unwrap();
+        let summary = build_catalog(&list, &books, None, "fr", &output, "2026-12-01").unwrap();
         assert_eq!(summary.books, 2);
         assert_eq!(summary.skipped.len(), 1);
         assert!(summary.skipped[0].starts_with("3 (Missing)"));
@@ -210,6 +212,7 @@ mod tests {
             None,
             "fr",
             &dir.path().join("out.sqlite"),
+            "x",
         )
         .unwrap_err();
         assert!(error.contains("line 1"), "{error}");

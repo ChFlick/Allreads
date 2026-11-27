@@ -602,3 +602,76 @@ impl DictionaryLookup {
         }
     }
 }
+
+/// A book in a downloaded catalog, with how well it fits the saved words.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct CatalogBook {
+    /// The source's number for the book.
+    pub id: i64,
+    pub title: String,
+    pub author: String,
+    pub subjects: Vec<String>,
+    /// Where `Get` downloads the EPUB from.
+    pub url: String,
+    pub year: Option<i32>,
+    pub popularity: u32,
+    /// The same numbers as a library book's difficulty.
+    pub difficulty: BookDifficulty,
+    /// New words (by dictionary form) met five times or more in the book.
+    pub worth_learning: u32,
+}
+
+/// A new word of a catalog book and how often it occurs there.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CatalogWord {
+    /// The word's dictionary form, as a term key.
+    pub word: String,
+    pub count: u32,
+}
+
+/// A book catalog offered for download.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct AvailableCatalog {
+    pub language_code: String,
+    pub url: String,
+    pub built: String,
+    pub books: u32,
+    pub download_bytes: u64,
+    pub installed_bytes: u64,
+    /// Pass back to `install_catalog`.
+    pub sha256: String,
+}
+
+impl From<allreads_core::catalog::AvailableCatalog> for AvailableCatalog {
+    fn from(c: allreads_core::catalog::AvailableCatalog) -> Self {
+        AvailableCatalog {
+            language_code: c.language,
+            url: c.url,
+            built: c.built,
+            books: c.books,
+            download_bytes: c.download_bytes,
+            installed_bytes: c.installed_bytes,
+            sha256: c.sha256,
+        }
+    }
+}
+
+/// An installed book catalog, for Settings.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct InstalledCatalog {
+    pub language_code: String,
+    pub built: String,
+    pub books: u32,
+    pub bytes: u64,
+}
+
+impl From<allreads_core::catalog::InstalledCatalog> for InstalledCatalog {
+    fn from(c: allreads_core::catalog::InstalledCatalog) -> Self {
+        InstalledCatalog {
+            language_code: c.language,
+            built: c.built,
+            books: c.books,
+            bytes: c.bytes,
+        }
+    }
+}

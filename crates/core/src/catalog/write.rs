@@ -50,7 +50,8 @@ pub struct CatalogWriter {
 
 impl CatalogWriter {
     /// Creates a new catalog at `path` for books in `language_code`, counted
-    /// with `count_stamp` (see [`crate::word_tally::count_stamp`]).
+    /// with `count_stamp` (see [`crate::word_tally::count_stamp`]) and built
+    /// on `built` (a date, e.g. `2026-12-01`).
     ///
     /// # Errors
     /// Returns `Format` if a file already exists at `path`, and `Sql` if it
@@ -59,6 +60,7 @@ impl CatalogWriter {
         path: &Path,
         language_code: &str,
         count_stamp: &str,
+        built: &str,
     ) -> Result<Self, CatalogError> {
         if path.exists() {
             return Err(CatalogError::Format(format!(
@@ -72,6 +74,7 @@ impl CatalogWriter {
             ("format", FORMAT_VERSION.to_string()),
             ("language", language_code.to_string()),
             ("count_stamp", count_stamp.to_string()),
+            ("built", built.to_string()),
         ] {
             conn.execute(
                 "INSERT INTO info (key, value) VALUES (?1, ?2)",

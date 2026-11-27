@@ -26,7 +26,8 @@ fn book(id: i64, title: &str, author: &str, subjects: &[&str], popularity: u32) 
 /// Two small French books: a tale and a novel with a name and a form.
 fn sample_catalog(dir: &tempfile::TempDir) -> Catalog {
     let path = dir.path().join("fr.sqlite");
-    let mut writer = CatalogWriter::create(&path, "fr", "1.3/fr-en 2026-11-25").unwrap();
+    let mut writer =
+        CatalogWriter::create(&path, "fr", "1.3/fr-en 2026-11-25", "2026-12-01").unwrap();
     let tale: HashMap<String, BookWord> = [
         ("le", word(10, None, false)),
         ("chat", word(6, None, false)),
@@ -79,7 +80,7 @@ fn a_catalog_lists_its_books_most_popular_first() {
     let dir = tempfile::tempdir().unwrap();
     let catalog = sample_catalog(&dir);
     assert_eq!(catalog.language_code(), "fr");
-    assert_eq!(catalog.count_stamp(), "1.3/fr-en 2026-11-25");
+    assert_eq!(catalog.count_stamp(), "1.3/fr-en 2026-11-25", "2026-12-01");
     let titles: Vec<&str> = catalog.books().iter().map(|b| b.title.as_str()).collect();
     assert_eq!(titles, ["Les Misérables", "Contes du lundi"]);
     let novel = &catalog.books()[0];
@@ -160,7 +161,7 @@ fn the_most_frequent_new_words_come_by_dictionary_form() {
 #[test]
 fn a_book_added_twice_is_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = CatalogWriter::create(&dir.path().join("fr.sqlite"), "fr", "x").unwrap();
+    let mut writer = CatalogWriter::create(&dir.path().join("fr.sqlite"), "fr", "x", "x").unwrap();
     writer
         .add_book(&book(1, "Un", "A", &[], 1), &HashMap::new())
         .unwrap();
@@ -173,7 +174,7 @@ fn a_book_added_twice_is_refused() {
 fn a_catalog_of_another_format_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("fr.sqlite");
-    CatalogWriter::create(&path, "fr", "x")
+    CatalogWriter::create(&path, "fr", "x", "x")
         .unwrap()
         .finish()
         .unwrap();
