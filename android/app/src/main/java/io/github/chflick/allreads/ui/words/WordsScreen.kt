@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.background
@@ -305,6 +307,28 @@ fun WordsContent(
     onRaise: (SavedTerm) -> Unit = {},
     onForget: (SavedTerm) -> Unit = {},
 ) {
+    // A swipe to the right only asks; forgetting happens after "Forget", so a
+    // stray swipe while scrolling loses nothing.
+    var toForget by remember { mutableStateOf<SavedTerm?>(null) }
+    toForget?.let { term ->
+        AlertDialog(
+            onDismissRequest = { toForget = null },
+            title = { Text("Forget “${term.displayText}”?") },
+            text = {
+                Text(
+                    "It is removed from your words and shows as new again. " +
+                        "If it has a card in AnkiDroid, the card is suspended after a minute.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    toForget = null
+                    onForget(term)
+                }) { Text("Forget") }
+            },
+            dismissButton = { TextButton(onClick = { toForget = null }) { Text("Cancel") } },
+        )
+    }
     Scaffold(
         // A slim header like the library's: the search, then one row of chips
         // whose labels carry the counts.
@@ -360,7 +384,7 @@ fun WordsContent(
                     }
                 }
                 items(visible, key = { it.id }) { term ->
-                    SwipeableTermRow(term, onClick = { onEdit(term) }, onRaise = { onRaise(term) }, onForget = { onForget(term) })
+                    SwipeableTermRow(term, onClick = { onEdit(term) }, onRaise = { onRaise(term) }, onForget = { toForget = term })
                 }
             }
         }
