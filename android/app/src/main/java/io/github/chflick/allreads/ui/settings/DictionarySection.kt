@@ -1,6 +1,7 @@
 package io.github.chflick.allreads.ui.settings
 
 import io.github.chflick.allreads.ui.AppText
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import android.content.Context
@@ -116,10 +117,10 @@ fun CatalogSection(catalogs: Catalogs) {
             name = Locale.forLanguageTag(language).getDisplayLanguage(Locale.ENGLISH),
             download = downloads[language],
             installedText = installed?.let {
-                stringResource(R.string.book_list_installed, it.books.toInt(), megabytes(it.bytes.toLong()), it.built)
+                pluralStringResource(R.plurals.book_list_installed, it.books.toInt(), it.books.toInt(), megabytes(it.bytes.toLong()), it.built)
             },
             availableText = available?.let {
-                stringResource(R.string.book_list_available, it.books.toInt(), megabytes(it.downloadBytes.toLong()))
+                pluralStringResource(R.plurals.book_list_available, it.books.toInt(), it.books.toInt(), megabytes(it.downloadBytes.toLong()))
             },
             downloadBytes = available?.downloadBytes?.toLong() ?: 0,
             onDownload = { available?.let(catalogs::download) },

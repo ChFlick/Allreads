@@ -1,6 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
 import io.github.chflick.allreads.ui.AppText
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -100,7 +101,7 @@ fun AnkiImportScreen(viewModel: AnkiImportViewModel, onClose: () -> Unit) {
                     StatusSection(state, onFollow = viewModel::followReviews, onLevel = viewModel::chooseLevel)
                     if (state.importing) LinearProgressIndicator(Modifier.fillMaxWidth())
                     Button(onClick = viewModel::import, enabled = state.canImport, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.import_notes, "%,d".format(state.noteCount)))
+                        Text(pluralStringResource(R.plurals.import_notes, state.noteCount, "%,d".format(state.noteCount)))
                     }
                 }
                 state.summary?.let { summary ->

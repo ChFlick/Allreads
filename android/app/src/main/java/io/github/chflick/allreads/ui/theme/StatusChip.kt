@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
@@ -68,7 +69,8 @@ fun StatusPill(status: WordStatus, short: Boolean = false) {
         Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
     }
     Text(
-        if (short) status.label().replace("Ignore", "Ignored") else status.longLabel(),
+        // Short pills show a learning level as its number; the others keep their name.
+        if (short && status is WordStatus.Learning) status.label() else status.longLabel(),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -101,7 +103,9 @@ fun LevelBar(selected: WordStatus?, onSelect: (WordStatus) -> Unit, modifier: Mo
                     BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 },
                 modifier = Modifier.weight(weight).fillMaxHeight().semantics {
-                    contentDescription = status.longLabel() + if (isSelected) ", selected" else ""
+                    contentDescription = status.longLabel()
+                    // TalkBack says "selected" itself, in the phone's language.
+                    this.selected = isSelected
                 },
             ) {
                 Box(contentAlignment = Alignment.Center) {

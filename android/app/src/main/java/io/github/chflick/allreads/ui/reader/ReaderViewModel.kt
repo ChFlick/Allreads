@@ -120,9 +120,10 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     /**
      * Opens a book at its saved position. `openId` identifies one opening of
      * the reader: calling again with the same id (after a rotation) does nothing.
+     * Returns true when a new opening started.
      */
-    fun open(bookId: Long, openId: Int) {
-        if (this.bookId == bookId && this.openId == openId) return
+    fun open(bookId: Long, openId: Int): Boolean {
+        if (this.bookId == bookId && this.openId == openId) return false
         this.bookId = bookId
         this.openId = openId
         openJob?.cancel()
@@ -148,6 +149,7 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
             // names and word forms in the background; the marks follow once done.
             if (runCatching { repository.ensureBookCounted(bookId) }.getOrDefault(false)) reloadStatuses()
         }
+        return true
     }
 
     private suspend fun load(index: UInt, startBlock: Int) {

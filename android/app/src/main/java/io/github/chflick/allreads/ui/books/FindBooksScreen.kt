@@ -53,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -157,7 +158,16 @@ fun FindBooksContent(
     onDownloadList: (AvailableCatalog) -> Unit = {},
 ) {
     val view = state.view
-    BackHandler(onBack = onClose)
+    val focus = LocalFocusManager.current
+    // Back first clears a search, as in the library, then closes the screen.
+    BackHandler {
+        if (view.query.isNotEmpty()) {
+            onView(view.copy(query = ""))
+            focus.clearFocus()
+        } else {
+            onClose()
+        }
+    }
     Scaffold(
         topBar = {
             Column {
@@ -265,7 +275,7 @@ private fun SortChip(sort: CatalogSort, onSort: (CatalogSort) -> Unit) {
             label = { Text(sort.label) },
             leadingIcon = { Icon(SortIcon, contentDescription = null, modifier = Modifier.size(18.dp)) },
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            modifier = Modifier.semantics { contentDescription = AppText.get(R.string.sort_books_by, sort.label.lowercase()) },
+            modifier = Modifier.semantics { contentDescription = AppText.get(R.string.sort_books_now_by, sort.label.lowercase()) },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             CatalogSort.entries.forEach { choice ->
@@ -323,7 +333,7 @@ private fun CatalogRow(
 private fun FitLine(book: CatalogBook) {
     val percent = book.difficulty.newPercent
     Row(verticalAlignment = Alignment.CenterVertically) {
-        DotLabel(difficultyColour(percent), AppText.get(R.string.percent_new, newPercentText(percent)))
+        DotLabel(difficultyColour(percent), AppText.get(R.string.new_label, newPercentText(percent)))
         if (book.worthLearning > 0u) {
             Text(
                 " · " + AppText.get(R.string.to_learn, book.worthLearning.toInt()),

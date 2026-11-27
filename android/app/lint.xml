@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- UniFFI's generated bindings use java.lang.ref.Cleaner only after
+         checking at run time that it exists (Android 13+), and fall back to
+         JNA's cleaner otherwise. -->
+    <issue id="NewApi">
+        <ignore path="build/generated/uniffi/**" />
+    </issue>
+    <!-- Rules from AnkiDroid's own lint checks, which come with its API
+         library and are written for AnkiDroid's codebase (its Crowdin
+         translations and its collection clock), not for this app. -->
+    <issue id="DuplicateCrowdInStrings" severity="ignore" />
+    <issue id="DirectSystemCurrentTimeMillisUsage" severity="ignore" />
+</lint>

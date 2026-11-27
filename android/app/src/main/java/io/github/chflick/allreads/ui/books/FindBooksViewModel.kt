@@ -67,13 +67,15 @@ class FindBooksViewModel(
     /**
      * Starts a fresh state for a new opening of the screen; repeat calls for
      * the same opening (e.g. on rotation) keep it. The books load on [reload].
+     * Returns true when a new opening started.
      */
-    fun open(session: Int) {
-        if (session == this.session) return
+    fun open(session: Int): Boolean {
+        if (session == this.session) return false
         this.session = session
         searchJob?.cancel()
         loadJob?.cancel()
         _state.value = FindBooksState()
+        return true
     }
 
     /** Reads the installed book lists again, e.g. after one was downloaded. */

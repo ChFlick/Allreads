@@ -153,7 +153,7 @@ fun ReaderScreen(
     LaunchedEffect(state.markedKnown) {
         val marked = state.markedKnown ?: return@LaunchedEffect
         viewModel.markedKnownShown()
-        snackbar.offerUndo(AppText.get(R.string.marked_words_as_known, marked.termIds.size), SnackbarDuration.Long) {
+        snackbar.offerUndo(AppText.plural(R.plurals.marked_words_as_known, marked.termIds.size, marked.termIds.size), SnackbarDuration.Long) {
             viewModel.undoMarkKnown(marked)
         }
     }
@@ -704,6 +704,13 @@ fun ReaderContent(
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
+        // A big chapter takes a moment to open; show that something is coming.
+        if (state.rows.isEmpty() && state.book != null) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().padding(padding),

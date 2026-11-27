@@ -2,7 +2,7 @@
     <string name="app_name">Allreads</string>
     <string name="text_and_page">Text and page</string>
     <string name="settings">Settings</string>
-    <string name="il_tait_une_fois_un">Il était une fois un renard qui errait dans la forêt la nuit.</string>
+    <string name="il_tait_une_fois_un" translatable="false">Il était une fois un renard qui errait dans la forêt la nuit.</string>
     <string name="text_size">Text size: %1$s %%</string>
     <string name="line_spacing">Line spacing: %1$s</string>
     <string name="font">Font</string>
@@ -109,7 +109,6 @@
     <string name="text_6">%1$s %2$s</string>
     <string name="import_from_anki_2">Import from Anki</string>
     <string name="which_field_holds_the_word">Which field holds the word?</string>
-    <string name="import_notes">Import %1$s notes</string>
     <string name="done">Done</string>
     <string name="words_you_study_in_anki">Words you study in Anki show as known or learning in the reader. Your Anki cards are not changed.</string>
     <string name="to_read_decks_from_ankidroid">To read decks from AnkiDroid, connect it in Settings first.</string>
@@ -133,7 +132,6 @@
     <string name="deepl_into">DeepL · into %1$s</string>
     <string name="ankidroid_is_not_installed">AnkiDroid is not installed</string>
     <string name="not_connected_yet">Not connected yet</string>
-    <string name="connected_words_waiting">Connected · %1$s words waiting</string>
     <string name="connected">Connected</string>
     <string name="english">%1$s → English</string>
     <string name="none_installed">None installed</string>
@@ -182,8 +180,6 @@
     <string name="creates">Creates “%1$s”.</string>
     <string name="top_level">Top level</string>
     <string name="they_are_deleted_from_ankidroid">They are deleted from AnkiDroid with their review history. This cannot be undone. In Anki they are the notes tagged “%1$s”.</string>
-    <string name="t_1_word_waiting_for_ankidroid">1 word waiting for AnkiDroid</string>
-    <string name="words_waiting_for_ankidroid">%1$s words waiting for AnkiDroid</string>
     <string name="looking_for_dictionaries">Looking for dictionaries…</string>
     <string name="no_dictionaries_yet">No dictionaries yet.</string>
     <string name="download_on_the_phone">%1$s download, %2$s on the phone</string>
@@ -221,7 +217,6 @@
     <string name="dictionary_form">Dictionary form</string>
     <string name="add_one">Add one</string>
     <string name="part_of">"Part of "</string>
-    <string name="marked_words_as_known">Marked %1$s words as known</string>
     <string name="no_voice_for_this_language">No voice for this language on the phone</string>
     <string name="get_a_voice_2">Get a voice</string>
     <string name="stop_reading">Stop reading</string>
@@ -299,11 +294,10 @@
     <string name="voice_offline">offline</string>
     <string name="voice_needs_network">needs network</string>
     <string name="the_key_works_usage">✓ The key works · %1$,d of %2$,d characters used this month</string>
-    <string name="speech_summary_on">%1$.1f× · speak on tap on</string>
-    <string name="speech_summary_off">%1$.1f× · speak on tap off</string>
+    <string name="speech_summary_on">Speed %1$.1f× · words spoken on tap</string>
+    <string name="speech_summary_off">Speed %1$.1f×</string>
     <string name="known_this_week">+%1$,d this week</string>
     <string name="learning_count">Learning (%1$,d)</string>
-    <string name="chart_starts_tomorrow">%1$,d words being learned. The chart starts tomorrow.</string>
     <string name="note_type">Note type %1$s</string>
     <string name="could_not_load_dictionaries">Could not load the list of dictionaries.</string>
     <string name="field_n">Field %1$s</string>
@@ -312,8 +306,6 @@
     <string name="word_forgotten">%1$s forgotten</string>
     <string name="word_level_change">%1$s: %2$s</string>
     <string name="book_lists">Book lists</string>
-    <string name="book_list_available">%1$d books · %2$s download</string>
-    <string name="book_list_installed">%1$d books · %2$s · built %3$s</string>
     <string name="book_lists_explained">For Find a book: public-domain books with their words counted, so each shows how much of it is new to you. Nothing about your words leaves the phone.</string>
     <string name="this_book_list_cannot_be_used">This book list cannot be used. Download it again.</string>
     <string name="find_a_book">Find a book</string>
@@ -326,7 +318,6 @@
     <string name="sort_popular">Popular</string>
     <string name="sort_shortest">Shortest</string>
     <string name="search_books_authors_subjects">Search titles, authors, subjects</string>
-    <string name="percent_new">%1$s new</string>
     <string name="to_learn">%1$,d to learn</string>
     <string name="thousand_words">%1$dk words</string>
     <string name="get_book">Get</string>
@@ -336,6 +327,33 @@
     <string name="no_book_list_yet">No book list for %1$s yet</string>
     <string name="book_list_offer">Download the list of free %1$s books (%2$s). It says how much of each book is new to you.</string>
     <string name="no_book_lists_published">No book lists are published yet. They will appear in Settings → Dictionaries.</string>
-    <string name="sort_books_by">Sort books, now by %1$s</string>
     <string name="book_source_line">Public domain · %1$s</string>
+    <plurals name="import_notes">
+        <item quantity="one">Import %1$s note</item>
+        <item quantity="other">Import %1$s notes</item>
+    </plurals>
+    <plurals name="connected_words_waiting">
+        <item quantity="one">Connected · %1$d word waiting</item>
+        <item quantity="other">Connected · %1$d words waiting</item>
+    </plurals>
+    <plurals name="words_waiting_for_ankidroid">
+        <item quantity="one">%1$d word waiting for AnkiDroid</item>
+        <item quantity="other">%1$d words waiting for AnkiDroid</item>
+    </plurals>
+    <plurals name="marked_words_as_known">
+        <item quantity="one">Marked %1$d word as known</item>
+        <item quantity="other">Marked %1$d words as known</item>
+    </plurals>
+    <plurals name="chart_starts_tomorrow">
+        <item quantity="one">%1$,d word being learned. The chart starts tomorrow.</item>
+        <item quantity="other">%1$,d words being learned. The chart starts tomorrow.</item>
+    </plurals>
+    <plurals name="book_list_available">
+        <item quantity="one">%1$d book · %2$s download</item>
+        <item quantity="other">%1$d books · %2$s download</item>
+    </plurals>
+    <plurals name="book_list_installed">
+        <item quantity="one">%1$d book · %2$s · built %3$s</item>
+        <item quantity="other">%1$d books · %2$s · built %3$s</item>
+    </plurals>
 </resources>

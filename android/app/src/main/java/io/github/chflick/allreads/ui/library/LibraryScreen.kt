@@ -368,7 +368,7 @@ private fun MetaLine(book: BookSummary, difficulty: BookDifficulty?, short: Bool
         Text(where, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val percent = difficulty?.takeIf { it.words > 0uL }?.newPercent ?: return@Row
         Text(" · ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        DotLabel(difficultyColour(percent), AppText.get(R.string.percent_new, newPercentText(percent)))
+        DotLabel(difficultyColour(percent), AppText.get(R.string.new_label, newPercentText(percent)))
     }
 }
 

@@ -171,7 +171,7 @@ private fun SettingsOverview(services: Services, onOpen: (SettingsPage) -> Unit)
                     null -> ""
                     AnkiAccess.NotInstalled -> AppText.get(R.string.ankidroid_is_not_installed)
                     AnkiAccess.NeedsPermission -> AppText.get(R.string.not_connected_yet)
-                    AnkiAccess.Connected -> if (waiting > 0) AppText.get(R.string.connected_words_waiting, waiting) else AppText.get(R.string.connected)
+                    AnkiAccess.Connected -> if (waiting > 0) AppText.plural(R.plurals.connected_words_waiting, waiting, waiting) else AppText.get(R.string.connected)
                 },
                 problem = ankiAccess == AnkiAccess.NeedsPermission || waiting > 0)
             OverviewRow("D", AppText.get(R.string.dictionaries), onClick = { onOpen(SettingsPage.Dictionaries) },

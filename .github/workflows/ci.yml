@@ -88,7 +88,7 @@ jobs:
       # Gradle runs cargo-ndk (three ABIs, API 26), generates the Kotlin
       # bindings, builds the APK, and runs the Kotlin tests against the host
       # build of the Rust library.
-      - name: Build the APK and run the Kotlin tests
+      - name: Build the APK, run the Kotlin tests and lint
         working-directory: android
         run: |
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
@@ -102,7 +102,7 @@ jobs:
           if [ -n "${ALLREADS_PREVIEW:-}" ]; then
             ALLREADS_PREVIEW="$(printf '%s' "$ALLREADS_PREVIEW" | tr -c 'a-zA-Z0-9' '-' | tr 'A-Z' 'a-z')"
           fi
-          ./gradlew assembleDebug testDebugUnitTest --no-daemon
+          ./gradlew assembleDebug testDebugUnitTest lintDebug --no-daemon
 
       - name: Check the APK holds the Rust library for all three ABIs
         run: |

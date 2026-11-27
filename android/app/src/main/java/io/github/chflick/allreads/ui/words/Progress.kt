@@ -71,7 +71,7 @@ fun ProgressCard(progress: WordProgress, modifier: Modifier = Modifier) {
                 }
             } else {
                 Text(
-                    AppText.get(R.string.chart_starts_tomorrow, now.learning.toInt()),
+                    AppText.plural(R.plurals.chart_starts_tomorrow, now.learning.toInt(), now.learning.toInt()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

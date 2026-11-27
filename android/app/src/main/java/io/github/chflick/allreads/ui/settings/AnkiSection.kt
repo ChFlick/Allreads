@@ -324,7 +324,7 @@ private fun WaitingWords(services: Services, access: AnkiAccess?) {
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            if (count == 1) AppText.get(R.string.t_1_word_waiting_for_ankidroid) else AppText.get(R.string.words_waiting_for_ankidroid, count),
+            AppText.plural(R.plurals.words_waiting_for_ankidroid, count, count),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
