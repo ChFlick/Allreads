@@ -37,11 +37,14 @@ import io.github.chflick.allreads.ui.theme.AllreadsTheme
 import io.github.chflick.allreads.ui.words.WordsContent
 import io.github.chflick.allreads.ui.words.WordsState
 import org.junit.After
+import io.github.chflick.allreads.ui.books.FindBooksContent
+import io.github.chflick.allreads.ui.books.FindBooksState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import uniffi.allreads_ffi.BookSummary
+import uniffi.allreads_ffi.CatalogBook
 import uniffi.allreads_ffi.BookDifficulty
 import uniffi.allreads_ffi.DayCount
 import uniffi.allreads_ffi.WordProgress
@@ -160,10 +163,46 @@ class Screenshots(private val dark: Boolean) {
             onEdit = {},
         )
     }
+
+    @Test
+    fun findBooks() = shot {
+        FindBooksContent(
+            state = FindBooksState(
+                languages = listOf("fr"),
+                language = "fr",
+                loading = false,
+                books = Samples.catalog,
+                imported = mapOf(3L to 9L),
+                getting = setOf(4L),
+            ),
+            snackbar = SnackbarHostState(),
+        )
+    }
 }
 
 /** Sample data: La Fontaine's fable "Le Coq et la Perle", in the public domain. */
 private object Samples {
+    /** Public-domain French books as a catalog lists them, against a learner's words. */
+    val catalog = listOf(
+        catalogBook(1, "Le Petit Chose", "Alphonse Daudet", 1868, 78_000, 3.2, 140),
+        catalogBook(2, "Lettres de mon moulin", "Alphonse Daudet", 1869, 61_000, 4.6, 210),
+        catalogBook(3, "La Guerre des boutons", "Louis Pergaud", 1912, 72_000, 7.8, 390),
+        catalogBook(4, "L’Aiguille creuse", "Maurice Leblanc", 1909, 68_000, 9.4, 460),
+        catalogBook(5, "Le Comte de Monte-Cristo", "Alexandre Dumas", 1844, 464_000, 11.1, 1_380),
+        catalogBook(6, "Germinal", "Émile Zola", 1885, 175_000, 14.3, 1_020),
+    )
+
+    private fun catalogBook(id: Long, title: String, author: String, year: Int, words: Long, percent: Double, worth: Int) =
+        CatalogBook(
+            id = id, title = title, author = author, subjects = emptyList(),
+            url = "https://ws-export.wmcloud.org/?format=epub&page=$id", year = year, popularity = 0u,
+            difficulty = BookDifficulty(
+                words = words.toULong(), newWords = (words * percent / 100).toLong().toULong(), learningWords = 0u,
+                uniqueWords = 1u, uniqueNewWords = 1u, newPercent = percent,
+            ),
+            worthLearning = worth.toUInt(),
+        )
+
     val books = listOf(
         // In the library's order: recently read first, then unread, newest first.
         BookSummary(1, "Fables", "Jean de La Fontaine", "fr", null, 12u, 3u, 0u, 1_764_100_000_000),

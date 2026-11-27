@@ -98,6 +98,18 @@ fun BookCover(book: BookSummary, width: Dp) {
     }
 }
 
+/** A cover drawn from the title and author, for books not in the library yet ("Find a book"). */
+@Composable
+fun DrawnCover(title: String, author: String?, width: Dp) {
+    GeneratedCover(
+        title,
+        author,
+        Modifier.size(width = width, height = width * 1.5f)
+            .shadow(3.dp, MaterialTheme.shapes.extraSmall)
+            .clip(MaterialTheme.shapes.extraSmall),
+    )
+}
+
 /** The title in serif and the author below it, on a colour picked from the title. */
 @Composable
 private fun GeneratedCover(title: String, author: String?, modifier: Modifier) {

@@ -14,6 +14,7 @@ fun describe(error: Throwable): String = when (error) {
     is AllreadsException.UnsupportedFile -> AppText.get(R.string.only_epub_and_txt_books_2)
     is AllreadsException.DictionaryDamaged -> AppText.get(R.string.the_download_was_damaged_try)
     is AllreadsException.DictionaryInvalid -> AppText.get(R.string.this_dictionary_file_cannot_be)
+    is AllreadsException.CatalogInvalid -> AppText.get(R.string.this_book_list_cannot_be_used)
     is java.io.IOException -> AppText.get(R.string.the_download_failed_check_the)
     else -> error.message ?: error::class.simpleName ?: AppText.get(R.string.something_went_wrong)
 }

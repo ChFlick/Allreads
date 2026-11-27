@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.chflick.allreads.data.Catalogs
 import io.github.chflick.allreads.data.Dictionaries
 import io.github.chflick.allreads.data.DownloadState
 import io.github.chflick.allreads.ui.megabytes
@@ -76,12 +77,81 @@ private fun DictionaryRow(
     installed: InstalledDictionary?,
     download: DownloadState?,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    DownloadRow(
+        name = pairName(pair),
+        download = download,
+        installedText = installed?.let {
+            stringResource(R.string.installed_built, megabytes(it.bytes.toLong()), it.built)
+        },
+        availableText = available?.let {
+            AppText.get(R.string.download_on_the_phone, megabytes(it.downloadBytes.toLong()), megabytes(it.installedBytes.toLong()))
+        },
+        downloadBytes = available?.downloadBytes?.toLong() ?: 0,
+        onDownload = { available?.let(dictionaries::download) },
+        onCancel = { dictionaries.cancel(pair) },
+        onRemove = { scope.launch { runCatching { dictionaries.remove(pair) } } },
+    )
+}
+
+/**
+ * The book lists for "Find a book": one per language, downloaded like a
+ * dictionary. Shown only when one is published or installed.
+ */
+@Composable
+fun CatalogSection(catalogs: Catalogs) {
+    val list by catalogs.list.collectAsStateWithLifecycle()
+    val downloads by catalogs.downloads.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { catalogs.refresh() }
+    val languages = (list.available.orEmpty().map { it.languageCode } + list.installed.map { it.languageCode })
+        .distinct()
+        .sorted()
+    if (languages.isEmpty()) return
+    Text(stringResource(R.string.book_lists), style = MaterialTheme.typography.titleMedium)
+    languages.forEach { language ->
+        val available = list.available?.firstOrNull { it.languageCode == language }
+        val installed = list.installed.firstOrNull { it.languageCode == language }
+        DownloadRow(
+            name = Locale.forLanguageTag(language).getDisplayLanguage(Locale.ENGLISH),
+            download = downloads[language],
+            installedText = installed?.let {
+                stringResource(R.string.book_list_installed, it.books.toInt(), megabytes(it.bytes.toLong()), it.built)
+            },
+            availableText = available?.let {
+                stringResource(R.string.book_list_available, it.books.toInt(), megabytes(it.downloadBytes.toLong()))
+            },
+            downloadBytes = available?.downloadBytes?.toLong() ?: 0,
+            onDownload = { available?.let(catalogs::download) },
+            onCancel = { catalogs.cancel(language) },
+            onRemove = { scope.launch { runCatching { catalogs.remove(language) } } },
+        )
+    }
+    Text(stringResource(R.string.book_lists_explained), style = MaterialTheme.typography.bodySmall)
+}
+
+/**
+ * One downloadable file in Settings: its progress while downloading, its size
+ * and a Remove button once installed, else a Download button (asking first on
+ * mobile data). `installedText` and `availableText` are null when it is not
+ * installed or not published.
+ */
+@Composable
+private fun DownloadRow(
+    name: String,
+    download: DownloadState?,
+    installedText: String?,
+    availableText: String?,
+    downloadBytes: Long,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val context = LocalContext.current
     var confirmMobileData by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(pairName(pair), style = MaterialTheme.typography.bodyLarge)
+        Text(name, style = MaterialTheme.typography.bodyLarge)
         when {
             download is DownloadState.Running -> {
                 val total = download.total.coerceAtLeast(1)
@@ -95,42 +165,34 @@ private fun DictionaryRow(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { dictionaries.cancel(pair) }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
                 }
             }
-            installed != null -> {
-                Text(
-                    stringResource(R.string.installed_built, megabytes(installed.bytes.toLong()), installed.built),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                OutlinedButton(onClick = { scope.launch { runCatching { dictionaries.remove(pair) } } }) {
-                    Text(stringResource(R.string.remove))
-                }
+            installedText != null -> {
+                Text(installedText, style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = onRemove) { Text(stringResource(R.string.remove)) }
             }
-            available != null -> {
-                Text(
-                    AppText.get(R.string.download_on_the_phone, megabytes(available.downloadBytes.toLong()), megabytes(available.installedBytes.toLong())),
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            availableText != null -> {
+                Text(availableText, style = MaterialTheme.typography.bodySmall)
                 if (download is DownloadState.Failed) {
                     Text(download.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
-                Button(onClick = {
-                    if (onMobileData(context)) confirmMobileData = true else dictionaries.download(available)
-                }) { Text(if (download is DownloadState.Failed) AppText.get(R.string.try_again) else AppText.get(R.string.download)) }
+                Button(onClick = { if (onMobileData(context)) confirmMobileData = true else onDownload() }) {
+                    Text(stringResource(if (download is DownloadState.Failed) R.string.try_again else R.string.download))
+                }
             }
         }
     }
 
-    if (confirmMobileData && available != null) {
+    if (confirmMobileData) {
         AlertDialog(
             onDismissRequest = { confirmMobileData = false },
             title = { Text(stringResource(R.string.download_on_mobile_data)) },
-            text = { Text(stringResource(R.string.is_a_download, pairName(pair), megabytes(available.downloadBytes.toLong()))) },
+            text = { Text(stringResource(R.string.is_a_download, name, megabytes(downloadBytes))) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmMobileData = false
-                    dictionaries.download(available)
+                    onDownload()
                 }) { Text(stringResource(R.string.download)) }
             },
             dismissButton = { TextButton(onClick = { confirmMobileData = false }) { Text(stringResource(R.string.not_now)) } },

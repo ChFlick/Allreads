@@ -13,7 +13,11 @@ import uniffi.allreads_ffi.WordProgress
 import uniffi.allreads_ffi.PreparedText
 import uniffi.allreads_ffi.WordStatus
 import uniffi.allreads_ffi.AnkiNote
+import uniffi.allreads_ffi.AvailableCatalog
 import uniffi.allreads_ffi.AvailableDictionary
+import uniffi.allreads_ffi.CatalogBook
+import uniffi.allreads_ffi.CatalogWord
+import uniffi.allreads_ffi.InstalledCatalog
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.InstalledDictionary
 import uniffi.allreads_ffi.PhraseSuggestion
@@ -37,7 +41,7 @@ import uniffi.allreads_ffi.readBookMeta
  * screens never block the main thread. The Rust library (database, migrations,
  * presets) is opened on the first call, which is also on [Dispatchers.IO].
  */
-class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles {
+class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles, CatalogFiles, BookCatalog {
     private val app: App by lazy { App(dataDir.absolutePath) }
 
     /** Where imported book files are copied. */
@@ -51,11 +55,11 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun readMeta(path: String): BookMeta = io { readBookMeta(path) }
 
-    suspend fun importBook(path: String, languageCode: String): BookSummary =
+    override suspend fun importBook(path: String, languageCode: String): BookSummary =
         io { app.importBook(path, languageCode) }
 
     /** A free path in the books folder named after a picked file (`name`), for its copy. */
-    suspend fun newBookPath(name: String?, extension: String): String = io { app.newBookPath(name, extension) }
+    override suspend fun newBookPath(name: String?, extension: String): String = io { app.newBookPath(name, extension) }
 
     /** Writes pasted or shared text as a TXT book; its first words title it if `title` is null. */
     suspend fun prepareText(title: String?, text: String): PreparedText = io { app.prepareText(title, text) }
@@ -183,6 +187,26 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles 
 
     suspend fun phraseSuggestions(languageCode: String, words: List<String>, index: UInt): List<PhraseSuggestion> =
         io { app.phraseSuggestions(languageCode, words, index) }
+
+    override suspend fun installedCatalogs(): List<InstalledCatalog> = io { app.installedCatalogs() }
+
+    override suspend fun installCatalog(download: File, sha256: String, languageCode: String): InstalledCatalog =
+        io { app.installCatalog(download.absolutePath, sha256, languageCode) }
+
+    override suspend fun removeCatalog(languageCode: String) {
+        io { app.removeCatalog(languageCode) }
+    }
+
+    override fun parseCatalogManifest(json: String): List<AvailableCatalog> =
+        uniffi.allreads_ffi.parseCatalogManifest(json)
+
+    override suspend fun catalogBooks(languageCode: String): List<CatalogBook> = io { app.catalogBooks(languageCode) }
+
+    override suspend fun searchCatalog(languageCode: String, query: String): List<Long> =
+        io { app.searchCatalog(languageCode, query) }
+
+    override suspend fun catalogNewWords(languageCode: String, bookId: Long, limit: Int): List<CatalogWord> =
+        io { app.catalogNewWords(languageCode, bookId, limit.toUInt()) }
 
     private suspend fun <T> io(block: () -> T): T = withContext(Dispatchers.IO) { block() }
 

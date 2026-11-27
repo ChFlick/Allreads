@@ -259,6 +259,7 @@ private fun DictionarySettings(services: Services) {
         checked = settings.hideTranslations,
         onCheckedChange = { on -> services.settings.update { it.copy(hideTranslations = on) } },
     )
+    CatalogSection(services.catalogs)
 }
 
 /**
