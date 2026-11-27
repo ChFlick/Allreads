@@ -75,7 +75,8 @@ impl Database {
     }
 
     /// How many words a vocabulary check marked in `language_code` that are
-    /// still as it left them, for Settings ("Undo vocabulary check (1,820 words)").
+    /// still as it left them (the ones [`Database::undo_vocabulary_check`]
+    /// would delete), for Settings ("Undo vocabulary check (1,820 words)").
     ///
     /// # Errors
     /// Returns a database error if the statement fails.
@@ -83,7 +84,8 @@ impl Database {
         let count: i64 = self.conn().query_row(
             "SELECT COUNT(*) FROM term
              WHERE language_code = ?1 AND imported_from = ?2 AND status = ?3
-               AND translation = '' AND notes = ''",
+               AND translation = '' AND notes = ''
+               AND id NOT IN (SELECT term_id FROM anki_link)",
             params![
                 language_code,
                 VOCABULARY_CHECK_SOURCE,
@@ -150,7 +152,7 @@ mod tests {
         let chien = db.find_term("fr", "chien").unwrap().unwrap().id;
         db.link_anki_note(chien, 1001, 77).unwrap();
 
-        assert_eq!(db.vocabulary_check_count("fr").unwrap(), 2);
+        assert_eq!(db.vocabulary_check_count("fr").unwrap(), 1);
         assert_eq!(db.undo_vocabulary_check("fr").unwrap(), 1);
         assert!(db.find_term("fr", "le").unwrap().is_none());
         assert_eq!(db.find_term("fr", "lire").unwrap().unwrap().id, lire.id);
@@ -161,5 +163,6 @@ mod tests {
             Status::Learning(2)
         );
         assert_eq!(db.undo_vocabulary_check("fr").unwrap(), 0);
+        assert_eq!(db.vocabulary_check_count("fr").unwrap(), 0);
     }
 }

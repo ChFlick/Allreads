@@ -64,7 +64,13 @@ jobs:
             gzip -9 "out/$code-en.sqlite" --keep
           done
           # Keep the book lists ("catalogs") the published manifest already lists.
-          gh release download dictionaries --pattern dictionaries.json --output published.json 2>/dev/null || echo '{}' > published.json
+          # Only a first run (no release yet) starts empty; a failed download stops
+          # the run rather than publish a manifest without the book lists.
+          if gh release view dictionaries >/dev/null 2>&1; then
+            gh release download dictionaries --pattern dictionaries.json --output published.json
+          else
+            echo '{}' > published.json
+          fi
           python3 - "$built" $LANGUAGES <<'PY'
           import hashlib, json, os, sys
           built, codes = sys.argv[1], sys.argv[2:]

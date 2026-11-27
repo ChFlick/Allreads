@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.chflick.allreads.data.Repository
 import io.github.chflick.allreads.ui.describe
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,6 +44,8 @@ class VocabCheckViewModel(private val repository: Repository) : ViewModel() {
     private var opening = -1
     private var session: VocabCheckSession? = null
     private var quiz: VocabQuiz? = null
+    /** The running start or answer; one at a time, so a quick double tap cannot answer a word not shown yet. */
+    private var job: Job? = null
 
     /**
      * Starts a check in `language` for one opening of the screen; repeat calls
@@ -58,29 +62,37 @@ class VocabCheckViewModel(private val repository: Repository) : ViewModel() {
 
     /** Starts (or restarts) the check with fresh words. */
     fun start() {
+        job?.cancel()
         _state.value = VocabCheckState.Starting
         session = null
         quiz = null
         val language = languageCode
-        viewModelScope.launch {
+        job = viewModelScope.launch {
             runCatching {
                 val started = repository.startVocabularyCheck(language)
                 session = started
                 quiz = VocabQuiz(started)
                 askNext()
-            }.onFailure { _state.value = VocabCheckState.Failed(describe(it)) }
+            }.onFailure { fail(it) }
         }
     }
 
     fun answer(yes: Boolean) {
         val quiz = quiz ?: return
         if (_state.value !is VocabCheckState.Asking) return
-        viewModelScope.launch {
+        if (job?.isActive == true) return
+        job = viewModelScope.launch {
             runCatching {
                 quiz.answer(yes)
                 askNext()
-            }.onFailure { _state.value = VocabCheckState.Failed(describe(it)) }
+            }.onFailure { fail(it) }
         }
+    }
+
+    /** Shows a failure, unless the work was only cancelled by a restart. */
+    private fun fail(error: Throwable) {
+        if (error is CancellationException) return
+        _state.value = VocabCheckState.Failed(describe(error))
     }
 
     private suspend fun askNext() {
