@@ -276,7 +276,7 @@ private object Samples {
         sentence = rows[1].sentence,
         rowKey = rows[1].key,
         status = WordStatus.Learning(3u),
-        saved = SavedTerm(1, "fr", "perle", "perle", WordStatus.Learning(3u), "pearl", "", null, ""),
+        saved = SavedTerm(1, "fr", "perle", "perle", WordStatus.Learning(3u), "pearl", "", null, "", false),
         machineTranslation = "pearl",
         dictionary = DictionaryLookup(
             entries = listOf(
@@ -316,13 +316,13 @@ private object Samples {
     )
 
     val terms = listOf(
-        SavedTerm(1, "fr", "coq", "coq", WordStatus.Learning(2u), "rooster", "", null, ""),
-        SavedTerm(2, "fr", "crois", "crois", WordStatus.Learning(4u), "believe", "", "croire", ""),
-        SavedTerm(3, "fr", "lapidaire", "lapidaire", WordStatus.Learning(1u), "jeweller, gem cutter", "", null, ""),
-        SavedTerm(4, "fr", "moindre", "moindre", WordStatus.Learning(5u), "least, smallest", "", null, "Anki · Vocabulaire"),
-        SavedTerm(5, "fr", "perle", "perle", WordStatus.Learning(3u), "pearl", "", null, ""),
-        SavedTerm(6, "fr", "pierre précieuse", "pierre précieuse", WordStatus.Learning(2u), "gemstone", "", null, ""),
-        SavedTerm(7, "fr", "trouva", "trouva", WordStatus.Learning(1u), "found", "", "trouver", ""),
-        SavedTerm(8, "fr", "un", "un", WordStatus.WellKnown, "a, one", "", null, "Anki · Vocabulaire"),
+        SavedTerm(1, "fr", "coq", "coq", WordStatus.Learning(2u), "rooster", "", null, "", false),
+        SavedTerm(2, "fr", "crois", "crois", WordStatus.Learning(4u), "believe", "", "croire", "", false),
+        SavedTerm(3, "fr", "lapidaire", "lapidaire", WordStatus.Learning(1u), "jeweller, gem cutter", "", null, "", false),
+        SavedTerm(4, "fr", "moindre", "moindre", WordStatus.Learning(5u), "least, smallest", "", null, "Anki · Vocabulaire", false),
+        SavedTerm(5, "fr", "perle", "perle", WordStatus.Learning(3u), "pearl", "", null, "", false),
+        SavedTerm(6, "fr", "pierre précieuse", "pierre précieuse", WordStatus.Learning(2u), "gemstone", "", null, "", false),
+        SavedTerm(7, "fr", "trouva", "trouva", WordStatus.Learning(1u), "found", "", "trouver", "", true),
+        SavedTerm(8, "fr", "un", "un", WordStatus.WellKnown, "a, one", "", null, "Anki · Vocabulaire", false),
     )
 }

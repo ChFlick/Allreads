@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.ui.words
 
+import java.text.Collator
+import io.github.chflick.allreads.data.WordSort
+import io.github.chflick.allreads.data.SettingsStore
 import androidx.annotation.StringRes
 import io.github.chflick.allreads.R
 import io.github.chflick.allreads.ui.AppText
@@ -32,6 +35,11 @@ data class WordsState(
     val terms: List<SavedTerm> = emptyList(),
     val query: String = "",
     val filter: WordFilter = WordFilter.All,
+    val sort: WordSort = WordSort.Recent,
+    /** Only words still waiting to go to AnkiDroid. */
+    val waitingOnly: Boolean = false,
+    /** Only words imported from Anki or a file. */
+    val importedOnly: Boolean = false,
     val editing: SavedTerm? = null,
     val message: String? = null,
     /** Known and learning words per day in this language, for the chart. */
@@ -57,18 +65,55 @@ data class WordsState(
     /** How many words a filter chip would show, for its label. */
     fun count(filter: WordFilter): Int = counts[filter] ?: 0
 
-    /** The terms matching the filter and search, by key or translation. */
-    val visible: List<SavedTerm>
-        get() = terms.filter { term ->
+    /** Words still waiting to go to AnkiDroid. */
+    val waitingCount: Int by lazy { terms.count { it.waitingForAnki } }
+
+    /** Words imported from Anki or a file. */
+    val importedCount: Int by lazy { terms.count { it.importedFrom.isNotBlank() } }
+
+    /** True when something narrows the list beyond the language. */
+    val narrowed: Boolean get() = query.isNotBlank() || filter != WordFilter.All || waitingOnly || importedOnly
+
+    /** The terms matching the filters and search (by key or translation), in the chosen order. */
+    val visible: List<SavedTerm> by lazy {
+        val q = query.trim().lowercase()
+        val shown = terms.filter { term ->
             val statusMatches = when (filter) {
                 WordFilter.All -> true
                 WordFilter.Learning -> term.status is WordStatus.Learning
                 WordFilter.Known -> term.status == WordStatus.WellKnown
                 WordFilter.Ignored -> term.status == WordStatus.Ignored
             }
-            val q = query.trim().lowercase()
-            statusMatches && (q.isEmpty() || term.termKey.contains(q) || term.translation.lowercase().contains(q))
+            statusMatches &&
+                (!waitingOnly || term.waitingForAnki) &&
+                (!importedOnly || term.importedFrom.isNotBlank()) &&
+                (q.isEmpty() || term.termKey.contains(q) || term.translation.lowercase().contains(q))
         }
+        sortWords(shown, sort)
+    }
+}
+
+/**
+ * Orders words for the list. Ids grow as words are saved, so the highest
+ * comes first for "Recently added". Alphabetical order follows the phone's
+ * language rules, so "été" sorts with "ete", not after "z".
+ */
+fun sortWords(words: List<SavedTerm>, sort: WordSort): List<SavedTerm> {
+    val collator = Collator.getInstance().apply { strength = Collator.PRIMARY }
+    val alphabetical = Comparator<SavedTerm> { a, b -> collator.compare(a.termKey, b.termKey) }
+    return when (sort) {
+        WordSort.Recent -> words.sortedByDescending { it.id }
+        WordSort.Alphabetical -> words.sortedWith(alphabetical)
+        WordSort.Level -> words.sortedWith(compareBy<SavedTerm> { levelRank(it.status) }.then(alphabetical))
+    }
+}
+
+/** Least known first: levels 1 to 5, then known, then ignored. */
+private fun levelRank(status: WordStatus): Int = when (status) {
+    is WordStatus.Learning -> status.level.toInt()
+    WordStatus.WellKnown -> 6
+    WordStatus.Ignored -> 7
+    WordStatus.New -> 0
 }
 
 /** PRD F17: the word list, with search and a filter by status and language. */
@@ -76,8 +121,10 @@ class WordsViewModel(
     private val repository: Repository,
     /** Pushes saved changes to AnkiDroid. */
     private val syncAnki: () -> Unit = {},
+    /** Remembers the chosen order; null in previews. */
+    private val settings: SettingsStore? = null,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(WordsState())
+    private val _state = MutableStateFlow(WordsState(sort = settings?.settings?.value?.wordSort ?: WordSort.Recent))
     val state: StateFlow<WordsState> = _state.asStateFlow()
 
     init {
@@ -95,8 +142,12 @@ class WordsViewModel(
     fun refresh() {
         val language = _state.value.language ?: return
         viewModelScope.launch {
+            // Without an AnkiDroid deck chosen every word waits, which says
+            // nothing; the Waiting filter and badge are only for Anki users.
+            val ankiInUse = runCatching { repository.ankiDeckId() != null }.getOrDefault(false)
             runCatching { repository.listTerms(language) }
-                .onSuccess { terms -> _state.update { it.copy(terms = terms) } }
+                .map { terms -> if (ankiInUse) terms else terms.map { it.copy(waitingForAnki = false) } }
+                .onSuccess { terms -> _state.update { it.copy(terms = terms, waitingOnly = it.waitingOnly && ankiInUse) } }
                 .onFailure { e -> _state.update { it.copy(message = describe(e)) } }
             runCatching { repository.wordProgress(language) }.onSuccess { progress ->
                 _state.update { it.copy(progress = progress) }
@@ -112,6 +163,17 @@ class WordsViewModel(
     fun search(query: String) = _state.update { it.copy(query = query) }
 
     fun filter(filter: WordFilter) = _state.update { it.copy(filter = filter) }
+
+    fun sort(sort: WordSort) {
+        _state.update { it.copy(sort = sort) }
+        settings?.update { it.copy(wordSort = sort) }
+    }
+
+    /** Switches the "Waiting for AnkiDroid" filter on or off. */
+    fun toggleWaiting() = _state.update { it.copy(waitingOnly = !it.waitingOnly) }
+
+    /** Switches the "Imported" filter on or off. */
+    fun toggleImported() = _state.update { it.copy(importedOnly = !it.importedOnly) }
 
     fun edit(term: SavedTerm?) = _state.update { it.copy(editing = term) }
 

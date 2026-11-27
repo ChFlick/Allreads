@@ -215,6 +215,8 @@ pub struct SavedTerm {
     /// Where an imported word came from, for its badge ("Anki · French
     /// vocabulary"); empty for words saved in Allreads.
     pub imported_from: String,
+    /// Still waiting to be sent to `AnkiDroid` (filled by `list_terms` only).
+    pub waiting_for_anki: bool,
 }
 
 impl From<Term> for SavedTerm {
@@ -229,6 +231,7 @@ impl From<Term> for SavedTerm {
             notes: term.notes,
             lemma: term.lemma,
             imported_from: term.imported_from,
+            waiting_for_anki: false,
         }
     }
 }

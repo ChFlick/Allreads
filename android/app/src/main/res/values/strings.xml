@@ -356,4 +356,11 @@
         <item quantity="one">%1$d book · %2$s · built %3$s</item>
         <item quantity="other">%1$d books · %2$s · built %3$s</item>
     </plurals>
+    <string name="word_sort_recent">Recently added</string>
+    <string name="word_sort_alphabetical">A–Z</string>
+    <string name="word_sort_level">Level</string>
+    <string name="sort_words_now_by">Sort words, now by %1$s</string>
+    <string name="waiting_count">Waiting %1$d</string>
+    <string name="imported_count">Imported %1$d</string>
+    <string name="not_in_ankidroid_yet">Not in AnkiDroid yet</string>
 </resources>

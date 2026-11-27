@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.books
 
+import io.github.chflick.allreads.ui.SortChip
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.clickable
@@ -243,7 +244,13 @@ private fun FilterRow(state: FindBooksState, onView: (CatalogView) -> Unit, onLa
         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SortChip(view.sort, onSort = { onView(view.copy(sort = it)) })
+        SortChip(
+            view.sort,
+            CatalogSort.entries,
+            label = { it.label },
+            description = AppText.get(R.string.sort_books_now_by, view.sort.label.lowercase()),
+            onSort = { onView(view.copy(sort = it)) },
+        )
         FitFilter.entries.forEach { fit ->
             FilterChip(
                 selected = view.fit == fit,
@@ -261,32 +268,6 @@ private fun FilterRow(state: FindBooksState, onView: (CatalogView) -> Unit, onLa
         if (state.languages.size > 1) {
             state.languages.forEach { code ->
                 FilterChip(selected = state.language == code, onClick = { onLanguage(code) }, label = { Text(languageName(code)) })
-            }
-        }
-    }
-}
-
-@Composable
-private fun SortChip(sort: CatalogSort, onSort: (CatalogSort) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        AssistChip(
-            onClick = { open = true },
-            label = { Text(sort.label) },
-            leadingIcon = { Icon(SortIcon, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            modifier = Modifier.semantics { contentDescription = AppText.get(R.string.sort_books_now_by, sort.label.lowercase()) },
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            CatalogSort.entries.forEach { choice ->
-                DropdownMenuItem(
-                    text = { Text(choice.label) },
-                    leadingIcon = { RadioButton(selected = choice == sort, onClick = null) },
-                    onClick = {
-                        open = false
-                        onSort(choice)
-                    },
-                )
             }
         }
     }

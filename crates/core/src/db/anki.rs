@@ -1,5 +1,7 @@
 //! `AnkiDroid` links and the queue of terms waiting to be pushed.
 
+use std::collections::HashSet;
+
 use rusqlite::{params, OptionalExtension, Row};
 
 use super::{require_one_changed, u32_column, Database, DbError};
@@ -54,6 +56,20 @@ impl Database {
                 link_from_row,
             )
             .optional()?)
+    }
+
+    /// The ids of a language's words still waiting to be pushed to
+    /// `AnkiDroid`, for the Words screen's "Waiting for AnkiDroid" filter.
+    ///
+    /// # Errors
+    /// Returns a database error if the statement fails.
+    pub fn waiting_for_anki(&self, language_code: &str) -> Result<HashSet<i64>, DbError> {
+        let mut statement = self.conn().prepare(
+            "SELECT o.term_id FROM anki_outbox o JOIN term t ON t.id = o.term_id
+             WHERE t.language_code = ?1",
+        )?;
+        let rows = statement.query_map([language_code], |row| row.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// Queues a term for pushing. A term already waiting keeps one entry, but
@@ -305,5 +321,17 @@ mod tests {
         db.delete_term(term).unwrap();
         assert_eq!(db.anki_link(term).unwrap(), None);
         assert!(db.anki_queue().unwrap().is_empty());
+    }
+
+    #[test]
+    fn waiting_words_are_listed_per_language_until_pushed() {
+        // Saving a learning word queues it.
+        let (db, term) = db_with_term();
+        assert_eq!(db.waiting_for_anki("fr").unwrap(), HashSet::from([term]));
+        assert!(db.waiting_for_anki("de").unwrap().is_empty());
+        let queued = db.anki_queue().unwrap().remove(0);
+        db.record_anki_push(term, queued.queue_id, 1001, 77)
+            .unwrap();
+        assert!(db.waiting_for_anki("fr").unwrap().is_empty());
     }
 }

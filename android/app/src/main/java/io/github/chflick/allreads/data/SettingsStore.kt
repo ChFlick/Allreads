@@ -33,6 +33,18 @@ enum class BookSort(@StringRes private val labelId: Int) {
     val label: String get() = AppText.get(labelId)
 }
 
+/** How the Words list is ordered (a setting, so the choice is remembered). */
+enum class WordSort(@StringRes private val labelId: Int) {
+    /** The words saved last first. */
+    Recent(R.string.word_sort_recent),
+    Alphabetical(R.string.word_sort_alphabetical),
+    /** Least known first: level 1 to 5, then known, then ignored. */
+    Level(R.string.word_sort_level),
+    ;
+
+    val label: String get() = AppText.get(labelId)
+}
+
 /** The reader's page colours: the app's light or dark theme, or warm sepia. */
 enum class ReaderPage(@StringRes private val labelId: Int) {
     App(R.string.page_app), Sepia(R.string.page_sepia), Black(R.string.page_black);
@@ -66,6 +78,7 @@ data class AppSettings(
     /** The voice chosen per language code; a missing language uses the best installed voice. */
     val voices: Map<String, String> = emptyMap(),
     val librarySort: BookSort = BookSort.Recent,
+    val wordSort: WordSort = WordSort.Recent,
 ) {
     companion object {
         /** DeepL target languages offered in Settings. */
@@ -92,6 +105,7 @@ class SettingsStore(context: Context) {
             .putString("reading_font", next.readingFont.name)
             .putString("reader_page", next.readerPage.name)
             .putString("library_sort", next.librarySort.name)
+            .putString("word_sort", next.wordSort.name)
             .putBoolean("wallpaper_colors", next.wallpaperColors)
             .putBoolean("anki_word_card", next.ankiWordCard)
             .putFloat("speech_rate", next.speechRate)
@@ -114,6 +128,7 @@ class SettingsStore(context: Context) {
             theme = prefs.getEnum("theme", defaults.theme),
             wallpaperColors = prefs.getBoolean("wallpaper_colors", defaults.wallpaperColors),
             librarySort = prefs.getEnum("library_sort", defaults.librarySort),
+            wordSort = prefs.getEnum("word_sort", defaults.wordSort),
             readingFont = prefs.getEnum("reading_font", defaults.readingFont),
             readerPage = prefs.getEnum("reader_page", defaults.readerPage),
             ankiWordCard = prefs.getBoolean("anki_word_card", defaults.ankiWordCard),

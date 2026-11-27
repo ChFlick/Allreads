@@ -237,7 +237,7 @@ private fun AllreadsTabs(
                                 )
                             }
                         }
-                        Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki) }, services)
+                        Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki, services.settings) }, services)
                         Tab.Settings -> SettingsScreen(services)
                     }
                 }

@@ -363,16 +363,24 @@ impl App {
             }))
     }
 
-    /// Every saved word in a language, sorted by term key, for the Words screen.
+    /// Every saved word in a language, sorted by term key, for the Words
+    /// screen, each saying whether it still waits to go to `AnkiDroid`.
     ///
     /// # Errors
     /// Returns `Database` if the database cannot be read.
     pub fn list_terms(&self, language_code: String) -> Result<Vec<SavedTerm>, AllreadsError> {
-        Ok(self
-            .db()?
+        let db = self.db()?;
+        let waiting = db.waiting_for_anki(&language_code)?;
+        Ok(db
             .terms(&language_code)?
             .into_iter()
-            .map(SavedTerm::from)
+            .map(|term| {
+                let queued = waiting.contains(&term.id);
+                SavedTerm {
+                    waiting_for_anki: queued,
+                    ..SavedTerm::from(term)
+                }
+            })
             .collect())
     }
 

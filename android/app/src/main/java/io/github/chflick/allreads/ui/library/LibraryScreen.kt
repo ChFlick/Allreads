@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.library
 
+import io.github.chflick.allreads.ui.SortChip
 import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
@@ -545,7 +546,13 @@ private fun FilterRow(state: LibraryState, onView: (LibraryView) -> Unit) {
         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SortChip(view.sort, onSort = { onView(view.copy(sort = it)) })
+        SortChip(
+            view.sort,
+            BookSort.entries,
+            label = { it.label },
+            description = AppText.get(R.string.sort_books_now_by, view.sort.label.lowercase()),
+            onSort = { onView(view.copy(sort = it)) },
+        )
         listOf(BookProgress.Reading, BookProgress.NotStarted).forEach { progress ->
             FilterChip(
                 selected = view.progress == progress,
@@ -566,29 +573,3 @@ private fun FilterRow(state: LibraryState, onView: (LibraryView) -> Unit) {
     }
 }
 
-/** "↕ Recently read ▾": shows the sort and opens the menu to change it. */
-@Composable
-private fun SortChip(sort: BookSort, onSort: (BookSort) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        AssistChip(
-            onClick = { open = true },
-            label = { Text(sort.label) },
-            leadingIcon = { Icon(SortIcon, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
-            modifier = Modifier.semantics { contentDescription = AppText.get(R.string.sort_books_now_by, sort.label.lowercase()) },
-        )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            BookSort.entries.forEach { choice ->
-                DropdownMenuItem(
-                    text = { Text(choice.label) },
-                    leadingIcon = { RadioButton(selected = choice == sort, onClick = null) },
-                    onClick = {
-                        open = false
-                        onSort(choice)
-                    },
-                )
-            }
-        }
-    }
-}

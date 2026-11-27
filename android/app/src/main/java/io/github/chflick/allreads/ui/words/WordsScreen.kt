@@ -1,5 +1,7 @@
 package io.github.chflick.allreads.ui.words
 
+import io.github.chflick.allreads.ui.SortChip
+import io.github.chflick.allreads.data.WordSort
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
@@ -124,6 +126,9 @@ fun WordsScreen(viewModel: WordsViewModel, services: Services? = null) {
         onLanguage = viewModel::chooseLanguage,
         onSearch = viewModel::search,
         onFilter = viewModel::filter,
+        onSort = viewModel::sort,
+        onToggleWaiting = viewModel::toggleWaiting,
+        onToggleImported = viewModel::toggleImported,
         onEdit = viewModel::edit,
         onRaise = viewModel::raise,
         onForget = viewModel::forget,
@@ -187,6 +192,7 @@ private fun TermRow(term: SavedTerm, onClick: () -> Unit) {
                     })
                 }
                 SourceBadge(term.importedFrom)
+                if (term.waitingForAnki) SourceBadge(AppText.get(R.string.not_in_ankidroid_yet))
             }
         },
         trailingContent = { StatusPill(term.status, short = true) },
@@ -318,6 +324,9 @@ fun WordsContent(
     onSearch: (String) -> Unit,
     onFilter: (WordFilter) -> Unit,
     onEdit: (SavedTerm) -> Unit,
+    onSort: (WordSort) -> Unit = {},
+    onToggleWaiting: () -> Unit = {},
+    onToggleImported: () -> Unit = {},
     onImport: (() -> Unit)? = null,
     onRaise: (SavedTerm) -> Unit = {},
     onForget: (SavedTerm) -> Unit = {},
@@ -367,11 +376,33 @@ fun WordsContent(
                         }
                         VerticalDivider(Modifier.height(32.dp).align(Alignment.CenterVertically))
                     }
+                    SortChip(
+                        state.sort,
+                        WordSort.entries,
+                        label = { it.label },
+                        description = AppText.get(R.string.sort_words_now_by, state.sort.label.lowercase()),
+                        onSort = onSort,
+                    )
                     WordFilter.entries.forEach { filter ->
                         FilterChip(
                             selected = filter == state.filter,
                             onClick = { onFilter(filter) },
                             label = { Text(stringResource(R.string.text_6, filter.label, state.count(filter))) },
+                        )
+                    }
+                    // On and off, next to the levels; only shown when they would find something.
+                    if (state.waitingCount > 0 || state.waitingOnly) {
+                        FilterChip(
+                            selected = state.waitingOnly,
+                            onClick = onToggleWaiting,
+                            label = { Text(stringResource(R.string.waiting_count, state.waitingCount)) },
+                        )
+                    }
+                    if (state.importedCount > 0 || state.importedOnly) {
+                        FilterChip(
+                            selected = state.importedOnly,
+                            onClick = onToggleImported,
+                            label = { Text(stringResource(R.string.imported_count, state.importedCount)) },
                         )
                     }
                 }
@@ -381,7 +412,7 @@ fun WordsContent(
     ) { padding ->
         val visible = state.visible
         // The chart sits on top of the full list, not of search results.
-        val showProgress = state.query.isBlank() && state.filter == WordFilter.All && state.progress.days.isNotEmpty()
+        val showProgress = !state.narrowed && state.progress.days.isNotEmpty()
         if (visible.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text(
