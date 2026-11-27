@@ -280,7 +280,11 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 
 **Why.** On a new install every word is new, so a first book shows half its words underlined even for a reader who knows a lot. Marking the common words they know fixes the first impression, but only if the marks are right: a wrong "known" hides a word they still need.
 
-**Data.** Lexique 3.82 (CC BY-SA 4.0, New, Pallier et al.): French word forms with their dictionary forms, grammatical gender, and frequencies from books and film subtitles. dictgen adds it to the French dictionary as a frequency table (dictionary forms by rank, their forms), so it comes with the dictionary download. Credit in About, as for Wiktionary.
+**Data, from pluggable sources.** dictgen reads word frequencies through one small interface, a frequency source that yields word forms with how common they are and, if it knows it, their dictionary form, so another provider is one more implementation. Two to start:
+- **Lexique 3.82** for French (CC BY-SA 4.0, New, Pallier et al.): forms with their dictionary forms, gender, and frequencies from books and film subtitles.
+- **FrequencyWords** for other languages (film subtitles from OpenSubtitles, licence to check before use): forms only; dictgen takes their dictionary forms from the dictionary's own "form of" links.
+
+Whatever the source, the dictionary file gets the same table (dictionary forms by rank, with their forms and the source's name), so the check and the app never depend on which provider it was. Credit in About for each source, as for Wiktionary.
 
 **The test.** About 6 dictionary forms from each of about 10 frequency bands (top 250, 250–500, 500–1,000, 1,000–2,000 … up to about 24,000) and about 10 made-up French-looking words (spliced from real ones; the dictionary confirms they are not words). Yes/no, about 70 taps, 2–3 minutes; it stops once two bands in a row are mostly unknown.
 
@@ -296,7 +300,7 @@ Ideas kept for later, roughly in order of interest. None is planned in detail.
 Steps, each with its check:
 
 1. **Core: building and scoring the test.** **Done when** simulated learners (knowing the top N words, with slips and some over-claiming) get at least 97 % of their marked words right while most of what they know is marked, and over-claimers are caught.
-2. **dictgen: Lexique into the dictionary,** and the Dictionaries workflow downloads it. **Done when** a sample Lexique file builds the frequency table and the core reads ranks and forms from it.
+2. **dictgen: frequency sources into the dictionary** (the source interface, Lexique and FrequencyWords), and the Dictionaries workflow downloads them. **Done when** sample files of both build the same kind of table and the core reads ranks and forms from it.
 3. **Core and FFI: marking and undo.** **Done when** a test applies a result, the words and their forms read as known, and undo removes exactly the untouched ones.
 4. **App: the check.** A card on first run and an entry in Settings, the test screen, the result with its count, and undo. **Done when** screenshots show the screens and a JVM test runs a check against the real core.
 5. **Phone check.**
