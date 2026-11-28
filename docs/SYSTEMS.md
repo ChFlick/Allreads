@@ -73,7 +73,7 @@ API keys are not in there: they live in the Android Keystore and are passed into
 
 **Manifest** (`dictionaries.json`): `format`, then per dictionary `pair`, `language`, `url`, `built`, `download_bytes`, `installed_bytes`, `sha256`, and `frequencies` (the frequency source, if any). Book lists are listed in the same file under `catalogs`.
 
-**The list in the app** (`Dictionaries`): fetched when Settings opens, when a tapped word has no dictionary, and for the library's cards. One fetch runs at a time and callers waiting for it share its result; a failed fetch is tried again after 1 and 3 seconds, and only then shows an error (with Try again in Settings).
+**The list in the app** (`Dictionaries`): fetched when Settings opens, when a tapped word has no dictionary, and for the library's cards. One fetch runs at a time and callers waiting for it share its result; a failed fetch is tried again after 1 and 3 seconds, and only then shows an error (with Try again in Settings). The last fetched list is saved (`dictionaries.json` in the app's cache) and shown at once on the next start while the fresh one loads, as the first request on a phone can take a long time.
 
 **Install** (core `dictionary::install`): check the download's SHA-256 against the manifest, unpack it, open it and check its pair, then move it into place with an atomic rename. A file that fails any step is deleted, so a broken dictionary is never opened.
 

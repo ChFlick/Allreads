@@ -8,6 +8,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
@@ -17,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,13 +52,25 @@ fun DictionarySection(dictionaries: Dictionaries) {
 
     // Published dictionaries, plus installed ones no longer published.
     val pairs = (list.available.orEmpty().map { it.pair } + list.installed.map { it.pair }).distinct().sorted()
-    if (pairs.isEmpty()) {
+    if (list.loading && (pairs.isEmpty() || list.fromCache)) {
+        // A slow first answer is common on phones: show that something is happening, and each new try.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            Column {
+                Text(
+                    if (pairs.isEmpty()) AppText.get(R.string.looking_for_dictionaries) else AppText.get(R.string.checking_for_new_dictionaries),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    if (list.attempt > 1) AppText.get(R.string.still_trying, list.attempt) else AppText.get(R.string.this_can_take_a_while),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    } else if (pairs.isEmpty() && list.listError == null) {
         Text(
-            if (list.loading || (list.available == null && list.listError == null)) {
-                AppText.get(R.string.looking_for_dictionaries)
-            } else {
-                AppText.get(R.string.no_dictionaries_yet)
-            },
+            if (list.available == null) AppText.get(R.string.looking_for_dictionaries) else AppText.get(R.string.no_dictionaries_yet),
             style = MaterialTheme.typography.bodyMedium,
         )
     }

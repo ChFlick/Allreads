@@ -60,6 +60,7 @@ import io.github.chflick.allreads.ui.reader.ReaderScreen
 import io.github.chflick.allreads.ui.reader.ReaderViewModel
 import io.github.chflick.allreads.ui.settings.ReadingSettings
 import io.github.chflick.allreads.ui.settings.SettingsScreen
+import io.github.chflick.allreads.ui.settings.SettingsPage
 import io.github.chflick.allreads.ui.theme.AllreadsTheme
 import io.github.chflick.allreads.ui.theme.ReaderPageTheme
 import io.github.chflick.allreads.ui.words.WordsScreen
@@ -197,6 +198,8 @@ private fun AllreadsTabs(
 ) {
     // Back from Words or Settings goes to the Library first; back there leaves the app.
     BackHandler(enabled = tab != Tab.Library) { onTab(Tab.Library) }
+    // A settings page the library asked for, opened once the Settings tab shows.
+    var settingsPage by remember { mutableStateOf<SettingsPage?>(null) }
 
     Scaffold(
         bottomBar = {
@@ -239,7 +242,10 @@ private fun AllreadsTabs(
                             LibraryScreen(
                                 library,
                                 onOpen = { onOpenBook(it.id) },
-                                onOpenSettings = { onTab(Tab.Settings) },
+                                onOpenSettings = { page ->
+                                    settingsPage = page
+                                    onTab(Tab.Settings)
+                                },
                                 onVocabCheck = onVocabCheck,
                                 onFindBooks = {
                                     findOpens += 1
@@ -274,7 +280,13 @@ private fun AllreadsTabs(
                             }
                         }
                         Tab.Words -> WordsScreen(viewModel { WordsViewModel(services.repository, services::syncAnki, services.settings) }, services)
-                        Tab.Settings -> SettingsScreen(services, onVocabCheck = onVocabCheck, refresh = vocabClosed)
+                        Tab.Settings -> SettingsScreen(
+                            services,
+                            onVocabCheck = onVocabCheck,
+                            refresh = vocabClosed,
+                            openPage = settingsPage,
+                            onOpened = { settingsPage = null },
+                        )
                     }
                 }
             }

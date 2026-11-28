@@ -57,7 +57,6 @@
     <string name="allreads_colours_every_word_by">Allreads colours every word by how well you know it. Three steps to begin:</string>
     <string name="import_a_book">Import a book</string>
     <string name="paste_text">Paste text</string>
-    <string name="open_settings">Open Settings</string>
     <string name="text">%1$s</string>
     <string name="import_a_web_article">Import a web article</string>
     <string name="address">Address</string>
@@ -380,9 +379,14 @@
     <string name="about_percent_right">About %1$d %% of them right</string>
     <string name="recommended">Recommended</string>
     <string name="check_your_vocabulary">Check your vocabulary</string>
+    <string name="checking_for_new_dictionaries">Checking for new dictionaries…</string>
+    <string name="this_can_take_a_while">The first time can take a while on a slow connection.</string>
+    <string name="still_trying">No answer yet, trying again (%1$d of 3)…</string>
+    <string name="add_the_key">Add the key</string>
+    <string name="download_size">Download (%1$s)</string>
     <string name="getting_started">Getting started</string>
     <string name="get_the_language_dictionary">Get the %1$s dictionary</string>
-    <string name="setup_dictionary_text">Meanings without a connection, and better counts of new words. In Settings → Dictionaries.</string>
+    <string name="setup_dictionary_text">Meanings without a connection, better counts of new words, and the vocabulary check.</string>
     <string name="hide">Hide</string>
     <string name="vocab_card_title">Already know some %1$s?</string>
     <string name="vocab_card_text">A two-minute check marks the common words you know, so your first book is not full of underlines.</string>

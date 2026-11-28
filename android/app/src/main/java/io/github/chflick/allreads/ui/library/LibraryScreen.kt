@@ -1,6 +1,11 @@
 package io.github.chflick.allreads.ui.library
 
 import io.github.chflick.allreads.ui.SortChip
+import io.github.chflick.allreads.ui.megabytes
+import io.github.chflick.allreads.ui.settings.SettingsPage
+import io.github.chflick.allreads.ui.settings.onMobileData
+import io.github.chflick.allreads.data.DownloadState
+import uniffi.allreads_ffi.AvailableDictionary
 import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
@@ -98,7 +103,7 @@ import kotlin.math.roundToInt
 fun LibraryScreen(
     viewModel: LibraryViewModel,
     onOpen: (BookSummary) -> Unit,
-    onOpenSettings: () -> Unit = {},
+    onOpenSettings: (SettingsPage?) -> Unit = {},
     onFindBooks: (() -> Unit)? = null,
     onVocabCheck: (String) -> Unit = {},
 ) {
@@ -131,6 +136,7 @@ fun LibraryScreen(
         onVocabCheck = onVocabCheck,
         onDismissVocabCheck = viewModel::dismissVocabCheck,
         onDismissSetup = viewModel::dismissSetup,
+        onDownloadDictionary = viewModel::downloadDictionary,
     )
 
     state.pending?.let { pending ->
@@ -200,7 +206,7 @@ private enum class ImportKind { Article, Text }
 
 /** The empty library: three steps to get going, each opening its place. */
 @Composable
-private fun FirstSteps(onImport: () -> Unit, onPaste: () -> Unit, onSettings: () -> Unit, modifier: Modifier = Modifier) {
+private fun FirstSteps(onImport: () -> Unit, onPaste: () -> Unit, onSettings: (SettingsPage) -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier.padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -218,10 +224,10 @@ private fun FirstSteps(onImport: () -> Unit, onPaste: () -> Unit, onSettings: ()
             }
         }
         FirstStep(2, AppText.get(R.string.add_a_deepl_key), AppText.get(R.string.for_translations_of_words_and)) {
-            OutlinedButton(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
+            OutlinedButton(onClick = { onSettings(SettingsPage.Translation) }) { Text(stringResource(R.string.add_the_key)) }
         }
         FirstStep(3, AppText.get(R.string.choose_an_ankidroid_deck), AppText.get(R.string.optional_words_you_save_become)) {
-            OutlinedButton(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
+            OutlinedButton(onClick = { onSettings(SettingsPage.Anki) }) { Text(stringResource(R.string.choose_a_deck)) }
         }
     }
 }
@@ -438,12 +444,13 @@ fun LibraryContent(
     onView: (LibraryView) -> Unit = {},
     onImportArticle: (url: String) -> Unit = {},
     onImportText: (title: String?, text: String) -> Unit = { _, _ -> },
-    onOpenSettings: () -> Unit = {},
+    onOpenSettings: (SettingsPage?) -> Unit = {},
     /** Opens "Find a book"; null hides the menu item. */
     onFindBooks: (() -> Unit)? = null,
     onVocabCheck: (String) -> Unit = {},
     onDismissVocabCheck: () -> Unit = {},
     onDismissSetup: () -> Unit = {},
+    onDownloadDictionary: () -> Unit = {},
 ) {
     val view = state.view
     // Most people read in one language; only books in another say theirs.
@@ -508,7 +515,7 @@ fun LibraryContent(
             FirstSteps(
                 onImport = onImport,
                 onPaste = { askFor = ImportKind.Text },
-                onSettings = onOpenSettings,
+                onSettings = { onOpenSettings(it) },
                 modifier = Modifier.fillMaxSize().padding(padding),
             )
             return@Scaffold
@@ -534,7 +541,9 @@ fun LibraryContent(
                 }
             }
             state.setup?.takeIf { view.isDefault }?.let { steps ->
-                item(key = "setup") { SetupCard(steps, onSettings = onOpenSettings, onDismiss = onDismissSetup) }
+                item(key = "setup") {
+                    SetupCard(steps, onSettings = { onOpenSettings(it) }, onDownload = onDownloadDictionary, onDismiss = onDismissSetup)
+                }
             }
             current?.let { book ->
                 item(key = "continue") {
@@ -595,32 +604,76 @@ private fun FilterRow(state: LibraryState, onView: (LibraryView) -> Unit) {
  * is in, each ticked off when done, until all are done or the card is hidden.
  */
 @Composable
-private fun SetupCard(steps: SetupSteps, onSettings: () -> Unit, onDismiss: () -> Unit) {
+private fun SetupCard(steps: SetupSteps, onSettings: (SettingsPage) -> Unit, onDownload: () -> Unit, onDismiss: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(R.string.getting_started), style = MaterialTheme.typography.titleMedium)
-            SetupStep(steps.deeplKey, stringResource(R.string.add_a_deepl_key), stringResource(R.string.for_translations_of_words_and))
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.getting_started), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.hide)) }
+            }
+            SetupStep(steps.deeplKey, stringResource(R.string.add_a_deepl_key), stringResource(R.string.for_translations_of_words_and)) {
+                OutlinedButton(onClick = { onSettings(SettingsPage.Translation) }) { Text(stringResource(R.string.add_the_key)) }
+            }
             steps.dictionaryLanguage?.let { language ->
                 SetupStep(
                     steps.dictionary,
                     stringResource(R.string.get_the_language_dictionary, languageName(language)),
                     stringResource(R.string.setup_dictionary_text),
-                )
+                ) { steps.dictionaryOffer?.let { offer -> DictionaryDownload(offer, steps.dictionaryDownload, onDownload) } }
             }
-            SetupStep(steps.ankiDeck, stringResource(R.string.choose_an_ankidroid_deck), stringResource(R.string.optional_words_you_save_become))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.hide)) }
+            SetupStep(steps.ankiDeck, stringResource(R.string.choose_an_ankidroid_deck), stringResource(R.string.optional_words_you_save_become)) {
+                OutlinedButton(onClick = { onSettings(SettingsPage.Anki) }) { Text(stringResource(R.string.choose_a_deck)) }
             }
         }
     }
 }
 
+/** The card's dictionary step: Download (asking first on mobile data), its progress, or a failure with Try again. */
 @Composable
-private fun SetupStep(done: Boolean, title: String, text: String) {
+private fun DictionaryDownload(offer: AvailableDictionary, download: DownloadState?, onDownload: () -> Unit) {
+    val context = LocalContext.current
+    var confirm by remember { mutableStateOf(false) }
+    val start = { if (onMobileData(context)) confirm = true else onDownload() }
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.download_on_mobile_data)) },
+            text = { Text(stringResource(R.string.the_dictionary_is_a_download, megabytes(offer.downloadBytes.toLong()))) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    onDownload()
+                }) { Text(stringResource(R.string.download)) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.not_now)) } },
+        )
+    }
+    when (download) {
+        is DownloadState.Running -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LinearProgressIndicator(
+                progress = { (download.bytes.toFloat() / download.total.coerceAtLeast(1)).coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                stringResource(R.string.downloading_the_dictionary_of, megabytes(download.bytes), megabytes(download.total)),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        is DownloadState.Failed -> Column {
+            Text(download.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = start) { Text(stringResource(R.string.try_the_download_again)) }
+        }
+        null -> OutlinedButton(onClick = start) {
+            Text(stringResource(R.string.download_size, megabytes(offer.downloadBytes.toLong())))
+        }
+    }
+}
+
+@Composable
+private fun SetupStep(done: Boolean, title: String, text: String, action: @Composable () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         val doneLabel = stringResource(R.string.done)
         Box(
@@ -637,13 +690,16 @@ private fun SetupStep(done: Boolean, title: String, text: String) {
         ) {
             if (done) Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
         }
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
             )
-            if (!done) Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!done) {
+                Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                action()
+            }
         }
     }
 }

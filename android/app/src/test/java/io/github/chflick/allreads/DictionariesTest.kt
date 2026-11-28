@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -52,8 +53,11 @@ class DictionariesTest {
         /** Fails this many list fetches first, like a phone whose network is still waking up. */
         var failFirst = 0
         var listFetches = 0
+        /** Holds list fetches until opened, so callers can pile up behind one. */
+        var gate: java.util.concurrent.CountDownLatch? = null
         override fun text(url: String): String {
             listFetches += 1
+            gate?.await()
             if (failFirst > 0) {
                 failFirst -= 1
                 throw IOException("not yet")
@@ -118,8 +122,33 @@ class DictionariesTest {
     }
 
     @Test
+    fun theListSavedLastTimeShowsWhileTheNetworkIsDown() = runBlocking {
+        dictionaries.refresh()
+        val later = Dictionaries(
+            files,
+            fetcher,
+            temp.root,
+            CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            describe = { it.message ?: "error" },
+            retryPauses = listOf(1, 1),
+        )
+        fetcher.fail = true
+        later.refresh()
+        assertEquals(listOf(french), later.list.value.available)
+        assertTrue(later.list.value.fromCache)
+        assertEquals(null, later.list.value.listError)
+    }
+
+    @Test
     fun callersAtTheSameTimeShareOneFetch() = runBlocking {
-        coroutineScope { repeat(3) { launch { dictionaries.refresh() } } }
+        val gate = java.util.concurrent.CountDownLatch(1)
+        fetcher.gate = gate
+        coroutineScope {
+            repeat(3) { launch { dictionaries.refresh() } }
+            // All three are waiting by now: the first in the fetch, the others for it.
+            delay(200)
+            gate.countDown()
+        }
         assertEquals(1, fetcher.listFetches)
         assertEquals(listOf(french), dictionaries.list.value.available)
     }
@@ -130,7 +159,7 @@ class DictionariesTest {
         awaitInstalled("fr-en")
         assertEquals("half and the rest", files.received)
         assertEquals(listOf("fr-en"), dictionaries.list.value.installed.map { it.pair })
-        assertTrue(temp.root.listFiles().orEmpty().isEmpty())
+        assertTrue(temp.root.listFiles().orEmpty().none { it.name.endsWith(".download") })
     }
 
     @Test
@@ -140,7 +169,7 @@ class DictionariesTest {
         awaitFailure("fr-en")
         assertEquals(DownloadState.Failed("connection lost"), dictionaries.downloads.value["fr-en"])
         assertEquals(null, files.received)
-        assertTrue(temp.root.listFiles().orEmpty().isEmpty())
+        assertTrue(temp.root.listFiles().orEmpty().none { it.name.endsWith(".download") })
     }
 
     @Test
@@ -149,7 +178,7 @@ class DictionariesTest {
         dictionaries.download(french)
         awaitFailure("fr-en")
         assertEquals(DownloadState.Failed("damaged"), dictionaries.downloads.value["fr-en"])
-        assertTrue(temp.root.listFiles().orEmpty().isEmpty())
+        assertTrue(temp.root.listFiles().orEmpty().none { it.name.endsWith(".download") })
     }
 
     @Test
@@ -179,6 +208,6 @@ class DictionariesTest {
         dictionaries.download(french)
         withTimeout(5_000) { dictionaries.awaitDownload("fr-en") }
         assertEquals("half and the rest", files.received)
-        assertTrue(temp.root.listFiles().orEmpty().isEmpty())
+        assertTrue(temp.root.listFiles().orEmpty().none { it.name.endsWith(".download") })
     }
 }

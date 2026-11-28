@@ -86,7 +86,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** The pages Settings opens from its overview. */
-private enum class SettingsPage(@StringRes val title: Int) {
+/** The settings pages; other screens can open one directly (the library's getting-started steps). */
+enum class SettingsPage(@StringRes val title: Int) {
     Translation(R.string.translation),
     Anki(R.string.ankidroid),
     Dictionaries(R.string.dictionaries),
@@ -103,8 +104,21 @@ private enum class SettingsPage(@StringRes val title: Int) {
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(services: Services, onVocabCheck: (String) -> Unit = {}, refresh: Int = 0) {
-    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+fun SettingsScreen(
+    services: Services,
+    onVocabCheck: (String) -> Unit = {},
+    refresh: Int = 0,
+    /** A page another screen asked to open; [onOpened] clears the request. */
+    openPage: SettingsPage? = null,
+    onOpened: () -> Unit = {},
+) {
+    var page by rememberSaveable { mutableStateOf(openPage) }
+    LaunchedEffect(openPage) {
+        if (openPage != null) {
+            page = openPage
+            onOpened()
+        }
+    }
     BackHandler(enabled = page != null) { page = null }
     // A page slides in from the overview and back out to it.
     AnimatedContent(targetState = page, transitionSpec = { sharedAxisX(forward = targetState != null) }, label = "settings") { open ->

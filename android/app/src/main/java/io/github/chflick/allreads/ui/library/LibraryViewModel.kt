@@ -23,9 +23,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.allreads_ffi.BookSummary
+import uniffi.allreads_ffi.AvailableDictionary
+import io.github.chflick.allreads.data.DownloadState
 import uniffi.allreads_ffi.WordStatus
 import uniffi.allreads_ffi.PreparedText
 import uniffi.allreads_ffi.BookDifficulty
@@ -70,6 +75,9 @@ data class SetupSteps(
     /** The language whose offline dictionary is offered, or null when none is published. */
     val dictionaryLanguage: String?,
     val dictionary: Boolean,
+    /** The dictionary to download from the card, while it is not installed. */
+    val dictionaryOffer: AvailableDictionary? = null,
+    val dictionaryDownload: DownloadState? = null,
 ) {
     val allDone: Boolean get() = deeplKey && ankiDeck && (dictionaryLanguage == null || dictionary)
 }
@@ -89,6 +97,26 @@ class LibraryViewModel(
 
     init {
         refresh()
+        // The dictionary list often arrives after the books (a slow first fetch), and a
+        // download from the card moves on: the cards follow both.
+        dictionaries?.let { dictionaries ->
+            viewModelScope.launch {
+                dictionaries.list.map { it.available to it.installed }
+                    .distinctUntilChanged()
+                    .drop(1)
+                    .collect { updateCards() }
+            }
+            viewModelScope.launch {
+                // Progress only moves the card's bar; no need to work the cards out again.
+                dictionaries.downloads.collect { downloads ->
+                    _state.update { state ->
+                        val setup = state.setup ?: return@update state
+                        val pair = setup.dictionaryOffer?.pair ?: return@update state
+                        state.copy(setup = setup.copy(dictionaryDownload = downloads[pair]))
+                    }
+                }
+            }
+        }
     }
 
     /** Changes the search or filters. A new sort is remembered for next time. */
@@ -120,11 +148,19 @@ class LibraryViewModel(
                 )
             }
             if (counting?.isActive != true) counting = viewModelScope.launch { countMissing() }
-            val list = books.getOrDefault(emptyList())
-            val offer = runCatching { vocabCheckOffer(list) }.getOrNull()
-            val setup = runCatching { setupSteps(list) }.getOrNull()
-            _state.update { it.copy(vocabCheckOffer = offer, setup = setup) }
+            // The cards first from what is known now; the list's arrival updates them (see init).
+            updateCards()
+            dictionaries?.let { runCatching { it.ensureListed() } }
         }
+    }
+
+    /** Works out the getting-started and vocabulary-check cards again, from the books and the dictionary list as they are. */
+    private suspend fun updateCards() {
+        val books = _state.value.books
+        val setup = runCatching { setupSteps(books) }.getOrNull()
+        _state.update { it.copy(setup = setup) }
+        val offer = runCatching { vocabCheckOffer(books) }.getOrNull()
+        _state.update { it.copy(vocabCheckOffer = offer) }
     }
 
     /** The language the reader reads in: that of the book read last, or of most books before any was read. */
@@ -137,20 +173,24 @@ class LibraryViewModel(
         val current = settings?.settings?.value ?: return null
         if (books.isEmpty() || current.setupDismissed) return null
         val language = mainLanguage(books)
-        // Usually fetched already, for the vocabulary check.
-        dictionaries?.ensureListed()
-        // Installed, or published.
-        val pair = language?.let { code ->
-            dictionaries?.list?.value?.installed?.firstOrNull { it.pair.startsWith("$code-") }?.pair
-                ?: dictionaries?.availableFor(code)?.pair
-        }
+        val list = dictionaries?.list?.value
+        val installed = language?.let { code -> list?.installed?.firstOrNull { it.pair.startsWith("$code-") } }
+        val offer = language?.takeIf { installed == null }?.let { dictionaries?.availableFor(it) }
         val steps = SetupSteps(
             deeplKey = hasDeeplKey(),
             ankiDeck = runCatching { repository.ankiDeckId() }.getOrNull() != null,
-            dictionaryLanguage = language?.takeIf { pair != null },
-            dictionary = pair != null && dictionaries?.list?.value?.installed?.any { it.pair == pair } == true,
+            dictionaryLanguage = language?.takeIf { installed != null || offer != null },
+            dictionary = installed != null,
+            dictionaryOffer = offer,
+            dictionaryDownload = offer?.let { dictionaries?.downloads?.value?.get(it.pair) },
         )
         return steps.takeIf { !it.allDone }
+    }
+
+    /** Downloads the language's dictionary from the getting-started card; the card shows the progress. */
+    fun downloadDictionary() {
+        val offer = _state.value.setup?.dictionaryOffer ?: return
+        dictionaries?.download(offer)
     }
 
     /** Hides the getting-started card for good. */
@@ -177,11 +217,8 @@ class LibraryViewModel(
     }
 
     /** True when the language's published dictionary supports the check (it downloads first). */
-    private suspend fun publishedWithFrequencies(language: String): Boolean {
-        val dictionaries = dictionaries ?: return false
-        dictionaries.ensureListed()
-        return dictionaries.availableFor(language)?.frequencySource != null
-    }
+    private fun publishedWithFrequencies(language: String): Boolean =
+        dictionaries?.availableFor(language)?.frequencySource != null
 
     /** Hides the vocabulary-check card for good (it stays in Settings). */
     fun dismissVocabCheck() {

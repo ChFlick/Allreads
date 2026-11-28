@@ -63,6 +63,10 @@ data class DictionaryList(
     val listError: String? = null,
     /** True while the published list is being fetched. */
     val loading: Boolean = false,
+    /** Which try of the fetch is running (1, 2, 3), for "Still trying" on a slow connection. */
+    val attempt: Int = 0,
+    /** True when [available] is the copy saved last time, not yet confirmed by this fetch. */
+    val fromCache: Boolean = false,
 )
 
 /**
@@ -92,47 +96,77 @@ class Dictionaries(
     /** One fetch of the list at a time: callers that arrive during one wait for it and share its result. */
     private val listing = Mutex()
 
+    /** The list as last fetched, so it shows at once next time, even before the network answers. */
+    private val savedList = File(cacheDir, "dictionaries.json")
+
+    /** How many fetches of the list have finished. */
+    @Volatile private var fetches = 0
+
     /**
      * Re-reads the installed files and the published list. The list is tried
-     * a few times, as the first request after the app starts often fails on a
-     * phone (the network is still waking up); an error shows only once every
-     * try has failed.
+     * a few times, as the first request after the app starts often fails or
+     * hangs on a phone; an error shows only once every try has failed.
      */
     suspend fun refresh() {
+        // Read before anything waits, so a fetch that finishes meanwhile counts as shared.
+        val started = fetches
         val installed = runCatching { files.installed() }.getOrDefault(emptyList())
         _list.update { it.copy(installed = installed) }
-        val started = fetches
+        loadSaved()
         listing.withLock {
             // Another caller fetched the list while this one waited: use theirs.
-            if (fetches != started && _list.value.available != null) return
-            _list.update { it.copy(loading = true, listError = null) }
+            if (fetches != started && _list.value.available != null && !_list.value.fromCache) return
+            _list.update { it.copy(loading = true, attempt = 1, listError = null) }
             var available = fetchList()
-            for (pause in retryPauses) {
+            for ((index, pause) in retryPauses.withIndex()) {
                 if (available.isSuccess) break
                 delay(pause)
+                _list.update { it.copy(attempt = index + 2) }
                 available = fetchList()
             }
             fetches += 1
+            val fetched = available.getOrNull()
             _list.update {
                 it.copy(
-                    available = available.getOrNull() ?: it.available,
-                    listError = available.exceptionOrNull()?.let { AppText.get(R.string.could_not_load_dictionaries) },
+                    available = fetched ?: it.available,
+                    fromCache = fetched == null && it.fromCache,
+                    // With a saved list on screen, a failed fetch is not worth an error.
+                    listError = available.exceptionOrNull()
+                        ?.takeIf { _ -> it.available == null }
+                        ?.let { AppText.get(R.string.could_not_load_dictionaries) },
                     loading = false,
+                    attempt = 0,
                 )
             }
         }
     }
 
-    /** How many fetches of the list have finished. */
-    @Volatile private var fetches = 0
+    /** Shows the list saved last time while nothing newer is known. */
+    private suspend fun loadSaved() {
+        if (_list.value.available != null) return
+        val saved = runCatching {
+            withContext(Dispatchers.IO) { if (savedList.exists()) files.parseManifest(savedList.readText()) else null }
+        }.getOrNull() ?: return
+        _list.update { if (it.available == null) it.copy(available = saved, fromCache = true) else it }
+    }
 
     private suspend fun fetchList(): Result<List<AvailableDictionary>> = runCatching {
-        withContext(Dispatchers.IO) { files.parseManifest(fetcher.text(DICTIONARY_MANIFEST_URL)) }
+        withContext(Dispatchers.IO) {
+            val json = fetcher.text(DICTIONARY_MANIFEST_URL)
+            val parsed = files.parseManifest(json)
+            runCatching { savedList.writeText(json) }
+            parsed
+        }
     }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
 
-    /** Reads the published list if it has not been read yet (e.g. Settings was never opened). */
+    /**
+     * Makes sure a list is known (e.g. Settings was never opened): the saved
+     * one at once, refreshed in the background, or else waits for the fetch.
+     */
     suspend fun ensureListed() {
-        if (_list.value.available == null) refresh()
+        if (_list.value.available != null) return
+        loadSaved()
+        if (_list.value.available == null) refresh() else scope.launch { refresh() }
     }
 
     /** The published dictionary for a book language, if there is one. */

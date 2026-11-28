@@ -26,6 +26,7 @@ import io.github.chflick.allreads.reader.readerRows
 import io.github.chflick.allreads.ui.library.LibraryContent
 import io.github.chflick.allreads.ui.library.LibraryState
 import io.github.chflick.allreads.ui.library.SetupSteps
+import uniffi.allreads_ffi.AvailableDictionary
 import io.github.chflick.allreads.ui.reader.PhraseChoice
 import io.github.chflick.allreads.ui.reader.ReaderActions
 import io.github.chflick.allreads.ui.reader.ContentsList
@@ -215,7 +216,16 @@ class Screenshots(private val dark: Boolean) {
             state = LibraryState(
                 books = Samples.books.take(2),
                 loading = false,
-                setup = SetupSteps(deeplKey = true, ankiDeck = false, dictionaryLanguage = "fr", dictionary = false),
+                setup = SetupSteps(
+                    deeplKey = true,
+                    ankiDeck = false,
+                    dictionaryLanguage = "fr",
+                    dictionary = false,
+                    dictionaryOffer = AvailableDictionary(
+                        pair = "fr-en", languageCode = "fr", url = "https://example.org/fr-en.sqlite.gz",
+                        built = "2026-11-28", downloadBytes = 11_200_000u, installedBytes = 43_000_000u, sha256 = "",
+                    ),
+                ),
             ),
             snackbar = SnackbarHostState(),
             onImport = {},
