@@ -380,6 +380,10 @@
     <string name="about_percent_right">About %1$d %% of them right</string>
     <string name="recommended">Recommended</string>
     <string name="check_your_vocabulary">Check your vocabulary</string>
+    <string name="getting_started">Getting started</string>
+    <string name="get_the_language_dictionary">Get the %1$s dictionary</string>
+    <string name="setup_dictionary_text">Meanings without a connection, and better counts of new words. In Settings → Dictionaries.</string>
+    <string name="hide">Hide</string>
     <string name="vocab_card_title">Already know some %1$s?</string>
     <string name="vocab_card_text">A two-minute check marks the common words you know, so your first book is not full of underlines.</string>
     <string name="start_check">Start</string>

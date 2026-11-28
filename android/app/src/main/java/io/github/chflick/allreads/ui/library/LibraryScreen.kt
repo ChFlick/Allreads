@@ -6,6 +6,7 @@ import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -39,6 +40,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -128,6 +130,7 @@ fun LibraryScreen(
         onFindBooks = onFindBooks,
         onVocabCheck = onVocabCheck,
         onDismissVocabCheck = viewModel::dismissVocabCheck,
+        onDismissSetup = viewModel::dismissSetup,
     )
 
     state.pending?.let { pending ->
@@ -440,6 +443,7 @@ fun LibraryContent(
     onFindBooks: (() -> Unit)? = null,
     onVocabCheck: (String) -> Unit = {},
     onDismissVocabCheck: () -> Unit = {},
+    onDismissSetup: () -> Unit = {},
 ) {
     val view = state.view
     // Most people read in one language; only books in another say theirs.
@@ -529,6 +533,9 @@ fun LibraryContent(
                     VocabCheckCard(language, onStart = { onVocabCheck(language) }, onDismiss = onDismissVocabCheck)
                 }
             }
+            state.setup?.takeIf { view.isDefault }?.let { steps ->
+                item(key = "setup") { SetupCard(steps, onSettings = onOpenSettings, onDismiss = onDismissSetup) }
+            }
             current?.let { book ->
                 item(key = "continue") {
                     ContinueCard(book, state.difficulty[book.id], onOpen = { onOpen(book) }, onLongPress = { onLongPress(book) })
@@ -579,6 +586,64 @@ private fun FilterRow(state: LibraryState, onView: (LibraryView) -> Unit) {
                     label = { Text(languageName(code)) },
                 )
             }
+        }
+    }
+}
+
+/**
+ * "Getting started": the empty library's other steps, still there once a book
+ * is in, each ticked off when done, until all are done or the card is hidden.
+ */
+@Composable
+private fun SetupCard(steps: SetupSteps, onSettings: () -> Unit, onDismiss: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(stringResource(R.string.getting_started), style = MaterialTheme.typography.titleMedium)
+            SetupStep(steps.deeplKey, stringResource(R.string.add_a_deepl_key), stringResource(R.string.for_translations_of_words_and))
+            steps.dictionaryLanguage?.let { language ->
+                SetupStep(
+                    steps.dictionary,
+                    stringResource(R.string.get_the_language_dictionary, languageName(language)),
+                    stringResource(R.string.setup_dictionary_text),
+                )
+            }
+            SetupStep(steps.ankiDeck, stringResource(R.string.choose_an_ankidroid_deck), stringResource(R.string.optional_words_you_save_become))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.hide)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupStep(done: Boolean, title: String, text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val doneLabel = stringResource(R.string.done)
+        Box(
+            Modifier.size(24.dp)
+                .then(
+                    if (done) {
+                        Modifier.background(MaterialTheme.colorScheme.primary, CircleShape)
+                    } else {
+                        Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    },
+                )
+                .semantics { if (done) contentDescription = doneLabel },
+            contentAlignment = Alignment.Center,
+        ) {
+            if (done) Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(16.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            )
+            if (!done) Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

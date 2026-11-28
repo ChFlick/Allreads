@@ -9,12 +9,15 @@ import java.net.URL
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.InstalledDictionary
@@ -58,6 +61,8 @@ data class DictionaryList(
     val available: List<AvailableDictionary>? = null,
     val installed: List<InstalledDictionary> = emptyList(),
     val listError: String? = null,
+    /** True while the published list is being fetched. */
+    val loading: Boolean = false,
 )
 
 /**
@@ -71,6 +76,8 @@ class Dictionaries(
     private val cacheDir: File,
     private val scope: CoroutineScope,
     private val describe: (Throwable) -> String,
+    /** Pauses before each retry of a failed list fetch. */
+    private val retryPauses: List<Long> = listOf(1_000, 3_000),
 ) {
     private val _list = MutableStateFlow(DictionaryList())
     val list: StateFlow<DictionaryList> = _list.asStateFlow()
@@ -82,20 +89,46 @@ class Dictionaries(
 
     private val jobs = mutableMapOf<String, Job>()
 
-    /** Re-reads the installed files and the published list. */
+    /** One fetch of the list at a time: callers that arrive during one wait for it and share its result. */
+    private val listing = Mutex()
+
+    /**
+     * Re-reads the installed files and the published list. The list is tried
+     * a few times, as the first request after the app starts often fails on a
+     * phone (the network is still waking up); an error shows only once every
+     * try has failed.
+     */
     suspend fun refresh() {
         val installed = runCatching { files.installed() }.getOrDefault(emptyList())
         _list.update { it.copy(installed = installed) }
-        val available = runCatching {
-            withContext(Dispatchers.IO) { files.parseManifest(fetcher.text(DICTIONARY_MANIFEST_URL)) }
-        }
-        _list.update {
-            it.copy(
-                available = available.getOrNull() ?: it.available,
-                listError = available.exceptionOrNull()?.let { AppText.get(R.string.could_not_load_dictionaries) },
-            )
+        val started = fetches
+        listing.withLock {
+            // Another caller fetched the list while this one waited: use theirs.
+            if (fetches != started && _list.value.available != null) return
+            _list.update { it.copy(loading = true, listError = null) }
+            var available = fetchList()
+            for (pause in retryPauses) {
+                if (available.isSuccess) break
+                delay(pause)
+                available = fetchList()
+            }
+            fetches += 1
+            _list.update {
+                it.copy(
+                    available = available.getOrNull() ?: it.available,
+                    listError = available.exceptionOrNull()?.let { AppText.get(R.string.could_not_load_dictionaries) },
+                    loading = false,
+                )
+            }
         }
     }
+
+    /** How many fetches of the list have finished. */
+    @Volatile private var fetches = 0
+
+    private suspend fun fetchList(): Result<List<AvailableDictionary>> = runCatching {
+        withContext(Dispatchers.IO) { files.parseManifest(fetcher.text(DICTIONARY_MANIFEST_URL)) }
+    }.onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
 
     /** Reads the published list if it has not been read yet (e.g. Settings was never opened). */
     suspend fun ensureListed() {

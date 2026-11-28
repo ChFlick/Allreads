@@ -223,7 +223,7 @@ private fun AllreadsTabs(
                 savedTabs.SaveableStateProvider(shown.name) {
                     when (shown) {
                         Tab.Library -> {
-                            val library = viewModel { LibraryViewModel(services.repository, services.settings, dictionaries = services.dictionaries) }
+                            val library = viewModel { LibraryViewModel(services.repository, services.settings, dictionaries = services.dictionaries, hasDeeplKey = { services.apiKeys.hasDeeplKey.value }) }
                             // Reading changes progress, so refresh whenever the library is shown,
                             // and after a vocabulary check marked words known.
                             LaunchedEffect(vocabClosed) { library.refresh() }

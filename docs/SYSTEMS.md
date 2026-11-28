@@ -73,6 +73,8 @@ API keys are not in there: they live in the Android Keystore and are passed into
 
 **Manifest** (`dictionaries.json`): `format`, then per dictionary `pair`, `language`, `url`, `built`, `download_bytes`, `installed_bytes`, `sha256`, and `frequencies` (the frequency source, if any). Book lists are listed in the same file under `catalogs`.
 
+**The list in the app** (`Dictionaries`): fetched when Settings opens, when a tapped word has no dictionary, and for the library's cards. One fetch runs at a time and callers waiting for it share its result; a failed fetch is tried again after 1 and 3 seconds, and only then shows an error (with Try again in Settings).
+
 **Install** (core `dictionary::install`): check the download's SHA-256 against the manifest, unpack it, open it and check its pair, then move it into place with an atomic rename. A file that fails any step is deleted, so a broken dictionary is never opened.
 
 **Used for:**
@@ -134,7 +136,7 @@ Core `vocab_check::VocabCheck`. The app drives it as a `VocabCheckSession` one b
 On simulated readers with real French ranks, the safe choice is 98–99 % right in 40–90 questions; with 25 % guessing it is 97–98 % right.
 
 **In the app:**
-- A card in the library for new readers, while the language's dictionary (installed or published) has frequencies.
+- A card in the library for new readers (next to the "Getting started" card with the DeepL key, the dictionary and the AnkiDroid deck), while the language's dictionary (installed or published) has frequencies.
 - Settings → Dictionaries, with the counts and Undo.
 - If the dictionary is not installed yet, the check downloads it first.
 

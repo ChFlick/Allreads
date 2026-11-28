@@ -81,6 +81,8 @@ data class AppSettings(
     val wordSort: WordSort = WordSort.Recent,
     /** The library's vocabulary-check card was dismissed. */
     val vocabCheckDismissed: Boolean = false,
+    /** The library's getting-started card was hidden. */
+    val setupDismissed: Boolean = false,
     /** Languages a vocabulary check was finished in, so the library stops offering it. */
     val vocabChecked: Set<String> = emptySet(),
 ) {
@@ -111,6 +113,7 @@ class SettingsStore(context: Context) {
             .putString("library_sort", next.librarySort.name)
             .putString("word_sort", next.wordSort.name)
             .putBoolean("vocab_check_dismissed", next.vocabCheckDismissed)
+            .putBoolean("setup_dismissed", next.setupDismissed)
             .putString("vocab_checked", next.vocabChecked.sorted().joinToString(","))
             .putBoolean("wallpaper_colors", next.wallpaperColors)
             .putBoolean("anki_word_card", next.ankiWordCard)
@@ -136,6 +139,7 @@ class SettingsStore(context: Context) {
             librarySort = prefs.getEnum("library_sort", defaults.librarySort),
             wordSort = prefs.getEnum("word_sort", defaults.wordSort),
             vocabCheckDismissed = prefs.getBoolean("vocab_check_dismissed", defaults.vocabCheckDismissed),
+            setupDismissed = prefs.getBoolean("setup_dismissed", defaults.setupDismissed),
             vocabChecked = prefs.getString("vocab_checked", null)?.split(',')?.filter { it.isNotBlank() }?.toSet()
                 ?: defaults.vocabChecked,
             readingFont = prefs.getEnum("reading_font", defaults.readingFont),

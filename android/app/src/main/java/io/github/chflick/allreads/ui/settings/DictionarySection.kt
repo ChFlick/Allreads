@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -51,7 +52,11 @@ fun DictionarySection(dictionaries: Dictionaries) {
     val pairs = (list.available.orEmpty().map { it.pair } + list.installed.map { it.pair }).distinct().sorted()
     if (pairs.isEmpty()) {
         Text(
-            if (list.available == null && list.listError == null) AppText.get(R.string.looking_for_dictionaries) else AppText.get(R.string.no_dictionaries_yet),
+            if (list.loading || (list.available == null && list.listError == null)) {
+                AppText.get(R.string.looking_for_dictionaries)
+            } else {
+                AppText.get(R.string.no_dictionaries_yet)
+            },
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -64,8 +69,12 @@ fun DictionarySection(dictionaries: Dictionaries) {
             download = downloads[pair],
         )
     }
-    list.listError?.let {
-        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    list.listError?.takeIf { !list.loading }?.let {
+        val scope = rememberCoroutineScope()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { dictionaries.refresh() } }) { Text(stringResource(R.string.try_again)) }
+        }
     }
     Text(
         stringResource(R.string.definitions_from_wiktionary_via_kaikki),

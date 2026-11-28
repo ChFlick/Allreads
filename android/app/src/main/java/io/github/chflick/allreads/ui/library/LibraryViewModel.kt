@@ -51,11 +51,27 @@ data class LibraryState(
     val fetching: Boolean = false,
     /** A language to offer the vocabulary check for, or null. */
     val vocabCheckOffer: String? = null,
+    /** The getting-started steps once books are in, or null when they are all done or hidden. */
+    val setup: SetupSteps? = null,
 ) {
     // Worked out once per state, not on every recomposition.
     val shown: List<BookSummary> by lazy { arrange(books, view) }
     /** The languages of the books, for the filter chips. */
     val languages: List<String> by lazy { books.map { it.languageCode }.distinct().sorted() }
+}
+
+/**
+ * The first steps after the first book: what is done and what is left, so a
+ * new reader still sees them once the empty library's page has gone.
+ */
+data class SetupSteps(
+    val deeplKey: Boolean,
+    val ankiDeck: Boolean,
+    /** The language whose offline dictionary is offered, or null when none is published. */
+    val dictionaryLanguage: String?,
+    val dictionary: Boolean,
+) {
+    val allDone: Boolean get() = deeplKey && ankiDeck && (dictionaryLanguage == null || dictionary)
 }
 
 class LibraryViewModel(
@@ -64,6 +80,8 @@ class LibraryViewModel(
     private val fetcher: Fetcher = HttpFetcher(),
     /** For offering the check when the dictionary is published but not installed yet. */
     private val dictionaries: Dictionaries? = null,
+    /** Whether a DeepL key is saved, for the getting-started card. */
+    private val hasDeeplKey: () -> Boolean = { false },
 ) : ViewModel() {
     private val savedSort = settings?.settings?.value?.librarySort ?: BookSort.Recent
     private val _state = MutableStateFlow(LibraryState(view = LibraryView(sort = savedSort)))
@@ -102,9 +120,43 @@ class LibraryViewModel(
                 )
             }
             if (counting?.isActive != true) counting = viewModelScope.launch { countMissing() }
-            val offer = runCatching { vocabCheckOffer(books.getOrDefault(emptyList())) }.getOrNull()
-            _state.update { it.copy(vocabCheckOffer = offer) }
+            val list = books.getOrDefault(emptyList())
+            val offer = runCatching { vocabCheckOffer(list) }.getOrNull()
+            val setup = runCatching { setupSteps(list) }.getOrNull()
+            _state.update { it.copy(vocabCheckOffer = offer, setup = setup) }
         }
+    }
+
+    /** The language the reader reads in: that of the book read last, or of most books before any was read. */
+    private fun mainLanguage(books: List<BookSummary>): String? =
+        books.filter { it.lastReadAt != null }.maxByOrNull { it.lastReadAt ?: 0 }?.languageCode
+            ?: books.groupingBy { it.languageCode }.eachCount().maxByOrNull { it.value }?.key
+
+    /** What is left of getting started; null without books (the empty library shows the steps) or once done or hidden. */
+    private suspend fun setupSteps(books: List<BookSummary>): SetupSteps? {
+        val current = settings?.settings?.value ?: return null
+        if (books.isEmpty() || current.setupDismissed) return null
+        val language = mainLanguage(books)
+        // Usually fetched already, for the vocabulary check.
+        dictionaries?.ensureListed()
+        // Installed, or published.
+        val pair = language?.let { code ->
+            dictionaries?.list?.value?.installed?.firstOrNull { it.pair.startsWith("$code-") }?.pair
+                ?: dictionaries?.availableFor(code)?.pair
+        }
+        val steps = SetupSteps(
+            deeplKey = hasDeeplKey(),
+            ankiDeck = runCatching { repository.ankiDeckId() }.getOrNull() != null,
+            dictionaryLanguage = language?.takeIf { pair != null },
+            dictionary = pair != null && dictionaries?.list?.value?.installed?.any { it.pair == pair } == true,
+        )
+        return steps.takeIf { !it.allDone }
+    }
+
+    /** Hides the getting-started card for good. */
+    fun dismissSetup() {
+        settings?.update { it.copy(setupDismissed = true) }
+        _state.update { it.copy(setup = null) }
     }
 
     /**
@@ -116,10 +168,7 @@ class LibraryViewModel(
     private suspend fun vocabCheckOffer(books: List<BookSummary>): String? {
         val current = settings?.settings?.value ?: return null
         if (current.vocabCheckDismissed) return null
-        // The book read last; with none read yet, the language most books are in.
-        val language = books.filter { it.lastReadAt != null }.maxByOrNull { it.lastReadAt ?: 0 }?.languageCode
-            ?: books.groupingBy { it.languageCode }.eachCount().maxByOrNull { it.value }?.key
-            ?: return null
+        val language = mainLanguage(books) ?: return null
         if (language in current.vocabChecked) return null
         if (!repository.vocabularyCheckAvailable(language) && !publishedWithFrequencies(language)) return null
         if (repository.vocabularyCheckCount(language) > 0) return null

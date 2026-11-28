@@ -25,6 +25,7 @@ import io.github.chflick.allreads.data.ThemeMode
 import io.github.chflick.allreads.reader.readerRows
 import io.github.chflick.allreads.ui.library.LibraryContent
 import io.github.chflick.allreads.ui.library.LibraryState
+import io.github.chflick.allreads.ui.library.SetupSteps
 import io.github.chflick.allreads.ui.reader.PhraseChoice
 import io.github.chflick.allreads.ui.reader.ReaderActions
 import io.github.chflick.allreads.ui.reader.ContentsList
@@ -201,6 +202,21 @@ class Screenshots(private val dark: Boolean) {
     fun libraryVocabCard() = shot {
         LibraryContent(
             state = LibraryState(books = Samples.books.take(2), loading = false, vocabCheckOffer = "fr"),
+            snackbar = SnackbarHostState(),
+            onImport = {},
+            onOpen = {},
+            onLongPress = {},
+        )
+    }
+
+    @Test
+    fun librarySetupCard() = shot {
+        LibraryContent(
+            state = LibraryState(
+                books = Samples.books.take(2),
+                loading = false,
+                setup = SetupSteps(deeplKey = true, ankiDeck = false, dictionaryLanguage = "fr", dictionary = false),
+            ),
             snackbar = SnackbarHostState(),
             onImport = {},
             onOpen = {},

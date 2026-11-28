@@ -10,6 +10,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
@@ -47,7 +49,17 @@ class DictionariesTest {
     }
 
     private class FakeFetcher(var fail: Boolean = false) : Fetcher {
-        override fun text(url: String) = if (fail) throw IOException("offline") else "manifest"
+        /** Fails this many list fetches first, like a phone whose network is still waking up. */
+        var failFirst = 0
+        var listFetches = 0
+        override fun text(url: String): String {
+            listFetches += 1
+            if (failFirst > 0) {
+                failFirst -= 1
+                throw IOException("not yet")
+            }
+            return if (fail) throw IOException("offline") else "manifest"
+        }
         override fun download(url: String, target: File, progress: (Long) -> Unit) {
             target.writeText("half")
             progress(4)
@@ -60,9 +72,14 @@ class DictionariesTest {
     private val files = FakeFiles()
     private val fetcher = FakeFetcher()
     private val dictionaries by lazy {
-        Dictionaries(files, fetcher, temp.root, CoroutineScope(SupervisorJob() + Dispatchers.Default)) {
-            it.message ?: "error"
-        }
+        Dictionaries(
+            files,
+            fetcher,
+            temp.root,
+            CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            describe = { it.message ?: "error" },
+            retryPauses = listOf(1, 1),
+        )
     }
 
     private fun awaitInstalled(pair: String) = runBlocking {
@@ -89,6 +106,22 @@ class DictionariesTest {
         assertEquals(1, dictionaries.list.value.installed.size)
         assertEquals(null, dictionaries.list.value.available)
         assertTrue(dictionaries.list.value.listError != null)
+    }
+
+    @Test
+    fun aFirstFailedFetchIsTriedAgainWithoutShowingAnError() = runBlocking {
+        fetcher.failFirst = 2
+        dictionaries.refresh()
+        assertEquals(listOf(french), dictionaries.list.value.available)
+        assertEquals(null, dictionaries.list.value.listError)
+        assertEquals(false, dictionaries.list.value.loading)
+    }
+
+    @Test
+    fun callersAtTheSameTimeShareOneFetch() = runBlocking {
+        coroutineScope { repeat(3) { launch { dictionaries.refresh() } } }
+        assertEquals(1, fetcher.listFetches)
+        assertEquals(listOf(french), dictionaries.list.value.available)
     }
 
     @Test
