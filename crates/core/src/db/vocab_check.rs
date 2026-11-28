@@ -1,13 +1,31 @@
 //! Saving and undoing the words a vocabulary check marks known (see
 //! [`crate::vocab_check`]).
 
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 
 use super::term::Status;
 use super::{Database, DbError};
 
 /// The source marked words carry, shown as their badge and used to undo.
 pub const VOCABULARY_CHECK_SOURCE: &str = "Vocabulary check";
+
+/// How a language's vocabulary checks have held up while reading.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct VocabCheckStats {
+    /// Word forms the checks marked known.
+    pub marked: usize,
+    /// Of those, how many the reader set back (another level, or forgotten):
+    /// the marks that were wrong, as far as the app can tell.
+    pub corrected: usize,
+}
+
+fn marked_key(language_code: &str) -> String {
+    format!("vocab_check_marked:{language_code}")
+}
+
+fn corrected_key(language_code: &str) -> String {
+    format!("vocab_check_corrected:{language_code}")
+}
 
 impl Database {
     /// Saves `keys` (term keys) as known in `language_code`, with the source
@@ -45,9 +63,64 @@ impl Database {
                 ])?;
             }
         }
+        self.add_to_counter(&marked_key(language_code), added)?;
         self.record_word_counts(Some(language_code))?;
         transaction.commit()?;
         Ok(added)
+    }
+
+    /// How the checks in `language_code` have held up: words marked, and how
+    /// many of them the reader set back since.
+    ///
+    /// # Errors
+    /// Returns a database error if a setting cannot be read.
+    pub fn vocabulary_check_stats(&self, language_code: &str) -> Result<VocabCheckStats, DbError> {
+        Ok(VocabCheckStats {
+            marked: self.counter(&marked_key(language_code))?,
+            corrected: self.counter(&corrected_key(language_code))?,
+        })
+    }
+
+    /// Called before term `id` changes to `status` (`None`: deleted). A word
+    /// the check marked known that leaves "known" counts as a correction, and
+    /// becomes the reader's own word: no longer from the check, so undo and
+    /// the badge leave it alone.
+    pub(crate) fn note_vocabulary_check_change(
+        &self,
+        id: i64,
+        status: Option<Status>,
+    ) -> Result<(), DbError> {
+        let found: Option<(String, String, i64)> = self
+            .conn()
+            .query_row(
+                "SELECT language_code, imported_from, status FROM term WHERE id = ?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let Some((language_code, source, code)) = found else {
+            return Ok(());
+        };
+        let marked_known =
+            source == VOCABULARY_CHECK_SOURCE && code == i64::from(Status::WellKnown.code());
+        if !marked_known || status == Some(Status::WellKnown) {
+            return Ok(());
+        }
+        self.add_to_counter(&corrected_key(&language_code), 1)?;
+        if status.is_some() {
+            self.conn()
+                .execute("UPDATE term SET imported_from = '' WHERE id = ?1", [id])?;
+        }
+        Ok(())
+    }
+
+    fn counter(&self, key: &str) -> Result<usize, DbError> {
+        Ok(self.setting(key)?.and_then(|v| v.parse().ok()).unwrap_or(0))
+    }
+
+    fn add_to_counter(&self, key: &str, amount: usize) -> Result<(), DbError> {
+        let value = self.counter(key)? + amount;
+        self.set_setting(key, &value.to_string())
     }
 
     /// Takes back a vocabulary check in `language_code`: deletes the words it
@@ -69,6 +142,9 @@ impl Database {
                 Status::WellKnown.code()
             ],
         )?;
+        // Starting over: the counts are about marks that no longer exist.
+        self.set_setting(&marked_key(language_code), "0")?;
+        self.set_setting(&corrected_key(language_code), "0")?;
         self.record_word_counts(Some(language_code))?;
         transaction.commit()?;
         Ok(deleted)
@@ -164,5 +240,51 @@ mod tests {
         );
         assert_eq!(db.undo_vocabulary_check("fr").unwrap(), 0);
         assert_eq!(db.vocabulary_check_count("fr").unwrap(), 0);
+    }
+
+    #[test]
+    fn setting_a_marked_word_back_counts_as_a_correction() {
+        let db = french_db();
+        db.mark_known_from_check("fr", &keys(&["le", "la", "lire", "chien", "chat"]))
+            .unwrap();
+        assert_eq!(
+            db.vocabulary_check_stats("fr").unwrap(),
+            VocabCheckStats {
+                marked: 5,
+                corrected: 0
+            }
+        );
+        // Not corrections: a meaning added while still known.
+        let mut le = new_term("le", Status::WellKnown);
+        le.translation = "the".into();
+        db.save_term(&le).unwrap();
+        // Corrections: a level from the drawer, a double tap's level, and a forget.
+        db.save_term(&new_term("lire", Status::Learning(2)))
+            .unwrap();
+        db.set_term_status("fr", "chien", Status::Learning(1))
+            .unwrap();
+        let chat = db.find_term("fr", "chat").unwrap().unwrap().id;
+        db.delete_term(chat).unwrap();
+        assert_eq!(
+            db.vocabulary_check_stats("fr").unwrap(),
+            VocabCheckStats {
+                marked: 5,
+                corrected: 3
+            }
+        );
+        // A corrected word is the reader's own now: no badge, and undo leaves it.
+        assert_eq!(
+            db.find_term("fr", "lire").unwrap().unwrap().imported_from,
+            ""
+        );
+        db.set_term_status("fr", "lire", Status::WellKnown).unwrap();
+        assert_eq!(db.vocabulary_check_stats("fr").unwrap().corrected, 3);
+        db.undo_vocabulary_check("fr").unwrap();
+        assert!(db.find_term("fr", "lire").unwrap().is_some());
+        assert!(db.find_term("fr", "la").unwrap().is_none());
+        assert_eq!(
+            db.vocabulary_check_stats("fr").unwrap(),
+            VocabCheckStats::default()
+        );
     }
 }

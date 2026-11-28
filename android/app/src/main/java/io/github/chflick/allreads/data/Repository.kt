@@ -20,6 +20,7 @@ import uniffi.allreads_ffi.CatalogWord
 import uniffi.allreads_ffi.InstalledCatalog
 import uniffi.allreads_ffi.VocabApplied
 import uniffi.allreads_ffi.VocabCheckSession
+import uniffi.allreads_ffi.VocabStats
 import uniffi.allreads_ffi.DictionaryLookup
 import uniffi.allreads_ffi.InstalledDictionary
 import uniffi.allreads_ffi.PhraseSuggestion
@@ -222,6 +223,9 @@ class Repository(val dataDir: File) : NoteTypeStore, SyncStore, DictionaryFiles,
         io { app.applyVocabularyCheck(session, choice.toUInt()) }
 
     suspend fun undoVocabularyCheck(languageCode: String): Int = io { app.undoVocabularyCheck(languageCode).toInt() }
+
+    /** How the checks held up: word forms marked and how many were set back since. */
+    suspend fun vocabularyCheckStats(languageCode: String): VocabStats = io { app.vocabularyCheckStats(languageCode) }
 
     /** Words a check marked that are still as it left them. */
     suspend fun vocabularyCheckCount(languageCode: String): Int = io { app.vocabularyCheckCount(languageCode).toInt() }

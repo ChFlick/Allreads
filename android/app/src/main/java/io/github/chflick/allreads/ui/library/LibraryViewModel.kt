@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.library
 
+import io.github.chflick.allreads.data.Dictionaries
 import io.github.chflick.allreads.R
 import io.github.chflick.allreads.ui.AppText
 import io.github.chflick.allreads.data.BookSort
@@ -61,6 +62,8 @@ class LibraryViewModel(
     private val repository: Repository,
     private val settings: SettingsStore? = null,
     private val fetcher: Fetcher = HttpFetcher(),
+    /** For offering the check when the dictionary is published but not installed yet. */
+    private val dictionaries: Dictionaries? = null,
 ) : ViewModel() {
     private val savedSort = settings?.settings?.value?.librarySort ?: BookSort.Recent
     private val _state = MutableStateFlow(LibraryState(view = LibraryView(sort = savedSort)))
@@ -118,10 +121,17 @@ class LibraryViewModel(
             ?: books.groupingBy { it.languageCode }.eachCount().maxByOrNull { it.value }?.key
             ?: return null
         if (language in current.vocabChecked) return null
-        if (!repository.vocabularyCheckAvailable(language)) return null
+        if (!repository.vocabularyCheckAvailable(language) && !publishedWithFrequencies(language)) return null
         if (repository.vocabularyCheckCount(language) > 0) return null
         val known = repository.listTerms(language).count { it.status == WordStatus.WellKnown }
         return language.takeIf { known < FEW_KNOWN_WORDS }
+    }
+
+    /** True when the language's published dictionary supports the check (it downloads first). */
+    private suspend fun publishedWithFrequencies(language: String): Boolean {
+        val dictionaries = dictionaries ?: return false
+        dictionaries.ensureListed()
+        return dictionaries.availableFor(language)?.frequencySource != null
     }
 
     /** Hides the vocabulary-check card for good (it stays in Settings). */

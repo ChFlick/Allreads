@@ -18,6 +18,10 @@ pub struct AvailableDictionary {
     pub installed_bytes: u64,
     /// SHA-256 of the downloaded `.gz`, in hex.
     pub sha256: String,
+    /// The word-frequency source in the file (for the vocabulary check), if any.
+    /// Older manifests do not list it.
+    #[serde(default)]
+    pub frequencies: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -53,7 +57,7 @@ mod tests {
       "dictionaries": [
         {"pair": "fr-en", "language": "fr", "url": "https://example.org/fr-en.sqlite.gz",
          "built": "2026-11-25", "download_bytes": 10773550, "installed_bytes": 42651648,
-         "sha256": "ab12"},
+         "sha256": "ab12", "frequencies": "Lexique 3"},
         {"pair": "../evil", "language": "fr", "url": "https://example.org/x",
          "built": "x", "download_bytes": 1, "installed_bytes": 1, "sha256": "00"}
       ]
@@ -65,6 +69,9 @@ mod tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].pair, "fr-en");
         assert_eq!(list[0].download_bytes, 10_773_550);
+        assert_eq!(list[0].frequencies.as_deref(), Some("Lexique 3"));
+        let older = MANIFEST.replace(r#", "frequencies": "Lexique 3""#, "");
+        assert_eq!(parse_manifest(&older).unwrap()[0].frequencies, None);
     }
 
     #[test]

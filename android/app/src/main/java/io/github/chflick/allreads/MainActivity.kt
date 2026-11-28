@@ -175,7 +175,7 @@ private fun AllreadsNavigation(services: Services) {
         exit = slideOutVertically(tween(250)) { it / 8 } + fadeOut(tween(200)),
     ) {
         // One view model for every check; open() starts a fresh one per opening.
-        val check = viewModel(key = "vocab-check") { VocabCheckViewModel(services.repository, services.settings) }
+        val check = viewModel(key = "vocab-check") { VocabCheckViewModel(services.repository, services.settings, services.dictionaries) }
         vocabCheck?.let { language -> remember(language, vocabChecks) { check.open(language, vocabChecks) } }
         VocabCheckScreen(check, onClose = {
             vocabCheck = null
@@ -223,7 +223,7 @@ private fun AllreadsTabs(
                 savedTabs.SaveableStateProvider(shown.name) {
                     when (shown) {
                         Tab.Library -> {
-                            val library = viewModel { LibraryViewModel(services.repository, services.settings) }
+                            val library = viewModel { LibraryViewModel(services.repository, services.settings, dictionaries = services.dictionaries) }
                             // Reading changes progress, so refresh whenever the library is shown,
                             // and after a vocabulary check marked words known.
                             LaunchedEffect(vocabClosed) { library.refresh() }

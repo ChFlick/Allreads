@@ -509,6 +509,9 @@ pub struct AvailableDictionary {
     pub installed_bytes: u64,
     /// Pass back to `install_dictionary`.
     pub sha256: String,
+    /// The word-frequency source in the file, if any: it supports the vocabulary check.
+    #[uniffi(default = None)]
+    pub frequency_source: Option<String>,
 }
 
 impl From<allreads_core::dictionary::AvailableDictionary> for AvailableDictionary {
@@ -521,6 +524,7 @@ impl From<allreads_core::dictionary::AvailableDictionary> for AvailableDictionar
             download_bytes: d.download_bytes,
             installed_bytes: d.installed_bytes,
             sha256: d.sha256,
+            frequency_source: d.frequencies,
         }
     }
 }

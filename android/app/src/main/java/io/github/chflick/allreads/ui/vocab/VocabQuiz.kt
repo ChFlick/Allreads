@@ -30,6 +30,16 @@ class VocabQuiz(private val session: VocabCheckSession) {
         return waiting.firstOrNull()
     }
 
+    /** True when the last answer can be taken back (it is still in this band). */
+    val canGoBack: Boolean get() = answers.isNotEmpty()
+
+    /** Takes back the last answer, so its word is asked again (a mis-tap). */
+    fun goBack() {
+        val last = answers.removeLastOrNull() ?: return
+        waiting.addFirst(last.word)
+        answered--
+    }
+
     /** Answers the current word; the band's answers go to the core together. */
     fun answer(yes: Boolean) {
         val word = waiting.removeFirstOrNull() ?: return
@@ -55,3 +65,6 @@ class VocabQuiz(private val session: VocabCheckSession) {
         const val TYPICAL_LENGTH = 65
     }
 }
+
+/** The source the core gives words a vocabulary check marked (`db::vocab_check::VOCABULARY_CHECK_SOURCE`). */
+const val VOCABULARY_CHECK_SOURCE = "Vocabulary check"

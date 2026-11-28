@@ -38,6 +38,7 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 import uniffi.allreads_ffi.AvailableDictionary
 import uniffi.allreads_ffi.InstalledDictionary
+import uniffi.allreads_ffi.VocabStats
 
 /** Step 23c: download and remove offline dictionaries. */
 @Composable
@@ -223,12 +224,17 @@ fun VocabCheckSection(services: Services, refresh: Int, onStart: (String) -> Uni
     val scope = rememberCoroutineScope()
     // Language → words the check marked (still untouched), for dictionaries with frequencies.
     var checks by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    // Language → how its checks held up while reading.
+    var stats by remember { mutableStateOf<Map<String, VocabStats>>(emptyMap()) }
     var askUndo by remember { mutableStateOf<String?>(null) }
     var undoError by remember { mutableStateOf<String?>(null) }
     suspend fun reload() {
         checks = list.installed.map { it.pair.substringBefore('-') }.distinct()
             .filter { runCatching { services.repository.vocabularyCheckAvailable(it) }.getOrDefault(false) }
             .associateWith { runCatching { services.repository.vocabularyCheckCount(it) }.getOrDefault(0) }
+        stats = checks.keys.associateWith { runCatching { services.repository.vocabularyCheckStats(it) }.getOrNull() }
+            .filterValues { it != null }
+            .mapValues { it.value!! }
     }
     LaunchedEffect(list.installed, refresh) { reload() }
     if (checks.isEmpty()) return
@@ -241,6 +247,19 @@ fun VocabCheckSection(services: Services, refresh: Int, onStart: (String) -> Uni
                 Text(
                     pluralStringResource(R.plurals.marked_by_the_check, marked, "%,d".format(marked)),
                     style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            // How it held up: marks the reader set back while reading.
+            stats[language]?.takeIf { it.marked > 0u }?.let { held ->
+                Text(
+                    pluralStringResource(
+                        R.plurals.check_corrections,
+                        held.marked.toInt(),
+                        "%,d".format(held.corrected.toInt()),
+                        "%,d".format(held.marked.toInt()),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

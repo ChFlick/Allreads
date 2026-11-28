@@ -134,6 +134,16 @@ impl Database {
         let context = term.context.as_ref();
         // The term and its queue entry are saved together or not at all.
         let transaction = self.conn().unchecked_transaction()?;
+        let existing: Option<i64> = transaction
+            .query_row(
+                "SELECT id FROM term WHERE language_code = ?1 AND text = ?2",
+                params![term.language_code, key],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(existing) = existing {
+            self.note_vocabulary_check_change(existing, Some(term.status))?;
+        }
         let id = transaction.query_row(
             "INSERT INTO term (language_code, text, lemma, status, translation, notes, parent_id,
                  display_text, context_sentence, context_translation, source_book, source_chapter)
@@ -345,6 +355,7 @@ impl Database {
             }
         }
         let transaction = self.conn().unchecked_transaction()?;
+        self.note_vocabulary_check_change(term.id, Some(status))?;
         transaction.execute(
             "UPDATE term SET status = ?2 WHERE id = ?1",
             params![term.id, status.code()],
@@ -400,6 +411,7 @@ impl Database {
             |row| row.get(0),
         )?;
         let transaction = self.conn().unchecked_transaction()?;
+        self.note_vocabulary_check_change(id, None)?;
         if let (Some(link), false) = (link, elsewhere) {
             transaction.execute(
                 "INSERT INTO anki_suspend (note_id, language_code, term_key, queued_at)

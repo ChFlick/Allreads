@@ -59,4 +59,21 @@ class VocabQuizTest {
         assertEquals(added, repository.undoVocabularyCheck("fr"))
         assertTrue(repository.listTerms("fr").isEmpty())
     }
+
+    @Test
+    fun backAsksThePreviousWordAgainWithinABand() = runBlocking {
+        val data = temp.newFolder("data")
+        File(fixtures, "frequencies.sqlite").copyTo(File(data, "dictionaries/fr-en.sqlite"))
+        val quiz = VocabQuiz(Repository(data).startVocabularyCheck("fr"))
+        assertFalse(quiz.canGoBack)
+        val first = quiz.current()!!
+        quiz.answer(true)
+        val second = quiz.current()!!
+        assertTrue(quiz.canGoBack)
+        quiz.goBack()
+        assertEquals(first, quiz.current())
+        assertEquals(0, quiz.answered)
+        quiz.answer(false)
+        assertEquals(second, quiz.current())
+    }
 }

@@ -86,6 +86,8 @@ jobs:
                   "download_bytes": os.path.getsize(gz),
                   "installed_bytes": os.path.getsize(f"out/{code}-en.sqlite"),
                   "sha256": hashlib.sha256(open(gz, "rb").read()).hexdigest(),
+                  # The word-frequency source added by dictgen, for the vocabulary check.
+                  "frequencies": "Lexique 3" if code == "fr" else "FrequencyWords",
               })
           catalogs = json.load(open("published.json")).get("catalogs", [])
           json.dump({"format": 1, "dictionaries": entries, "catalogs": catalogs}, open("out/dictionaries.json", "w"), indent=2)

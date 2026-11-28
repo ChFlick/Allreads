@@ -97,6 +97,11 @@ class Dictionaries(
         }
     }
 
+    /** Reads the published list if it has not been read yet (e.g. Settings was never opened). */
+    suspend fun ensureListed() {
+        if (_list.value.available == null) refresh()
+    }
+
     /** The published dictionary for a book language, if there is one. */
     fun availableFor(languageCode: String): AvailableDictionary? =
         _list.value.available?.firstOrNull { it.languageCode == languageCode }

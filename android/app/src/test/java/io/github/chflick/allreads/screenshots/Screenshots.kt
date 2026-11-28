@@ -188,6 +188,16 @@ class Screenshots(private val dark: Boolean) {
     }
 
     @Test
+    fun vocabNeedsDictionary() = shot {
+        VocabCheckContent(VocabCheckState.NeedsDictionary(11_081_203), language = "French")
+    }
+
+    @Test
+    fun vocabDone() = shot {
+        VocabCheckContent(VocabCheckState.Done(words = 820, forms = 2_950), language = "French")
+    }
+
+    @Test
     fun libraryVocabCard() = shot {
         LibraryContent(
             state = LibraryState(books = Samples.books.take(2), loading = false, vocabCheckOffer = "fr"),

@@ -55,6 +55,15 @@ pub struct VocabResult {
     pub choices: Vec<VocabChoice>,
 }
 
+/// How a language's vocabulary checks held up while reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct VocabStats {
+    /// Word forms the checks marked known.
+    pub marked: u32,
+    /// Of those, how many the reader set back since.
+    pub corrected: u32,
+}
+
 /// A vocabulary check in progress.
 #[derive(uniffi::Object)]
 pub struct VocabCheckSession {
@@ -204,6 +213,22 @@ impl App {
         Ok(u32::try_from(deleted).unwrap_or(u32::MAX))
     }
 
+    /// How the checks in the language held up while reading: word forms
+    /// marked, and how many of them the reader set back since.
+    ///
+    /// # Errors
+    /// Returns `Database` if the database cannot be read.
+    pub fn vocabulary_check_stats(
+        &self,
+        language_code: String,
+    ) -> Result<VocabStats, AllreadsError> {
+        let stats = self.db()?.vocabulary_check_stats(&language_code)?;
+        Ok(VocabStats {
+            marked: u32::try_from(stats.marked).unwrap_or(u32::MAX),
+            corrected: u32::try_from(stats.corrected).unwrap_or(u32::MAX),
+        })
+    }
+
     /// How many words a vocabulary check marked that are still as it left them.
     ///
     /// # Errors
@@ -348,6 +373,13 @@ mod tests {
         ));
 
         assert_eq!(app.vocabulary_check_count("fr".into()).unwrap(), added);
+        assert_eq!(
+            app.vocabulary_check_stats("fr".into()).unwrap(),
+            VocabStats {
+                marked: added,
+                corrected: 0
+            }
+        );
         assert_eq!(app.undo_vocabulary_check("fr".into()).unwrap(), added);
         assert!(app.list_terms("fr".into()).unwrap().is_empty());
     }

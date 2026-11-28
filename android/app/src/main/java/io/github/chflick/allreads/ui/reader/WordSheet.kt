@@ -1,5 +1,6 @@
 package io.github.chflick.allreads.ui.reader
 
+import io.github.chflick.allreads.ui.vocab.VOCABULARY_CHECK_SOURCE
 import io.github.chflick.allreads.ui.AppText
 import androidx.compose.ui.res.stringResource
 import io.github.chflick.allreads.R
@@ -276,16 +277,30 @@ fun WordSheetContent(
         // One row of levels; a tap saves straight away, "New" forgets a saved word.
         // The line under it confirms what a tap just did.
         var justSaved by remember(word.text) { mutableStateOf<WordStatus?>(null) }
+        val selectLevel: (WordStatus) -> Unit = { choice ->
+            draft.status = choice
+            if (choice != WordStatus.New || draft.lastSaved != null) {
+                justSaved = choice
+                onSave(draft.fields)
+                draft.lastSaved = draft.fields.takeIf { choice != WordStatus.New }
+            }
+        }
+        // Marked known by the vocabulary check, yet looked up: maybe the mark was
+        // wrong. One tap sets it back (and the check learns how it held up).
+        if (word.saved?.importedFrom == VOCABULARY_CHECK_SOURCE && draft.status == WordStatus.WellKnown && justSaved == null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.marked_known_by_the_check),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { selectLevel(WordStatus.New) }) { Text(stringResource(R.string.set_back_to_new)) }
+            }
+        }
         LevelBar(
             selected = draft.status.takeIf { draft.lastSaved != null },
-            onSelect = { choice ->
-                draft.status = choice
-                if (choice != WordStatus.New || draft.lastSaved != null) {
-                    justSaved = choice
-                    onSave(draft.fields)
-                    draft.lastSaved = draft.fields.takeIf { choice != WordStatus.New }
-                }
-            },
+            onSelect = selectLevel,
         )
         justSaved?.let { saved ->
             Text(

@@ -1,5 +1,8 @@
 package io.github.chflick.allreads.ui.vocab
 
+import uniffi.allreads_ffi.AvailableDictionary
+import io.github.chflick.allreads.data.DownloadState
+import io.github.chflick.allreads.data.Dictionaries
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.chflick.allreads.data.Repository
@@ -18,8 +21,14 @@ import uniffi.allreads_ffi.VocabResult
 sealed interface VocabCheckState {
     data object Starting : VocabCheckState
 
+    /** The check needs the language's dictionary, which is published but not installed. */
+    data class NeedsDictionary(val downloadBytes: Long) : VocabCheckState
+
+    /** The dictionary is downloading (0 to 1). */
+    data class Downloading(val progress: Float) : VocabCheckState
+
     /** A word to answer, and how far along the check is (0 to 1). */
-    data class Asking(val word: String, val progress: Float) : VocabCheckState
+    data class Asking(val word: String, val progress: Float, val canGoBack: Boolean = false) : VocabCheckState
 
     /** The result; `chosen` is the index of the selected choice. */
     data class Result(val result: VocabResult, val chosen: Int = 0, val applying: Boolean = false) : VocabCheckState
@@ -38,6 +47,8 @@ class VocabCheckViewModel(
     private val repository: Repository,
     /** Remembers which languages were checked, so the library stops offering it; null in tests. */
     private val settings: SettingsStore? = null,
+    /** Downloads the dictionary when it is published but not installed; null in tests. */
+    private val dictionaries: Dictionaries? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow<VocabCheckState>(VocabCheckState.Starting)
     val state: StateFlow<VocabCheckState> = _state.asStateFlow()
@@ -74,6 +85,14 @@ class VocabCheckViewModel(
         val language = languageCode
         job = viewModelScope.launch {
             runCatching {
+                if (!repository.vocabularyCheckAvailable(language)) {
+                    // Not installed yet: offer the published dictionary, if it supports the check.
+                    val published = publishedDictionary(language)
+                    if (published != null) {
+                        _state.value = VocabCheckState.NeedsDictionary(published.downloadBytes.toLong())
+                        return@runCatching
+                    }
+                }
                 val started = repository.startVocabularyCheck(language)
                 session = started
                 quiz = VocabQuiz(started)
@@ -94,6 +113,46 @@ class VocabCheckViewModel(
         }
     }
 
+    /** Downloads the language's dictionary, then starts the check. */
+    fun downloadDictionary() {
+        val dictionaries = dictionaries ?: return
+        if (_state.value !is VocabCheckState.NeedsDictionary) return
+        job?.cancel()
+        val language = languageCode
+        job = viewModelScope.launch {
+            runCatching {
+                val published = publishedDictionary(language) ?: error("no dictionary")
+                _state.value = VocabCheckState.Downloading(0f)
+                dictionaries.download(published)
+                // Follow the download until it ends, either way.
+                val progress = launch {
+                    dictionaries.downloads.collect { downloads ->
+                        val running = downloads[published.pair] as? DownloadState.Running ?: return@collect
+                        _state.value = VocabCheckState.Downloading(running.bytes.toFloat() / running.total.coerceAtLeast(1))
+                    }
+                }
+                dictionaries.awaitDownload(published.pair)
+                progress.cancel()
+                (dictionaries.downloads.value[published.pair] as? DownloadState.Failed)?.let { error(it.message) }
+                start()
+            }.onFailure { fail(it) }
+        }
+    }
+
+    private suspend fun publishedDictionary(language: String): AvailableDictionary? {
+        val dictionaries = dictionaries ?: return null
+        dictionaries.ensureListed()
+        return dictionaries.availableFor(language)?.takeIf { it.frequencySource != null }
+    }
+
+    /** Asks the previous word again, taking back its answer (a mis-tap). */
+    fun back() {
+        val quiz = quiz ?: return
+        if (_state.value !is VocabCheckState.Asking || job?.isActive == true || !quiz.canGoBack) return
+        quiz.goBack()
+        job = viewModelScope.launch { runCatching { askNext() }.onFailure { fail(it) } }
+    }
+
     /** Shows a failure, unless the work was only cancelled by a restart. */
     private fun fail(error: Throwable) {
         if (error is CancellationException) return
@@ -105,7 +164,7 @@ class VocabCheckViewModel(
         val word = quiz.current()
         _state.value = if (word != null) {
             val progress = (quiz.answered.toFloat() / VocabQuiz.TYPICAL_LENGTH).coerceAtMost(0.95f)
-            VocabCheckState.Asking(word.word, progress)
+            VocabCheckState.Asking(word.word, progress, quiz.canGoBack)
         } else {
             // A finished check counts as done, whatever the reader marks.
             val language = languageCode

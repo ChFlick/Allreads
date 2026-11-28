@@ -413,4 +413,15 @@
         <item quantity="other">%1$s word forms marked by the check</item>
     </plurals>
     <string name="undo_failed">Undo did not work: %1$s</string>
+    <string name="back_to_previous_word">Back to the previous word</string>
+    <string name="vocab_needs_dictionary_title">First, the %1$s dictionary</string>
+    <string name="vocab_needs_dictionary_text">The check uses the offline %1$s dictionary, which also gives you meanings while reading. It is a %2$s download.</string>
+    <string name="download_and_start">Download and start</string>
+    <string name="downloading_the_dictionary">Downloading the %1$s dictionary…</string>
+    <string name="marked_known_by_the_check">Marked known by the vocabulary check</string>
+    <string name="set_back_to_new">Set back to new</string>
+    <plurals name="check_corrections">
+        <item quantity="one">While reading, you set back %1$s of the %2$s word form it marked.</item>
+        <item quantity="other">While reading, you set back %1$s of the %2$s word forms it marked.</item>
+    </plurals>
 </resources>

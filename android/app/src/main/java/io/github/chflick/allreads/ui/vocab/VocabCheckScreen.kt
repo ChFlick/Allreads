@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.chflick.allreads.R
 import io.github.chflick.allreads.ui.languageName
+import io.github.chflick.allreads.ui.megabytes
 import io.github.chflick.allreads.ui.theme.Literata
 import kotlin.math.roundToInt
 import uniffi.allreads_ffi.VocabChoice
@@ -57,6 +58,8 @@ fun VocabCheckScreen(viewModel: VocabCheckViewModel, onClose: () -> Unit) {
         state = state,
         language = languageName(viewModel.languageCode),
         onAnswer = viewModel::answer,
+        onBack = viewModel::back,
+        onDownload = viewModel::downloadDictionary,
         onChoose = viewModel::choose,
         onApply = viewModel::apply,
         onRetake = viewModel::start,
@@ -71,6 +74,8 @@ fun VocabCheckContent(
     state: VocabCheckState,
     language: String,
     onAnswer: (Boolean) -> Unit = {},
+    onBack: () -> Unit = {},
+    onDownload: () -> Unit = {},
     onChoose: (Int) -> Unit = {},
     onApply: () -> Unit = {},
     onRetake: () -> Unit = {},
@@ -105,6 +110,27 @@ fun VocabCheckContent(
                     VocabCheckState.Starting -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
+                    is VocabCheckState.NeedsDictionary -> Column(
+                        Modifier.fillMaxSize().padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Text(stringResource(R.string.vocab_needs_dictionary_title, language), style = MaterialTheme.typography.headlineSmall)
+                        Text(
+                            stringResource(R.string.vocab_needs_dictionary_text, language, megabytes(state.downloadBytes)),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Button(onClick = onDownload, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                            Text(stringResource(R.string.download_and_start))
+                        }
+                        TextButton(onClick = onClose, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.not_now)) }
+                    }
+                    is VocabCheckState.Downloading -> Column(
+                        Modifier.fillMaxSize().padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Text(stringResource(R.string.downloading_the_dictionary, language), style = MaterialTheme.typography.titleMedium)
+                        LinearProgressIndicator(progress = { state.progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                    }
                     is VocabCheckState.Done -> Column(
                         Modifier.fillMaxSize().padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -121,7 +147,7 @@ fun VocabCheckContent(
                             Text(stringResource(R.string.done))
                         }
                     }
-                    is VocabCheckState.Asking -> Question(state.word, language, onAnswer)
+                    is VocabCheckState.Asking -> Question(state.word, language, state.canGoBack, onAnswer, onBack)
                     is VocabCheckState.Result -> ResultView(state, language, onChoose, onApply, onRetake, onClose)
                     is VocabCheckState.Failed -> Column(
                         Modifier.fillMaxSize().padding(24.dp),
@@ -138,7 +164,7 @@ fun VocabCheckContent(
 
 /** One word, large, with No and Yes. */
 @Composable
-private fun Question(word: String, language: String, onAnswer: (Boolean) -> Unit) {
+private fun Question(word: String, language: String, canGoBack: Boolean, onAnswer: (Boolean) -> Unit, onBack: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -166,6 +192,10 @@ private fun Question(word: String, language: String, onAnswer: (Boolean) -> Unit
             Button(onClick = { onAnswer(true) }, modifier = Modifier.weight(1f).height(56.dp)) {
                 Text(stringResource(R.string.yes))
             }
+        }
+        // Takes back a mis-tap; only within the words asked since the last band was sent.
+        TextButton(onClick = onBack, enabled = canGoBack, modifier = Modifier.padding(top = 4.dp)) {
+            Text(stringResource(R.string.back_to_previous_word))
         }
     }
 }
