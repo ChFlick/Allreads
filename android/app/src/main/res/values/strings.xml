@@ -155,7 +155,7 @@
     <string name="translations_with_your_own_key">translations, with your own key</string>
     <string name="ankidroid_api" translatable="false">AnkiDroid API</string>
     <string name="the_connection_to_ankidroid">the connection to AnkiDroid</string>
-    <string name="android_jetpack_and_compose">Android Jetpack and Compose</string>
+    <string name="android_jetpack_and_compose">Android Jetpack and Compose, OkHttp</string>
     <string name="apache_license_2_0">Apache License 2.0</string>
     <string name="rust_libraries">Rust libraries</string>
     <string name="rusqlite_scraper_rbook_zip_ruzstd" translatable="false">rusqlite, scraper, rbook, zip, ruzstd, encoding_rs, ureq, uniffi · MIT / Apache 2.0</string>

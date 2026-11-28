@@ -4,8 +4,10 @@ import io.github.chflick.allreads.ui.AppText
 import io.github.chflick.allreads.R
 import java.io.File
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -247,69 +249,66 @@ class Dictionaries(
         _downloads.update { if (state == null) it - pair else it + (pair to state) }
 }
 
-/** [Fetcher] with `HttpURLConnection`. */
+/**
+ * [Fetcher] with OkHttp. Android's own `HttpURLConnection` tries a server's
+ * addresses one after another, so a broken IPv6 route on a phone's network
+ * cost many seconds before IPv4 was tried; OkHttp tries both at once and uses
+ * the first that answers ("fast fallback"). It also follows redirects between
+ * http and https, which GitHub's downloads and some article links need.
+ */
 class HttpFetcher : Fetcher {
-    override fun text(url: String): String = open(url).inputStream.use { it.readBytes().decodeToString() }
+    override fun text(url: String): String = call(url).use { it.body.string() }
 
-    override fun page(url: String): FetchedPage {
-        val connection = open(url)
-        return FetchedPage(connection.inputStream.use { it.readBytes() }, connection.contentType)
+    override fun page(url: String): FetchedPage = call(url).use { response ->
+        FetchedPage(response.body.bytes(), response.header("Content-Type"))
     }
 
     override fun download(url: String, target: File, progress: (Long) -> Unit) {
-        val connection = open(url)
-        connection.inputStream.use { input ->
-            target.outputStream().use { output ->
-                val buffer = ByteArray(64 * 1024)
-                var written = 0L
-                var lastReport = 0L
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    output.write(buffer, 0, read)
-                    written += read
-                    // Report every 256 KB, not every buffer, to keep the UI calm.
-                    if (written - lastReport >= 256 * 1024) {
-                        progress(written)
-                        lastReport = written
+        call(url).use { response ->
+            response.body.byteStream().use { input ->
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    var written = 0L
+                    var lastReport = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        written += read
+                        // Report every 256 KB, not every buffer, to keep the UI calm.
+                        if (written - lastReport >= 256 * 1024) {
+                            progress(written)
+                            lastReport = written
+                        }
                     }
+                    progress(written)
                 }
-                progress(written)
             }
         }
     }
 
-    private fun open(url: String): HttpURLConnection {
-        var address = URL(url)
-        // HttpURLConnection follows redirects only within one protocol, so an
-        // "http://" link that moved to "https://" is followed here.
-        repeat(MAX_REDIRECTS) {
-            val connection = address.openConnection() as HttpURLConnection
-            // Per address: when one route is broken (often IPv6 on a phone), the
-            // next address is tried after this, so a long wait here is felt directly.
-            connection.connectTimeout = 6_000
-            connection.readTimeout = 30_000
-            // GitHub answers release downloads with a redirect to its file host.
-            connection.instanceFollowRedirects = true
-            // Some sites refuse Java's default agent. A generic one, nothing about the user.
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) Allreads")
-            val code = connection.responseCode
-            val location = connection.getHeaderField("Location")
-            if (code in 300..399 && location != null) {
-                connection.disconnect()
-                address = URL(address, location)
-                return@repeat
-            }
-            if (code !in 200..299) {
-                connection.disconnect()
-                throw IOException("The server answered $code")
-            }
-            return connection
+    private fun call(url: String): Response {
+        val request = Request.Builder()
+            .url(url)
+            // Some sites refuse a library's default agent. A generic one, nothing about the user.
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android) Allreads")
+            .build()
+        val response = client.newCall(request).execute()
+        if (!response.isSuccessful) {
+            response.close()
+            throw IOException("The server answered ${response.code}")
         }
-        throw IOException("Too many redirects")
+        return response
     }
 
     private companion object {
-        const val MAX_REDIRECTS = 5
+        /** One client for the app, so connections and their pool are shared. */
+        val client: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .fastFallback(true)
+                .build()
+        }
     }
 }

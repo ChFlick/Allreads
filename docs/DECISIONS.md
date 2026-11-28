@@ -137,3 +137,7 @@ The vocabulary check uses Lexique 3.82 (CC BY-SA 4.0) for French word frequencie
 ## 2026-11-27: vocabulary check, after an accuracy review
 
 Checked against the real French ranks. One curve for all words stays: cognates (about 40 % of the words from rank 500 on) do not lower the accuracy of the safe choice, while separate curves for cognates and other words marked more at about 95 % right. Made-up words must use only letter sequences common in real words and must not be one letter from a common word, so a "yes" to one really is a guess. An unreliable result (more than 30 % "yes" to made-up words) offers nothing and asks for a retake, rather than marking the "yes" answers.
+
+## 2026-11-28: OkHttp for downloads
+
+The dictionary list loaded quickly in the phone's browser but took very long in the app. Android's `HttpURLConnection` tries a server's addresses one after another, so a broken route (most likely IPv6 on that network) cost a full timeout before the next address. OkHttp (Apache 2.0) tries IPv4 and IPv6 at once and uses whichever answers first, so all downloads now go through it (`HttpFetcher`). Version 5.3.2: newer versions need a newer compile SDK than the project uses. Moving the files to other storage (Cloudflare R2, GitHub Pages) was considered and dropped, as the server was never the slow part.
