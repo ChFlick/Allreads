@@ -183,9 +183,21 @@ class Dictionaries(
                 // A cancelled download may still be blocked in a read; let it end
                 // first, so two downloads never write the same file.
                 previous?.join()
-                run(dictionary)
+                run(confirmed(dictionary))
             }
         }
+    }
+
+    /**
+     * The dictionary as the fresh list has it. An offer from the saved list may
+     * be out of date (rebuilt since, with a new checksum), so the list is
+     * fetched first; if that fails, the saved entry is tried.
+     */
+    private suspend fun confirmed(dictionary: AvailableDictionary): AvailableDictionary {
+        if (!_list.value.fromCache) return dictionary
+        setState(dictionary.pair, DownloadState.Running(0, dictionary.downloadBytes.toLong()))
+        refresh()
+        return _list.value.available?.firstOrNull { it.pair == dictionary.pair } ?: dictionary
     }
 
     /** Waits until the current download of `pair` (if any) has finished, either way. */
@@ -273,7 +285,9 @@ class HttpFetcher : Fetcher {
         // "http://" link that moved to "https://" is followed here.
         repeat(MAX_REDIRECTS) {
             val connection = address.openConnection() as HttpURLConnection
-            connection.connectTimeout = 15_000
+            // Per address: when one route is broken (often IPv6 on a phone), the
+            // next address is tried after this, so a long wait here is felt directly.
+            connection.connectTimeout = 6_000
             connection.readTimeout = 30_000
             // GitHub answers release downloads with a redirect to its file host.
             connection.instanceFollowRedirects = true

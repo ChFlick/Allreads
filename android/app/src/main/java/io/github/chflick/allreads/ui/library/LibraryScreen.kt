@@ -61,6 +61,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -622,7 +623,21 @@ private fun SetupCard(steps: SetupSteps, onSettings: (SettingsPage) -> Unit, onD
                     steps.dictionary,
                     stringResource(R.string.get_the_language_dictionary, languageName(language)),
                     stringResource(R.string.setup_dictionary_text),
-                ) { steps.dictionaryOffer?.let { offer -> DictionaryDownload(offer, steps.dictionaryDownload, onDownload) } }
+                ) {
+                    val offer = steps.dictionaryOffer
+                    if (offer != null) {
+                        DictionaryDownload(offer, steps.dictionaryDownload, onDownload)
+                    } else if (steps.dictionaryLooking) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Text(
+                                stringResource(R.string.looking_for_an_offline_dictionary),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
             SetupStep(steps.ankiDeck, stringResource(R.string.choose_an_ankidroid_deck), stringResource(R.string.optional_words_you_save_become)) {
                 OutlinedButton(onClick = { onSettings(SettingsPage.Anki) }) { Text(stringResource(R.string.choose_a_deck)) }

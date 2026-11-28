@@ -69,6 +69,12 @@ class Services(
     /** Book catalogs for "Find a book", from the same published list. */
     val catalogs = Catalogs(repository, fetcher, cacheDir, scope, ::describe)
 
+    init {
+        // Fetch the dictionary list as the app starts, so the word drawer, the
+        // library's cards and Settings rarely have to wait for it.
+        scope.launch { runCatching { dictionaries.ensureListed() } }
+    }
+
     /** For "Find a book"'s Get, which downloads an EPUB before importing it. */
     val bookFetcher: Fetcher get() = fetcher
 

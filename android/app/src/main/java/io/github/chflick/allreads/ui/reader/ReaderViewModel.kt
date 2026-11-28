@@ -53,6 +53,8 @@ data class SelectedWord(
     val dictionary: DictionaryLookup? = null,
     /** A dictionary that could be downloaded, when none is installed. */
     val dictionaryOffer: AvailableDictionary? = null,
+    /** True while the list of dictionaries is still being fetched, with none installed. */
+    val lookingForDictionary: Boolean = false,
     /** The entry of a dictionary form tapped in the drawer, e.g. "lire" for "lisait". */
     val lemmaEntry: Pair<String, DictionaryLookup>? = null,
     /** True for a phrase of several words. */
@@ -305,22 +307,27 @@ class ReaderViewModel(private val services: Services) : ViewModel() {
     private suspend fun lookUpSelected(language: String, text: String) {
         val lookup = runCatching { repository.lookupWord(language, text) }.getOrNull()
         val dictionaries = services.dictionaries
-        if (lookup == null && dictionaries.list.value.available == null) {
+        // A word missing from an installed dictionary gets no download offer.
+        val installed = dictionaries.list.value.installed.any { it.pair.startsWith("$language-") }
+        val looking = lookup == null && !installed && dictionaries.list.value.available == null
+        if (looking) {
             // Fetch the list in the background, so the tap's translation never waits on it.
             viewModelScope.launch {
-                runCatching { dictionaries.refresh() }
-                val offer = dictionaries.availableFor(language) ?: return@launch
+                runCatching { dictionaries.ensureListed() }
+                val offer = dictionaries.availableFor(language)
                 _state.update { state ->
                     val current = state.selected?.takeIf { it.text == text && it.dictionary == null }
                         ?: return@update state
-                    state.copy(selected = current.copy(dictionaryOffer = offer))
+                    state.copy(selected = current.copy(dictionaryOffer = offer, lookingForDictionary = false))
                 }
             }
         }
-        val offer = if (lookup == null) dictionaries.availableFor(language) else null
+        val offer = if (lookup == null && !installed) dictionaries.availableFor(language) else null
         _state.update { state ->
             val current = state.selected?.takeIf { it.text == text } ?: return@update state
-            state.copy(selected = current.copy(dictionary = lookup, dictionaryOffer = offer))
+            state.copy(
+                selected = current.copy(dictionary = lookup, dictionaryOffer = offer, lookingForDictionary = looking && offer == null),
+            )
         }
     }
 

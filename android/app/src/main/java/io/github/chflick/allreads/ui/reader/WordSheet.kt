@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -455,6 +456,18 @@ private fun OfflineDictionary(
 ) {
     val lookup = word.dictionary
     if (lookup == null) {
+        if (word.lookingForDictionary) {
+            // A slow first fetch of the list: say so, rather than showing nothing.
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                Text(
+                    stringResource(R.string.looking_for_an_offline_dictionary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            return
+        }
         val offer = word.dictionaryOffer ?: return
         val context = LocalContext.current
         var confirm by remember { mutableStateOf(false) }

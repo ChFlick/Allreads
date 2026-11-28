@@ -384,6 +384,7 @@
     <string name="still_trying">No answer yet, trying again (%1$d of 3)…</string>
     <string name="add_the_key">Add the key</string>
     <string name="download_size">Download (%1$s)</string>
+    <string name="looking_for_an_offline_dictionary">Looking for an offline dictionary…</string>
     <string name="getting_started">Getting started</string>
     <string name="get_the_language_dictionary">Get the %1$s dictionary</string>
     <string name="setup_dictionary_text">Meanings without a connection, better counts of new words, and the vocabulary check.</string>

@@ -78,6 +78,8 @@ data class SetupSteps(
     /** The dictionary to download from the card, while it is not installed. */
     val dictionaryOffer: AvailableDictionary? = null,
     val dictionaryDownload: DownloadState? = null,
+    /** True while the dictionary list is still being fetched (the step shows it is looking). */
+    val dictionaryLooking: Boolean = false,
 ) {
     val allDone: Boolean get() = deeplKey && ankiDeck && (dictionaryLanguage == null || dictionary)
 }
@@ -101,7 +103,7 @@ class LibraryViewModel(
         // download from the card moves on: the cards follow both.
         dictionaries?.let { dictionaries ->
             viewModelScope.launch {
-                dictionaries.list.map { it.available to it.installed }
+                dictionaries.list.map { Triple(it.available, it.installed, it.listError) }
                     .distinctUntilChanged()
                     .drop(1)
                     .collect { updateCards() }
@@ -176,13 +178,16 @@ class LibraryViewModel(
         val list = dictionaries?.list?.value
         val installed = language?.let { code -> list?.installed?.firstOrNull { it.pair.startsWith("$code-") } }
         val offer = language?.takeIf { installed == null }?.let { dictionaries?.availableFor(it) }
+        // No list yet (a slow first fetch): show the step as looking, not leave it out.
+        val looking = installed == null && list != null && list.available == null && list.listError == null
         val steps = SetupSteps(
             deeplKey = hasDeeplKey(),
             ankiDeck = runCatching { repository.ankiDeckId() }.getOrNull() != null,
-            dictionaryLanguage = language?.takeIf { installed != null || offer != null },
+            dictionaryLanguage = language?.takeIf { installed != null || offer != null || looking },
             dictionary = installed != null,
             dictionaryOffer = offer,
             dictionaryDownload = offer?.let { dictionaries?.downloads?.value?.get(it.pair) },
+            dictionaryLooking = looking,
         )
         return steps.takeIf { !it.allDone }
     }

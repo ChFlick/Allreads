@@ -140,6 +140,27 @@ class DictionariesTest {
     }
 
     @Test
+    fun aDownloadFromTheSavedListFetchesTheFreshListFirst() = runBlocking {
+        dictionaries.refresh()
+        val later = Dictionaries(
+            files,
+            fetcher,
+            temp.root,
+            CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            describe = { it.message ?: "error" },
+            retryPauses = listOf(1, 1),
+        )
+        fetcher.gate = java.util.concurrent.CountDownLatch(1)
+        later.ensureListed()
+        // The saved list shows before the network answers.
+        assertTrue(later.list.value.fromCache)
+        fetcher.gate?.countDown()
+        later.download(french)
+        withTimeout(5_000) { later.list.first { list -> list.installed.any { it.pair == "fr-en" } } }
+        assertEquals(false, later.list.value.fromCache)
+    }
+
+    @Test
     fun callersAtTheSameTimeShareOneFetch() = runBlocking {
         val gate = java.util.concurrent.CountDownLatch(1)
         fetcher.gate = gate
