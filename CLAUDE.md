@@ -16,6 +16,7 @@ Read these before starting any task:
 - `docs/PRD.md`: goals, user stories, requirements (F1–F27), non-functional targets
 - `docs/IMPLEMENTATION_PLAN.md`: the ordered steps (each with a **Done when** check) and the roadmap after v1
 - `docs/PROGRESS.md`: which steps are done; update it as you go
+- `docs/SYSTEMS.md`: how the systems work today (builds and releases, dictionaries, word frequencies and the vocabulary check, book difficulty, book lists, AnkiDroid); update it when one of them changes
 
 If the code and the docs disagree, flag it and ask before changing direction. Record decisions that change the plan in `docs/DECISIONS.md` (date, decision, why).
 
